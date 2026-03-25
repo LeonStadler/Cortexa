@@ -1,0 +1,52 @@
+/.build/
+/.swiftpm/
+/build/
+/artifacts/
+/models/
+/dist/
+/node_modules/
+/.venv/
+/venv/
+/Pods/
+/Carthage/
+/coverage/
+
+/third_party/whisper.cpp/build/
+/third_party/whisper.cpp/build-macos-cli/
+/third_party/whisper.cpp/models/
+/apps/macos/AppShell/Resources/Runtime/
+
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+
+# Xcode / Derived data
+/DerivedData/
+/.deriveddata/
+/.xcode-home/
+/apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj/
+/apps/ios/WisprLocaliOS/WisprLocaliOS.xcodeproj/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Debug-Symbole
+*.dSYM
+*.xcarchive
+
+# Caches
+/.cache/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+
+# Distribution artifacts
+*.dmg
+*.pkg
+*.ipa

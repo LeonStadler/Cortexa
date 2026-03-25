@@ -1,0 +1,60 @@
+name: WisprLocalMac
+options:
+  minimumXcodeGenVersion: 2.38.0
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+    MACOSX_DEPLOYMENT_TARGET: '14.0'
+    MARKETING_VERSION: ${APP_MARKETING_VERSION}
+    CURRENT_PROJECT_VERSION: ${APP_BUILD_NUMBER}
+    SPARKLE_FEED_URL: ${SPARKLE_FEED_URL}
+    SPARKLE_PUBLIC_ED_KEY: ${SPARKLE_PUBLIC_ED_KEY}
+    WISPR_LICENSE_PUBLIC_KEY_BASE64: ${WISPR_LICENSE_PUBLIC_KEY_BASE64}
+packages:
+  WisprLocalPackage:
+    path: ../../..
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.0.0
+targets:
+  WisprLocalMac:
+    type: application
+    platform: macOS
+    deploymentTarget: '14.0'
+    sources:
+      - path: ../AppShell
+      - path: ../AppShell/Resources/Runtime
+        buildPhase: resources
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wisprlocal.mac
+        PRODUCT_NAME: WisprLocalMac
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: WisprLocalMac-Info.plist
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - package: WisprLocalPackage
+        product: ASRCore
+      - package: WisprLocalPackage
+        product: SnippetCore
+      - package: WisprLocalPackage
+        product: SessionCore
+      - package: WisprLocalPackage
+        product: CapabilityCore
+      - package: WisprLocalPackage
+        product: LicenseCore
+      - package: Sparkle
+        product: Sparkle
+schemes:
+  WisprLocalMac:
+    build:
+      targets:
+        WisprLocalMac: all
+    run:
+      config: Debug
+    archive:
+      config: Release

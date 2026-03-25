@@ -1,0 +1,18 @@
+# Build & artifacts (Cursor index/diff)
+.build/
+.swiftpm/
+build/
+artifacts/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcuserstate
+
+# Große / externe Daten
+models/
+third_party/
+
+# Caches
+.cache/
+*.dSYM
+*.xcarchive

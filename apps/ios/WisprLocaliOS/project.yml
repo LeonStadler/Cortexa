@@ -1,0 +1,63 @@
+name: WisprLocaliOS
+options:
+  minimumXcodeGenVersion: 2.38.0
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+packages:
+  WisprLocalPackage:
+    path: ../../..
+targets:
+  WisprLocaliOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ../App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wisprlocal.ios
+        PRODUCT_NAME: WisprLocaliOS
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: WisprLocaliOS-Info.plist
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: WisprLocaliOS.entitlements
+    dependencies:
+      - target: WisprLocalKeyboard
+        embed: true
+      - package: WisprLocalPackage
+        product: SnippetCore
+      - package: WisprLocalPackage
+        product: LicenseCore
+
+  WisprLocalKeyboard:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ../KeyboardExtension
+      - path: ../App/IOSSharedStorage.swift
+      - path: ../App/SharedDefaultsKeys.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wisprlocal.ios.keyboard
+        PRODUCT_NAME: WisprLocalKeyboard
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: WisprLocalKeyboard-Info.plist
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: WisprLocalKeyboard.entitlements
+    dependencies:
+      - package: WisprLocalPackage
+        product: SnippetCore
+
+schemes:
+  WisprLocaliOS:
+    build:
+      targets:
+        WisprLocaliOS: all
+        WisprLocalKeyboard: all
+    run:
+      config: Debug
+    archive:
+      config: Release
