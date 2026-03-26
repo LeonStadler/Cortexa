@@ -30,6 +30,19 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
         }
     }
 
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        switch (interfaceLanguageCode, self) {
+        case ("en", .german):
+            return "German"
+        case ("en", .english):
+            return "English"
+        case ("en", .auto):
+            return "Auto"
+        default:
+            return displayName
+        }
+    }
+
     var asrHint: String? {
         switch self {
         case .german:
@@ -73,6 +86,21 @@ enum DictationPerformance: String, CaseIterable, Identifiable {
             return "Präzise"
         }
     }
+
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        switch (interfaceLanguageCode, self) {
+        case ("en", .auto):
+            return "Auto"
+        case ("en", .fast):
+            return "Fast"
+        case ("en", .balanced):
+            return "Balanced"
+        case ("en", .accurate):
+            return "Accurate"
+        default:
+            return displayName
+        }
+    }
 }
 
 struct DictationStartOptions {
@@ -80,6 +108,29 @@ struct DictationStartOptions {
     let language: DictationLanguage
     let performance: DictationPerformance
     let snippetRules: [SnippetRule]
+    let finalResultDeliveryMode: FinalResultDeliveryMode
+    let clipboardFallbackWhenNoTarget: Bool
+}
+
+enum FinalResultDeliveryMode: String, CaseIterable, Identifiable {
+    case insert
+    case clipboardOnly
+
+    var id: String { rawValue }
+}
+
+enum FinalTranscriptDeliveryOutcome: Equatable {
+    case inserted
+    case copiedToClipboard
+    case historyOnlyNoTarget
+    case failed(String)
+}
+
+struct FinalTranscriptEvent {
+    let text: String
+    let languageCode: String
+    let mode: DictationMode
+    let deliveryOutcome: FinalTranscriptDeliveryOutcome
 }
 
 enum DictationRuntimeError: LocalizedError {
@@ -88,6 +139,7 @@ enum DictationRuntimeError: LocalizedError {
     case microphonePermissionDenied
     case accessibilityPermissionDenied
     case focusedElementUnavailable
+    case unsupportedTextTarget
     case invalidAudioPipeline
     case unsafePasteFallback
 
@@ -103,6 +155,8 @@ enum DictationRuntimeError: LocalizedError {
             return "Bedienungshilfen-Berechtigung fehlt."
         case .focusedElementUnavailable:
             return "Kein fokussiertes Textfeld gefunden."
+        case .unsupportedTextTarget:
+            return "Das fokussierte Element unterstützt keine Texteingabe."
         case .invalidAudioPipeline:
             return "Audio-Pipeline konnte nicht initialisiert werden."
         case .unsafePasteFallback:
@@ -123,7 +177,8 @@ final class DictationRuntime: @unchecked Sendable {
     var onStatus: ((String) -> Void)?
     var onDiagnostic: ((String) -> Void)?
     var onTranscript: ((String) -> Void)?
-    var onFinalTranscript: ((String) -> Void)?
+    var onFinalTranscript: ((FinalTranscriptEvent) -> Void)?
+    var onSessionActivityChanged: ((Bool) -> Void)?
 
     private let whisperEngine = WhisperCppEngine()
     private let processQueue = DispatchQueue(label: "wispr.dictation.process", qos: .userInitiated)
@@ -142,13 +197,21 @@ final class DictationRuntime: @unchecked Sendable {
     private var snippetMatcher: DefaultSnippetMatcher?
     private var loadedModelPath: URL?
     private var loadedConfig: ASRConfig?
+    private var currentOptions: DictationStartOptions?
     private var lastKnownTarget: LockedTextTarget?
     private var waitingForInsertionTarget = false
     private var pendingStreamingInsertionTask: Task<Void, Never>?
+    private var speechActivityDetected = false
+    private var speechChunkStreak = 0
+    private var maxObservedRMS: Float = 0
+    private var lastRecoverableInsertDiagnosticAt: Date?
     private let focusedTargetRetryCount = 8
     private let focusedTargetRetryDelayNanoseconds: UInt64 = 150_000_000
     private let pendingInsertionTimeoutNanoseconds: UInt64 = 5_000_000_000
     private let pendingInsertionPollNanoseconds: UInt64 = 150_000_000
+    private let speechRMSActivationThreshold: Float = 0.008
+    private let speechRMSReleaseThreshold: Float = 0.004
+    private let speechActivationChunkCount = 3
 
     private func runOnMainThread<T>(_ work: () throws -> T) throws -> T {
         if Thread.isMainThread {
@@ -237,7 +300,11 @@ final class DictationRuntime: @unchecked Sendable {
                 }
                 runningMode = options.mode
                 runningLocale = options.language.locale
+                currentOptions = options
                 latestInsertedPreview = ""
+                speechActivityDetected = false
+                speechChunkStreak = 0
+                maxObservedRMS = 0
                 stableCommitter = makeStreamingCommitStabilizer(for: options)
                 snippetMatcher = DefaultSnippetMatcher(rules: options.snippetRules)
 
@@ -245,13 +312,12 @@ final class DictationRuntime: @unchecked Sendable {
                 try startAudioCapture()
 
                 isRunning = true
+                publishSessionActivity(true)
                 publishStatus("Recording")
                 let modeText = options.mode == .streaming ? "Streaming Insert" : "Finalize Insert"
                 publishDiagnostic("Recording (\(modeText), \(options.language.displayName))")
             } catch {
-                cleanupSession()
-                publishStatus("Error")
-                publishDiagnostic("Start failed: \(error.localizedDescription)")
+                abortSession(reason: "Start failed: \(error.localizedDescription)")
             }
         }
     }
@@ -268,15 +334,30 @@ final class DictationRuntime: @unchecked Sendable {
             let normalized = normalizeText(final.text)
             let finalText = applySnippetsToFinalText(normalized, locale: runningLocale)
 
-            try await deliverFinalText(finalText)
+            if shouldDiscardTranscript(finalText) {
+                publishTranscript("")
+                publishStatus("Idle")
+                publishDiagnostic("Kein verwertbares Sprachsignal erkannt. Das Transkript wurde verworfen.")
+                cleanupSession()
+                return
+            }
+
+            let deliveryOutcome = await deliverFinalText(finalText)
 
             publishTranscript(finalText)
-            publishFinalTranscript(finalText)
+            publishFinalTranscript(
+                FinalTranscriptEvent(
+                    text: finalText,
+                    languageCode: currentOptions?.language.rawValue ?? "auto",
+                    mode: currentOptions?.mode ?? .finalize,
+                    deliveryOutcome: deliveryOutcome
+                )
+            )
             publishStatus("Idle")
             publishDiagnostic("Last transcript: \(finalText)")
         } catch {
-            publishStatus("Error")
-            publishDiagnostic("Stop failed: \(error.localizedDescription)")
+            abortSession(reason: "Stop failed: \(error.localizedDescription)")
+            return
         }
 
         cleanupSession()
@@ -294,6 +375,7 @@ final class DictationRuntime: @unchecked Sendable {
 
     private func handlePartialText(_ text: String) {
         guard isRunning, runningMode == .streaming else { return }
+        guard speechActivityDetected else { return }
 
         let normalized = normalizeText(text)
         guard !normalized.isEmpty else { return }
@@ -301,11 +383,13 @@ final class DictationRuntime: @unchecked Sendable {
         insertionQueue.async { [weak self] in
             guard let self else { return }
             var target = self.target
+            var recoverablePatchText = normalized
 
             do {
                 let stable = self.stableCommitter.ingestPartial(normalized)
                 let committedWithSnippets = self.applySnippetsToFinalText(stable.committedPrefix, locale: self.runningLocale)
                 let patchText = self.normalizeText(committedWithSnippets + stable.tail)
+                recoverablePatchText = patchText
 
                 guard !patchText.isEmpty else { return }
 
@@ -353,8 +437,10 @@ final class DictationRuntime: @unchecked Sendable {
                     }
                 }
             } catch {
-                self.publishStatus("Error")
-                self.publishDiagnostic("Streaming insert failed: \(error.localizedDescription)")
+                if self.handleRecoverableStreamingInsertionFailure(error, patchText: recoverablePatchText) {
+                    return
+                }
+                self.abortSession(reason: "Streaming insert failed: \(error.localizedDescription)")
             }
         }
     }
@@ -411,13 +497,16 @@ final class DictationRuntime: @unchecked Sendable {
             }
 
             let element = focusedElement as! AXUIElement
+            try validateEditableTextTarget(element)
 
             var valueRef: CFTypeRef?
             _ = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef)
             let value = (valueRef as? String) ?? ""
             let range = readSelectedRange(from: element, currentValueLength: value.count)
 
-            let app = NSWorkspace.shared.frontmostApplication
+            var owningPID: pid_t = 0
+            let owningPIDResult = AXUIElementGetPid(element, &owningPID)
+            let app = owningPIDResult == .success ? NSRunningApplication(processIdentifier: owningPID) : NSWorkspace.shared.frontmostApplication
             return LockedTextTarget(
                 element: element,
                 insertionLocation: range.location,
@@ -475,6 +564,8 @@ final class DictationRuntime: @unchecked Sendable {
                 throw DictationRuntimeError.focusedElementUnavailable
             }
 
+            try validateEditableTextTarget(target.element)
+
             var valueRef: CFTypeRef?
             let readResult = AXUIElementCopyAttributeValue(target.element, kAXValueAttribute as CFString, &valueRef)
             guard readResult == .success else {
@@ -491,6 +582,14 @@ final class DictationRuntime: @unchecked Sendable {
                 fallbackBundleIdentifier: target.fallbackBundleIdentifier,
                 insertedLength: range.length
             )
+        }
+    }
+
+    private func validateEditableTextTarget(_ element: AXUIElement) throws {
+        var isValueSettable = DarwinBoolean(false)
+        let settableResult = AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &isValueSettable)
+        guard settableResult == .success, isValueSettable.boolValue else {
+            throw DictationRuntimeError.unsupportedTextTarget
         }
     }
 
@@ -519,25 +618,52 @@ final class DictationRuntime: @unchecked Sendable {
         return nil
     }
 
-    private func deliverFinalText(_ finalText: String) async throws {
-        if let resolvedTarget = resolveAvailableTextTarget() {
-            try replaceInsertedText(finalText, in: resolvedTarget, allowFallbackPaste: true)
+    private func deliverFinalText(_ finalText: String) async -> FinalTranscriptDeliveryOutcome {
+        guard let currentOptions else {
+            return .failed("Fehlende Diktat-Optionen.")
+        }
+
+        if currentOptions.finalResultDeliveryMode == .clipboardOnly {
+            copyTranscriptToClipboard(finalText)
+            publishDiagnostic("Finales Transkript wurde in die Zwischenablage kopiert.")
             waitingForInsertionTarget = false
-            return
+            return .copiedToClipboard
+        }
+
+        if let resolvedTarget = resolveAvailableTextTarget() {
+            do {
+                try replaceInsertedText(finalText, in: resolvedTarget, allowFallbackPaste: true)
+                waitingForInsertionTarget = false
+                return .inserted
+            } catch {
+                return .failed(error.localizedDescription)
+            }
         }
 
         waitingForInsertionTarget = true
         publishDiagnostic("Kein Textfeld aktiv. Warte bis zu 5 Sekunden auf ein Ziel für das finale Transkript.")
 
         if let delayedTarget = await waitForAvailableTextTarget(timeoutNanoseconds: pendingInsertionTimeoutNanoseconds) {
-            try replaceInsertedText(finalText, in: delayedTarget, allowFallbackPaste: true)
-            waitingForInsertionTarget = false
-            publishDiagnostic("Textziel erkannt. Finales Transkript wurde eingefügt.")
-            return
+            do {
+                try replaceInsertedText(finalText, in: delayedTarget, allowFallbackPaste: true)
+                waitingForInsertionTarget = false
+                publishDiagnostic("Textziel erkannt. Finales Transkript wurde eingefügt.")
+                return .inserted
+            } catch {
+                waitingForInsertionTarget = false
+                return .failed(error.localizedDescription)
+            }
         }
 
         waitingForInsertionTarget = false
+        if currentOptions.clipboardFallbackWhenNoTarget {
+            copyTranscriptToClipboard(finalText)
+            publishDiagnostic("Kein Textfeld gewählt. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert.")
+            return .copiedToClipboard
+        }
+
         publishDiagnostic("Kein Textfeld gewählt. Das finale Transkript bleibt in der History verfügbar.")
+        return .historyOnlyNoTarget
     }
 
     private func schedulePendingStreamingInsertionIfNeeded() {
@@ -626,12 +752,91 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         let frameCount = Int(converted.frameLength)
+        updateSpeechActivityState(channelData: channelData, frameCount: frameCount)
         do {
             try whisperEngine.pushAudioPCM16kMono(channelData, frameCount: frameCount)
         } catch {
             publishStatus("Error")
             publishDiagnostic("Audio push failed: \(error.localizedDescription)")
         }
+    }
+
+    private func updateSpeechActivityState(channelData: UnsafePointer<Float>, frameCount: Int) {
+        guard frameCount > 0 else { return }
+
+        var sumSquares: Float = 0
+        for index in 0..<frameCount {
+            let sample = channelData[index]
+            sumSquares += sample * sample
+        }
+
+        let rms = sqrt(sumSquares / Float(frameCount))
+        maxObservedRMS = max(maxObservedRMS, rms)
+
+        if rms >= speechRMSActivationThreshold {
+            speechChunkStreak += 1
+            if speechChunkStreak >= speechActivationChunkCount {
+                speechActivityDetected = true
+            }
+        } else if rms < speechRMSReleaseThreshold {
+            speechChunkStreak = max(0, speechChunkStreak - 1)
+        }
+    }
+
+    private func handleRecoverableStreamingInsertionFailure(_ error: Error, patchText: String) -> Bool {
+        guard isRecoverableStreamingInsertionError(error) else {
+            return false
+        }
+
+        target = nil
+        waitingForInsertionTarget = true
+        latestInsertedPreview = patchText
+        publishTranscript(patchText)
+        schedulePendingStreamingInsertionIfNeeded()
+        emitRecoverableInsertionDiagnosticIfNeeded(error)
+        return true
+    }
+
+    private func isRecoverableStreamingInsertionError(_ error: Error) -> Bool {
+        guard let runtimeError = error as? DictationRuntimeError else {
+            return false
+        }
+
+        switch runtimeError {
+        case .focusedElementUnavailable, .unsupportedTextTarget, .unsafePasteFallback:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func emitRecoverableInsertionDiagnosticIfNeeded(_ error: Error) {
+        let now = Date()
+        if let lastRecoverableInsertDiagnosticAt, now.timeIntervalSince(lastRecoverableInsertDiagnosticAt) < 1.5 {
+            return
+        }
+        lastRecoverableInsertDiagnosticAt = now
+        publishDiagnostic("Streaming wartet auf ein geeignetes Textfeld. Der bisherige Text bleibt erhalten.")
+    }
+
+    private func shouldDiscardTranscript(_ text: String) -> Bool {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return true }
+
+        let lowered = normalized.lowercased()
+        let normalizedToken = lowered.replacingOccurrences(of: "[^a-zA-ZäöüÄÖÜß]", with: "", options: .regularExpression)
+        let suspiciousTokens: Set<String> = ["musik", "music", "you", "thanks"]
+
+        if !speechActivityDetected || maxObservedRMS < speechRMSActivationThreshold {
+            if normalized.count <= 24 {
+                return true
+            }
+            if suspiciousTokens.contains(normalizedToken) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func replaceInsertedText(_ text: String, in lockedTarget: LockedTextTarget, allowFallbackPaste: Bool) throws {
@@ -721,6 +926,12 @@ final class DictationRuntime: @unchecked Sendable {
 
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+    }
+
+    private func copyTranscriptToClipboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 
     private func configureEngine(for options: DictationStartOptions) throws {
@@ -844,15 +1055,31 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func cleanupSession() {
+        stopAudioCapture()
+        audioEngine.reset()
+        converter = nil
+        whisperEngine.resetStreaming()
         isRunning = false
         runningMode = nil
+        currentOptions = nil
         target = nil
         latestInsertedPreview = ""
         snippetMatcher = nil
         waitingForInsertionTarget = false
         pendingStreamingInsertionTask?.cancel()
         pendingStreamingInsertionTask = nil
+        speechActivityDetected = false
+        speechChunkStreak = 0
+        maxObservedRMS = 0
+        lastRecoverableInsertDiagnosticAt = nil
         stableCommitter.reset()
+        publishSessionActivity(false)
+    }
+
+    private func abortSession(reason: String) {
+        cleanupSession()
+        publishStatus("Error")
+        publishDiagnostic(reason)
     }
 
     private func publishStatus(_ value: String) {
@@ -873,9 +1100,15 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
-    private func publishFinalTranscript(_ value: String) {
+    private func publishFinalTranscript(_ value: FinalTranscriptEvent) {
         DispatchQueue.main.async { [weak self] in
             self?.onFinalTranscript?(value)
+        }
+    }
+
+    private func publishSessionActivity(_ isActive: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onSessionActivityChanged?(isActive)
         }
     }
 }

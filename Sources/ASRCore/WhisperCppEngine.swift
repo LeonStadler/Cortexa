@@ -139,6 +139,16 @@ public final class WhisperCppEngine: WhisperEngine {
         return final
     }
 
+    public func resetStreaming() {
+        stateQueue.sync {
+            isStreaming = false
+            streamingSamples.removeAll(keepingCapacity: false)
+            isDecodingPartial = false
+            sequence = 0
+            decodeVersion += 1
+        }
+    }
+
     public func transcribeFile(url: URL) async throws -> FinalTranscript {
         guard let config, let modelPath, let cliPath = resolvedCLIPath else {
             throw WhisperEngineError.modelNotLoaded

@@ -2,6 +2,38 @@
 
 ## Fixes
 
+- 2026-03-26: macOS-Menü und Settings entfernen doppelten Verlauf, stabilisieren die History-Breite, vereinfachen Menüleisten-Optionen und zeigen Suchtreffer reiterübergreifend.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/GlobalHotkeyManager.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Das Menü zeigt im Idle-Zustand keinen redundanten `Bereit`-Header und keine doppelte Verlaufsvorschau mehr; die Verlaufsvorschau im Menü wird zusätzlich gekürzt, damit lange Diktate das Layout nicht aufblähen. Die Settings halten jetzt eine feste Fensterbreite, zeigen im History-Reiter kompakte, aufklappbare Verlaufskarten statt ungebremster Volltexte, entfernen den zuvor fest reservierten Notfall-Kurzbefehl vollständig aus Hotkey-Registrierung, UI und Diagnosetexten, blenden den Update-Bereich nicht mehr in den Settings ein und verwenden bei aktiver Suche eine reiterübergreifende Ergebnisansicht mit getrennten Gruppen pro Bereich.
+
+- 2026-03-25: macOS-Diktierlauf räumt Insert-/AX-Fehler jetzt sauber auf und bleibt bei fehlendem Textziel recoverable.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/MacAppState.swift`, `Sources/ASRCore/Protocols.swift`, `Sources/ASRCore/WhisperCppEngine.swift`
+  - Funktionalität: Der Runtime-Pfad hat jetzt einen zentralen Abort/Cleanup-Weg, der Audioengine, Streaming-Decoder, Pending-Insertion-Tasks und Session-Flags zuverlässig zurücksetzt; vorübergehend fehlende oder ungeeignete Textziele werden beim Streaming nicht mehr als fataler Fehler behandelt, sondern halten den bisherigen Text im Wartemodus vor, bis wieder ein editierbares Ziel verfügbar ist.
+
+- 2026-03-25: macOS-Finalisierung speichert Transkripte jetzt unabhängig von der Zustellung immer in der History.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/MacAppState.swift`
+  - Funktionalität: Finale Diktate werden jetzt als Ereignis mit Zustellungsstatus (`eingefügt`, `Zwischenablage`, `nur History`, `Zustellfehler`) verarbeitet; dadurch bleibt die History auch dann korrekt erhalten, wenn beim Einfügen oder beim Ziel-Timeout kein Textfeld verfügbar war.
+
+- 2026-03-25: Neuer ASR-Lifecycle-Test deckt den Reset-Pfad des Streaming-Engines ab.
+  - Dateien: `Tests/ASRCoreTests/WhisperCppEngineLifecycleTests.swift`
+  - Funktionalität: Der Test stellt sicher, dass `resetStreaming()` eine laufende Session wirklich zurücksetzt, `stopStreaming()` danach korrekt `engineNotRunning` liefert und ein erneuter Start im selben Engine-Objekt wieder möglich ist.
+
+- 2026-03-25: macOS-Xcode-Projektgenerierung findet Homebrew/XcodeGen jetzt auch außerhalb eines reduzierten PATHs und nutzt vorhandene Projektdateien weiter.
+  - Dateien: `scripts/generate_macos_xcodeproj.sh`, `scripts/smoke_test_macos_app.sh`, `VERSION`
+  - Funktionalität: Die Skripte suchen `xcodegen` und `brew` jetzt zusätzlich in typischen Homebrew-Pfaden wie `/opt/homebrew/bin`; fehlt `xcodegen` trotzdem, kann der Build auf ein bereits vorhandenes `WisprLocalMac.xcodeproj` zurückfallen, statt unnötig abzubrechen.
+
+- 2026-03-25: macOS-Build-Skripte brechen ohne Homebrew jetzt mit klarer XcodeGen-Anleitung ab.
+  - Dateien: `scripts/generate_macos_xcodeproj.sh`, `scripts/smoke_test_macos_app.sh`, `VERSION`
+  - Funktionalität: Die Skripte versuchen `brew` nicht mehr blind aufzurufen; wenn weder `xcodegen` noch `brew` verfügbar ist, geben sie eine konkrete Installationsanleitung für XcodeGen aus und stoppen früh mit einer verständlichen Fehlermeldung.
+
+- 2026-03-25: macOS-Settings lassen sich jetzt zuverlässig per globalem Shortcut öffnen.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/MacAppState.swift`
+  - Funktionalität: `Control + Option + Escape` stoppt weiterhin laufende Aufnahmen, öffnet im Idle-Zustand jetzt aber tatsächlich das Settings-Fenster; dafür nutzt die App ein eigenes `NSWindow`-basiertes Settings-Presenter statt einer nur visuell angedeuteten Menüleisten-Aktion.
+
+- 2026-03-25: Leerlauf-Halluzinationen wie `Musik` bei fehlendem Sprachsignal im macOS-Diktierpfad gefiltert.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`
+  - Funktionalität: Der Runtime-Pfad misst jetzt einfache Sprachaktivität per RMS-Schwelle, ignoriert Partials vor gesichertem Spracheinsatz und verwirft sehr kurze bzw. typische Leerlauf-Transkripte ohne ausreichend Sprachenergie statt sie einzufügen oder in die History zu übernehmen.
+
 - 2026-03-25: macOS-Menüleisten-Menü auf Kernaktionen reduziert und visuell bereinigt.
   - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`
   - Funktionalität: Das Menü zeigt jetzt keine langen Status-/Hinweisblöcke mehr; `Check for Updates` ist entfernt, `Open Settings` und `Start Dictation` zeigen ihre Shortcut-Hinweise direkt im Label, und `Letztes Diktat kopieren` ist als Schnellaktion ergänzt.
@@ -79,6 +111,30 @@
   - Funktionalität: Versionsbasierte Partial-Publikation (`decodeVersion`) verhindert veraltete Partial-Updates bei konkurrierenden Decodes.
 
 ## Features
+
+- 2026-03-25: macOS-Menü und Settings an kompaktere Preferences-/Menu-Bar-Struktur angepasst.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/AppLanguage.swift`
+  - Funktionalität: Das Menüleisten-Menü zeigt jetzt einen kompakten Status-Header, fokussierte Primäraktionen, explizite Update-/Settings-Aktionen und problembezogene Berechtigungsaktionen; das Settings-Fenster nutzt eine preference-artige Fensterkonfiguration, fünf aufgeräumte Reiter (`Allgemein`, `Diktat`, `Kurzbefehle`, `Verlauf`, `Erweitert`) sowie ein überarbeitetes Suchfeld.
+
+- 2026-03-25: Menü- und Settings-Polish für macOS weiter verfeinert.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`
+  - Funktionalität: Das Menü nutzt jetzt zusätzliche Status-Pills und Kartenflächen für Quick Controls, Berechtigungen und das letzte Diktat; das Suchfeld in den Settings erhielt einen klareren visuellen Rahmen, damit es sich konsistenter in die Präferenzoberfläche einfügt.
+
+- 2026-03-25: macOS-Diktat unterstützt jetzt Clipboard-Only und Clipboard-Fallback ohne Verlust der History.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`
+  - Funktionalität: In den Einstellungen kann gewählt werden, ob finale Diktate direkt eingefügt oder nur in die Zwischenablage kopiert werden; zusätzlich kann nach einem 5-Sekunden-Timeout ohne Textziel automatisch die Zwischenablage als Fallback verwendet werden, während die History weiterhin immer gepflegt wird.
+
+- 2026-03-25: macOS-Shortcut-Recorder und Menülabels barriereärmer und sprachkonsistenter gemacht.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/AppLanguage.swift`
+  - Funktionalität: Shortcut-Aufnahme und Menüaktionen haben jetzt konsistentere deutsch/englische Labels, sichtbare Zustände für die Aufnahme eines Shortcuts und zusätzliche Accessibility-Beschriftungen/Hinweise für VoiceOver.
+
+- 2026-03-25: macOS-Diktat um konfigurierbares Hold-to-dictate erweitert.
+  - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/GlobalHotkeyManager.swift`, `apps/macos/AppShell/SettingsView.swift`
+  - Funktionalität: Neben dem normalen Toggle-Shortcut kann jetzt ein separater Hold-to-dictate-Shortcut aktiviert, aufgezeichnet oder deaktiviert werden; Start/Stop-Shortcut und Hold-Shortcut lassen sich unabhängig ein- oder ausschalten und werden mit Konfliktwarnungen in den Settings angezeigt.
+
+- 2026-03-25: macOS-App-Sprache jetzt konsistenter über Menü und Diktat-Settings gespiegelt.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/DictationRuntime.swift`
+  - Funktionalität: Die App kann weiterhin zwischen Deutsch und Englisch umgeschaltet werden; zusätzlich folgen jetzt auch die Anzeigen für Diktatsprache und Performance im Menü sowie in den Settings der gewählten UI-Sprache.
 
 - 2026-03-25: macOS-App-UI um lokale App-Sprache und kompakte Menüleisten-Steuerung erweitert.
   - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`

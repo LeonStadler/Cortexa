@@ -40,8 +40,6 @@ struct HotkeyBinding: Codable, Equatable, Hashable, Identifiable {
 
     static let optionSpace = HotkeyBinding(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey))
     static let optionShiftSpace = HotkeyBinding(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey | shiftKey))
-    static let controlOptionEscape = HotkeyBinding(keyCode: UInt32(kVK_Escape), carbonModifiers: UInt32(controlKey | optionKey))
-
     static func from(rawValue: String) -> HotkeyBinding? {
         let parts = rawValue.split(separator: ":")
         guard parts.count == 2,
@@ -175,15 +173,7 @@ struct HotkeyBinding: Codable, Equatable, Hashable, Identifiable {
 }
 
 enum HotkeyAdvisor {
-    static func advisory(for binding: HotkeyBinding, emergencyBinding: HotkeyBinding = .controlOptionEscape) -> HotkeyAdvisory? {
-        if binding == emergencyBinding {
-            return HotkeyAdvisory(
-                severity: .critical,
-                title: "Konflikt mit Notfall-Shortcut",
-                message: "Diese Tastenkombination ist bereits als Notfall-Stopp reserviert. Wähle für Start/Stop einen anderen Shortcut."
-            )
-        }
-
+    static func advisory(for binding: HotkeyBinding) -> HotkeyAdvisory? {
         if matches(binding, keyCode: UInt32(kVK_Space), modifiers: UInt32(cmdKey)) {
             return HotkeyAdvisory(
                 severity: .critical,
@@ -264,24 +254,17 @@ enum HotkeyAdvisor {
 
 final class GlobalHotkeyManager {
     var onToggle: (() -> Void)?
-    var onEmergencyAction: (() -> Void)?
     var onHoldPress: (() -> Void)?
     var onHoldRelease: (() -> Void)?
 
     private var toggleHotKeyRef: EventHotKeyRef?
-    private var emergencyHotKeyRef: EventHotKeyRef?
     private var holdHotKeyRef: EventHotKeyRef?
     private var isRegistered = false
     private var isHandlerInstalled = false
     private(set) var currentShortcut: HotkeyBinding = .optionSpace
     private(set) var currentHoldShortcut: HotkeyBinding? = .optionShiftSpace
     private let toggleHotKeyIdentifier: UInt32 = 1
-    private let emergencyHotKeyIdentifier: UInt32 = 2
-    private let holdHotKeyIdentifier: UInt32 = 3
-
-    var emergencyShortcutDisplayName: String {
-        HotkeyBinding.controlOptionEscape.displayName
-    }
+    private let holdHotKeyIdentifier: UInt32 = 2
 
     @discardableResult
     func registerDefaultShortcut(force: Bool = false) -> Bool {
@@ -310,7 +293,6 @@ final class GlobalHotkeyManager {
 
         let signature = OSType(0x57535052) // WSPR
         let toggleHotKeyID = EventHotKeyID(signature: signature, id: toggleHotKeyIdentifier)
-        let emergencyHotKeyID = EventHotKeyID(signature: signature, id: emergencyHotKeyIdentifier)
         let holdHotKeyID = EventHotKeyID(signature: signature, id: holdHotKeyIdentifier)
 
         if shortcutEnabled {
@@ -328,21 +310,6 @@ final class GlobalHotkeyManager {
                 return false
             }
             currentShortcut = shortcut
-        }
-
-        let emergencyBinding = HotkeyBinding.controlOptionEscape
-        let emergencyRegisterStatus = RegisterEventHotKey(
-            emergencyBinding.keyCode,
-            emergencyBinding.carbonModifiers,
-            emergencyHotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &emergencyHotKeyRef
-        )
-        guard emergencyRegisterStatus == noErr else {
-            unregisterDefaultShortcut()
-            isRegistered = false
-            return false
         }
 
         if holdEnabled, let holdShortcut {
@@ -390,8 +357,6 @@ final class GlobalHotkeyManager {
                 switch hotKeyID.id {
                 case manager.toggleHotKeyIdentifier where eventKind == UInt32(kEventHotKeyPressed):
                     manager.onToggle?()
-                case manager.emergencyHotKeyIdentifier where eventKind == UInt32(kEventHotKeyPressed):
-                    manager.onEmergencyAction?()
                 case manager.holdHotKeyIdentifier where eventKind == UInt32(kEventHotKeyPressed):
                     manager.onHoldPress?()
                 case manager.holdHotKeyIdentifier where eventKind == UInt32(kEventHotKeyReleased):
@@ -400,7 +365,7 @@ final class GlobalHotkeyManager {
                     break
                 }
                 return noErr
-            }, UInt32(eventSpecs.count), &eventSpecs, Unmanaged.passUnretained(self).toOpaque(), nil)
+            }, eventSpecs.count, &eventSpecs, Unmanaged.passUnretained(self).toOpaque(), nil)
             isHandlerInstalled = true
         }
 
@@ -412,10 +377,6 @@ final class GlobalHotkeyManager {
         if let toggleHotKeyRef {
             UnregisterEventHotKey(toggleHotKeyRef)
             self.toggleHotKeyRef = nil
-        }
-        if let emergencyHotKeyRef {
-            UnregisterEventHotKey(emergencyHotKeyRef)
-            self.emergencyHotKeyRef = nil
         }
         if let holdHotKeyRef {
             UnregisterEventHotKey(holdHotKeyRef)

@@ -23,4 +23,13 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             return english
         }
     }
+
+    var locale: Locale {
+        switch self {
+        case .german:
+            return Locale(identifier: "de_DE")
+        case .english:
+            return Locale(identifier: "en_US")
+        }
+    }
 }

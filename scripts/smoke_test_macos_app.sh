@@ -27,6 +27,15 @@ require_command() {
   fi
 }
 
+print_xcodegen_preflight_help() {
+  cat >&2 <<'EOF'
+[smoke_test_macos_app] XcodeGen is required before the macOS smoke test can generate the Xcode project.
+[smoke_test_macos_app] Install it first, for example:
+[smoke_test_macos_app]   brew install xcodegen
+[smoke_test_macos_app] If Homebrew is not available, install XcodeGen manually and ensure `xcodegen` is on your PATH.
+EOF
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --keep-running)
@@ -42,6 +51,13 @@ done
 require_command xcodebuild
 require_command plutil
 require_command pgrep
+
+if [[ ! -d "${PROJECT_PATH}" ]] && ! command -v xcodegen >/dev/null 2>&1 && ! command -v brew >/dev/null 2>&1 \
+  && [[ ! -x /opt/homebrew/bin/xcodegen ]] && [[ ! -x /usr/local/bin/xcodegen ]] \
+  && [[ ! -x /opt/homebrew/bin/brew ]] && [[ ! -x /usr/local/bin/brew ]]; then
+  print_xcodegen_preflight_help
+  exit 1
+fi
 
 mkdir -p "${ROOT_DIR}/artifacts/mac"
 

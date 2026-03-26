@@ -5,6 +5,7 @@ public protocol WhisperEngine: AnyObject {
     func startStreaming() throws
     func pushAudioPCM16kMono(_ buffer: UnsafePointer<Float>, frameCount: Int) throws
     func stopStreaming() async throws -> FinalTranscript
+    func resetStreaming()
     func transcribeFile(url: URL) async throws -> FinalTranscript
     var onPartial: ((PartialTranscript) -> Void)? { get set }
     var onFinalSegment: ((FinalSegment) -> Void)? { get set }

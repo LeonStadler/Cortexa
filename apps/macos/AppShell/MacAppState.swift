@@ -125,6 +125,39 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var toggleShortcutEnabled: Bool {
+        didSet {
+            userDefaults.set(toggleShortcutEnabled, forKey: UserDefaultsKeys.toggleShortcutEnabled)
+            registerSelectedHotkey(force: true)
+        }
+    }
+
+    @Published var holdToDictateEnabled: Bool {
+        didSet {
+            userDefaults.set(holdToDictateEnabled, forKey: UserDefaultsKeys.holdToDictateEnabled)
+            registerSelectedHotkey(force: true)
+        }
+    }
+
+    @Published var holdShortcut: HotkeyBinding {
+        didSet {
+            userDefaults.set(holdShortcut.rawValue, forKey: UserDefaultsKeys.holdShortcut)
+            registerSelectedHotkey(force: true)
+        }
+    }
+
+    @Published var finalResultDeliveryMode: FinalResultDeliveryMode {
+        didSet {
+            userDefaults.set(finalResultDeliveryMode.rawValue, forKey: UserDefaultsKeys.finalResultDeliveryMode)
+        }
+    }
+
+    @Published var clipboardFallbackWhenNoTarget: Bool {
+        didSet {
+            userDefaults.set(clipboardFallbackWhenNoTarget, forKey: UserDefaultsKeys.clipboardFallbackWhenNoTarget)
+        }
+    }
+
     @Published var showMenuBarShortcutHints: Bool {
         didSet {
             userDefaults.set(showMenuBarShortcutHints, forKey: UserDefaultsKeys.showMenuBarShortcutHints)
@@ -148,6 +181,7 @@ final class MacAppState: ObservableObject {
     @Published var updaterStatusText: String = "Updater wird initialisiert..."
     @Published var updaterConfigured: Bool = false
     @Published var updaterFeedURLText: String = ""
+    @Published var isSessionActive: Bool = false
 
     var menuBarIconName: String {
         switch recordingStatus {
@@ -179,6 +213,14 @@ final class MacAppState: ObservableObject {
         selectedHotkey.displayName
     }
 
+    var holdShortcutDisplayText: String {
+        holdShortcut.displayName
+    }
+
+    var latestDictationText: String {
+        transcriptHistory.first?.text ?? lastTranscript
+    }
+
     var hotkeyHintText: String {
         switch recordingStatus {
         case "Recording":
@@ -188,18 +230,19 @@ final class MacAppState: ObservableObject {
         }
     }
 
-    var emergencyHintText: String {
-        recordingStatus == "Recording"
-            ? "Notfall-Stopp: \(hotkeyManager.emergencyShortcutDisplayName)"
-            : "Settings öffnen: Menüleiste oder \(hotkeyManager.emergencyShortcutDisplayName)"
-    }
-
-    var emergencyShortcutDisplayText: String {
-        hotkeyManager.emergencyShortcutDisplayName
-    }
-
     var hotkeyAdvisory: HotkeyAdvisory? {
         HotkeyAdvisor.advisory(for: selectedHotkey)
+    }
+
+    var holdShortcutAdvisory: HotkeyAdvisory? {
+        if holdShortcut == selectedHotkey {
+            return HotkeyAdvisory(
+                severity: .critical,
+                title: "Konflikt mit Start/Stop-Shortcut",
+                message: "Hold-to-dictate und der normale Diktier-Shortcut dürfen nicht dieselbe Kombination verwenden."
+            )
+        }
+        return HotkeyAdvisor.advisory(for: holdShortcut)
     }
 
     var statusBadgeText: String {
@@ -268,6 +311,11 @@ final class MacAppState: ObservableObject {
         static let selectedLanguage = "wispr.settings.selectedLanguage"
         static let performanceProfile = "wispr.settings.performanceProfile"
         static let selectedHotkey = "wispr.settings.selectedHotkey"
+        static let toggleShortcutEnabled = "wispr.settings.toggleShortcutEnabled"
+        static let holdToDictateEnabled = "wispr.settings.holdToDictateEnabled"
+        static let holdShortcut = "wispr.settings.holdShortcut"
+        static let finalResultDeliveryMode = "wispr.settings.finalResultDeliveryMode"
+        static let clipboardFallbackWhenNoTarget = "wispr.settings.clipboardFallbackWhenNoTarget"
         static let showMenuBarShortcutHints = "wispr.settings.showMenuBarShortcutHints"
     }
 
@@ -289,6 +337,8 @@ final class MacAppState: ObservableObject {
     private var diagnosticLines: [String] = []
     private var checkForUpdatesHandler: (() -> Void)?
     private var lastExternalApplication: NSRunningApplication?
+    private var openSettingsHandler: (() -> Void)?
+    private var holdSessionActive = false
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -320,7 +370,24 @@ final class MacAppState: ObservableObject {
             self.selectedHotkey = .optionSpace
         }
 
+        self.toggleShortcutEnabled = userDefaults.object(forKey: UserDefaultsKeys.toggleShortcutEnabled) as? Bool ?? true
+        self.holdToDictateEnabled = userDefaults.object(forKey: UserDefaultsKeys.holdToDictateEnabled) as? Bool ?? false
+
+        if let rawHoldHotkey = userDefaults.string(forKey: UserDefaultsKeys.holdShortcut),
+           let parsedHoldHotkey = HotkeyBinding.from(rawValue: rawHoldHotkey) {
+            self.holdShortcut = parsedHoldHotkey
+        } else {
+            self.holdShortcut = .optionShiftSpace
+        }
+
         self.showMenuBarShortcutHints = userDefaults.object(forKey: UserDefaultsKeys.showMenuBarShortcutHints) as? Bool ?? false
+        if let rawDeliveryMode = userDefaults.string(forKey: UserDefaultsKeys.finalResultDeliveryMode),
+           let parsedDeliveryMode = FinalResultDeliveryMode(rawValue: rawDeliveryMode) {
+            self.finalResultDeliveryMode = parsedDeliveryMode
+        } else {
+            self.finalResultDeliveryMode = .insert
+        }
+        self.clipboardFallbackWhenNoTarget = userDefaults.object(forKey: UserDefaultsKeys.clipboardFallbackWhenNoTarget) as? Bool ?? false
 
         self.snippetStore = SnippetStore(fileURL: Self.snippetStorageURL())
         self.historyFileURL = Self.historyStorageURL()
@@ -335,6 +402,15 @@ final class MacAppState: ObservableObject {
 
         dictationRuntime.onStatus = { [weak self] status in
             self?.recordingStatus = status
+            if status != "Recording" {
+                self?.holdSessionActive = false
+            }
+        }
+        dictationRuntime.onSessionActivityChanged = { [weak self] isActive in
+            self?.isSessionActive = isActive
+            if !isActive {
+                self?.holdSessionActive = false
+            }
         }
         dictationRuntime.onDiagnostic = { [weak self] diagnostic in
             self?.appendDiagnostic(diagnostic)
@@ -342,15 +418,18 @@ final class MacAppState: ObservableObject {
         dictationRuntime.onTranscript = { [weak self] transcript in
             self?.lastTranscript = transcript
         }
-        dictationRuntime.onFinalTranscript = { [weak self] transcript in
-            self?.handleFinalTranscript(transcript)
+        dictationRuntime.onFinalTranscript = { [weak self] event in
+            self?.handleFinalTranscript(event)
         }
 
         hotkeyManager.onToggle = { [weak self] in
             self?.toggleTranscriptionFromUI()
         }
-        hotkeyManager.onEmergencyAction = { [weak self] in
-            self?.handleEmergencyAction()
+        hotkeyManager.onHoldPress = { [weak self] in
+            self?.handleHoldShortcutPressed()
+        }
+        hotkeyManager.onHoldRelease = { [weak self] in
+            self?.handleHoldShortcutReleased()
         }
         registerSelectedHotkey(force: true)
 
@@ -386,46 +465,49 @@ final class MacAppState: ObservableObject {
         }
     }
 
-    func openSettingsWindow() {
-        NSApp.activate(ignoringOtherApps: true)
+    func bindOpenSettingsHandler(_ handler: @escaping () -> Void) {
+        openSettingsHandler = handler
     }
 
-    func handleEmergencyAction() {
-        appendAudit("hotkey.emergency recordingStatus=\(recordingStatus)")
-        if recordingStatus == "Recording" {
-            toggleTranscriptionFromUI()
-            appendDiagnostic("Notfall-Stopp ausgelöst.")
+    func openSettingsWindow() {
+        if let openSettingsHandler {
+            openSettingsHandler()
         } else {
-            appendDiagnostic("Notfall-Shortcut ausgelöst: Menüleisten-Menü oder Settings öffnen.")
+            NSApplication.shared.activate(ignoringOtherApps: true)
         }
     }
 
+    func handleHoldShortcutPressed() {
+        appendAudit("hotkey.hold.press recordingStatus=\(recordingStatus)")
+        guard holdToDictateEnabled else { return }
+        guard !holdSessionActive else { return }
+        guard !isSessionActive else { return }
+
+        holdSessionActive = true
+        startTranscriptionForShortcut()
+    }
+
+    func handleHoldShortcutReleased() {
+        appendAudit("hotkey.hold.release recordingStatus=\(recordingStatus)")
+        guard holdSessionActive else { return }
+        holdSessionActive = false
+        guard isSessionActive else { return }
+        dictationRuntime.toggle(options: currentStartOptions())
+    }
+
     func toggleTranscriptionFromUI() {
-        if recordingStatus == "Recording" {
+        if isSessionActive {
             appendAudit("session.toggle stop")
+            holdSessionActive = false
             dictationRuntime.toggle(options: currentStartOptions())
             return
         }
 
-        let options = currentStartOptions()
-        appendAudit("session.toggle start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)")
-
-        if shouldRestorePreviousApplicationBeforeStarting(),
-           let previousApplication = lastExternalApplication {
-            appendDiagnostic("Wechsle vor dem Start zurück zur letzten App, um das fokussierte Textfeld zu verwenden.")
-            previousApplication.activate(options: [.activateAllWindows])
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                self?.dictationRuntime.start(options: options)
-            }
-            return
-        }
-
-        dictationRuntime.toggle(options: options)
+        startTranscriptionForShortcut()
     }
 
     func toggleTranscriptionFromMenuBar() {
-        if recordingStatus == "Recording" {
+        if isSessionActive {
             toggleTranscriptionFromUI()
             return
         }
@@ -452,13 +534,38 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    private func startTranscriptionForShortcut() {
+        let options = currentStartOptions()
+        appendAudit("session.toggle start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)")
+
+        if shouldRestorePreviousApplicationBeforeStarting(),
+           let previousApplication = lastExternalApplication {
+            appendDiagnostic("Wechsle vor dem Start zurück zur letzten App, um das fokussierte Textfeld zu verwenden.")
+            previousApplication.activate(options: [.activateAllWindows])
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                self?.dictationRuntime.start(options: options)
+            }
+            return
+        }
+
+        dictationRuntime.toggle(options: options)
+    }
+
     private func currentStartOptions() -> DictationStartOptions {
-        let mode: DictationMode = streamingEnabled ? .streaming : .finalize
+        let mode: DictationMode
+        if finalResultDeliveryMode == .clipboardOnly {
+            mode = .finalize
+        } else {
+            mode = streamingEnabled ? .streaming : .finalize
+        }
         return DictationStartOptions(
             mode: mode,
             language: selectedLanguage,
             performance: performanceProfile,
-            snippetRules: snippetRules
+            snippetRules: snippetRules,
+            finalResultDeliveryMode: finalResultDeliveryMode,
+            clipboardFallbackWhenNoTarget: clipboardFallbackWhenNoTarget
         )
     }
 
@@ -755,15 +862,14 @@ final class MacAppState: ObservableObject {
         }
     }
 
-    private func handleFinalTranscript(_ transcript: String) {
-        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func handleFinalTranscript(_ event: FinalTranscriptEvent) {
+        let trimmed = event.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let mode = streamingEnabled ? "streaming" : "finalize"
         let entry = TranscriptHistoryEntry(
             text: trimmed,
-            languageCode: selectedLanguage.rawValue,
-            mode: mode
+            languageCode: event.languageCode,
+            mode: event.mode == .streaming ? "streaming" : "finalize"
         )
 
         transcriptHistory.insert(entry, at: 0)
@@ -772,7 +878,17 @@ final class MacAppState: ObservableObject {
         }
         persistHistory()
         appendDiagnostic("History gespeichert (\(transcriptHistory.count) Einträge)")
-        appendAudit("transcript.final language=\(selectedLanguage.rawValue) mode=\(mode) chars=\(trimmed.count)")
+        switch event.deliveryOutcome {
+        case .inserted:
+            appendDiagnostic("Finales Transkript eingefügt.")
+        case .copiedToClipboard:
+            appendDiagnostic("Finales Transkript in die Zwischenablage kopiert.")
+        case .historyOnlyNoTarget:
+            appendDiagnostic("Finales Transkript ohne Ziel nur in der History gespeichert.")
+        case let .failed(reason):
+            appendDiagnostic("Finales Transkript konnte nicht zugestellt werden: \(reason)")
+        }
+        appendAudit("transcript.final language=\(event.languageCode) mode=\(entry.mode) chars=\(trimmed.count)")
     }
 
     private func loadSnippets() {
@@ -944,14 +1060,33 @@ final class MacAppState: ObservableObject {
     }
 
     private func registerSelectedHotkey(force: Bool) {
-        let didRegister = hotkeyManager.register(shortcut: selectedHotkey, force: force)
+        let didRegister = hotkeyManager.register(
+            shortcut: selectedHotkey,
+            shortcutEnabled: toggleShortcutEnabled,
+            holdShortcut: holdShortcut,
+            holdEnabled: holdToDictateEnabled,
+            force: force
+        )
         if didRegister {
-            appendDiagnostic("Globaler Shortcut aktiv: \(selectedHotkey.displayName)")
-            appendDiagnostic("Notfall-Shortcut aktiv: \(hotkeyManager.emergencyShortcutDisplayName)")
+            appendDiagnostic(
+                toggleShortcutEnabled
+                    ? "Globaler Shortcut aktiv: \(selectedHotkey.displayName)"
+                    : "Globaler Shortcut deaktiviert."
+            )
+            appendDiagnostic(
+                holdToDictateEnabled
+                    ? "Hold-to-dictate aktiv: \(holdShortcut.displayName)"
+                    : "Hold-to-dictate deaktiviert."
+            )
             if let hotkeyAdvisory {
                 appendDiagnostic("Shortcut-Hinweis: \(hotkeyAdvisory.title) – \(hotkeyAdvisory.message)")
             }
-            appendAudit("hotkey.register value=\(selectedHotkey.rawValue) emergency=controlOptionEscape")
+            if holdToDictateEnabled, let holdShortcutAdvisory {
+                appendDiagnostic("Hold-Hinweis: \(holdShortcutAdvisory.title) – \(holdShortcutAdvisory.message)")
+            }
+            appendAudit(
+                "hotkey.register value=\(selectedHotkey.rawValue) enabled=\(toggleShortcutEnabled) hold=\(holdShortcut.rawValue) holdEnabled=\(holdToDictateEnabled)"
+            )
         } else {
             appendDiagnostic("Globaler Shortcut konnte nicht registriert werden: \(selectedHotkey.displayName)")
             appendAudit("hotkey.register_failed value=\(selectedHotkey.rawValue)")
