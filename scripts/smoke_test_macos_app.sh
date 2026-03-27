@@ -9,6 +9,7 @@ APP_PATH="${DERIVED_DATA_PATH}/Build/Products/Debug/WisprLocalMac.app"
 APP_BINARY="${APP_PATH}/Contents/MacOS/WisprLocalMac"
 APP_INFO_PLIST="${APP_PATH}/Contents/Info.plist"
 RUNTIME_DIR="${APP_PATH}/Contents/Resources/Runtime"
+FALLBACK_RUNTIME_DIR="${APP_PATH}/Contents/Resources"
 LOG_PATH="${ROOT_DIR}/artifacts/mac/dev-run.log"
 KEEP_RUNNING=0
 
@@ -84,9 +85,15 @@ xcodebuild \
 [[ -d "${APP_PATH}" ]] || error "Built app not found at ${APP_PATH}"
 [[ -x "${APP_BINARY}" ]] || error "App binary missing at ${APP_BINARY}"
 [[ -f "${APP_INFO_PLIST}" ]] || error "App Info.plist missing at ${APP_INFO_PLIST}"
-[[ -x "${RUNTIME_DIR}/whisper-cli" ]] || error "Bundled whisper-cli missing at ${RUNTIME_DIR}/whisper-cli"
+if [[ -x "${RUNTIME_DIR}/whisper-cli" ]] && [[ -d "${RUNTIME_DIR}/models" ]]; then
+  EFFECTIVE_RUNTIME_DIR="${RUNTIME_DIR}"
+elif [[ -x "${FALLBACK_RUNTIME_DIR}/whisper-cli" ]] && [[ -d "${FALLBACK_RUNTIME_DIR}/models" ]]; then
+  EFFECTIVE_RUNTIME_DIR="${FALLBACK_RUNTIME_DIR}"
+else
+  error "Bundled whisper-cli missing at ${RUNTIME_DIR}/whisper-cli and fallback ${FALLBACK_RUNTIME_DIR}/whisper-cli"
+fi
 
-MODEL_COUNT=$(find "${RUNTIME_DIR}/models" -maxdepth 1 -type f -name '*.bin' | wc -l | tr -d ' ')
+MODEL_COUNT=$(find "${EFFECTIVE_RUNTIME_DIR}/models" -maxdepth 1 -type f -name '*.bin' | wc -l | tr -d ' ')
 [[ "${MODEL_COUNT}" -ge 1 ]] || error "No bundled ggml model files found in ${RUNTIME_DIR}/models"
 
 LSUIELEMENT=$(/usr/libexec/PlistBuddy -c "Print :LSUIElement" "${APP_INFO_PLIST}" 2>/dev/null || echo 0)
@@ -112,7 +119,7 @@ fi
 
 log "App process is running with pid ${APP_PID}"
 log "Runtime resources verified:"
-log "  CLI: ${RUNTIME_DIR}/whisper-cli"
+log "  CLI: ${EFFECTIVE_RUNTIME_DIR}/whisper-cli"
 log "  Models: ${MODEL_COUNT}"
 log "  Log: ${LOG_PATH}"
 

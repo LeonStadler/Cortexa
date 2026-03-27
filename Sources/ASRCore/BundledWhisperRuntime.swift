@@ -39,8 +39,19 @@ public enum BundledWhisperRuntimeInstaller {
 
     public static func bundledRuntimeDirectory(in bundle: Bundle = .main, resourceSubdirectory: String = "Runtime") -> URL? {
         guard let resourceURL = bundle.resourceURL else { return nil }
-        let runtimeURL = resourceURL.appendingPathComponent(resourceSubdirectory, isDirectory: true)
-        return FileManager.default.fileExists(atPath: runtimeURL.path) ? runtimeURL : nil
+        let nestedRuntimeURL = resourceURL.appendingPathComponent(resourceSubdirectory, isDirectory: true)
+
+        if isValidRuntimeDirectory(nestedRuntimeURL, fileManager: .default) {
+            return nestedRuntimeURL
+        }
+
+        // Xcode can flatten folder resources depending on how the target is configured.
+        // Accept both `Resources/Runtime/...` and `Resources/...` layouts.
+        if isValidRuntimeDirectory(resourceURL, fileManager: .default) {
+            return resourceURL
+        }
+
+        return nil
     }
 
     public static func defaultInstallDirectory(appName: String = "WisprLocal", fileManager: FileManager = .default) throws -> URL {
@@ -142,5 +153,11 @@ public enum BundledWhisperRuntimeInstaller {
         _ = fileURL
         _ = fileManager
         #endif
+    }
+
+    private static func isValidRuntimeDirectory(_ directory: URL, fileManager: FileManager) -> Bool {
+        let cliURL = directory.appendingPathComponent(cliName)
+        let modelsURL = directory.appendingPathComponent(modelsSubdirectory, isDirectory: true)
+        return fileManager.fileExists(atPath: cliURL.path) && fileManager.fileExists(atPath: modelsURL.path)
     }
 }

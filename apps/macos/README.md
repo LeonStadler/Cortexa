@@ -24,11 +24,17 @@ Operational notes:
 - `Settings…` from the menu bar opens an explicit preference-styled settings window, which is more reliable for the agent/menu bar app than relying on the default SwiftUI settings selector.
 - The settings let you switch the visible app UI between German and English.
 - The settings window is organized into tabs for general app preferences, dictation, shortcuts, history, and advanced options.
-- The settings search field is available again and visually integrated as a compact in-window filter; when active, it searches across all tabs and shows grouped results per area instead of restricting the search to the currently selected tab.
+- Settings search now uses a native toolbar search field via SwiftUI `.searchable(...)`; when active, it searches across all tabs and shows grouped results per area instead of restricting the search to the currently selected tab.
+- Search results reuse the same preference cards as the normal tabs, but without nesting full pane containers inside the search mode; this keeps the global search view flatter and closer to native macOS preferences behavior.
 - The settings window keeps a fixed width so long history entries do not stretch the preferences layout horizontally.
+- The settings window now leans more heavily on native macOS structures such as toolbar search, `Form`-based content flow, and restrained `GroupBox` grouping instead of a heavily custom header/search/card shell.
 - The history tab shows compact transcript cards with short previews first; longer dictations can be expanded inline for the full text without destabilizing the window layout.
 - Advanced options contain snippets, diagnostics, and license handling; the diagnostics preview can be expanded and copied.
-- Update management stays in the menu bar menu instead of the Settings window; if an update state becomes available, the menu header can surface it as a compact badge.
+- The search results view announces grouped matches and uses clearer accessibility labels for the search field, result grouping, and transcript history previews.
+- Update management stays in the menu bar menu instead of the Settings window; if an update state becomes available, the menu header can surface it as a compact badge while the rest of the menu remains visually restrained.
+- The menu bar menu weights its primary dictation action more strongly than utility footer actions, so `Settings…`, updates, and quit read more like classic menu utilities than like equal-priority content blocks.
+- The macOS target now includes an asset catalog under `apps/macos/AppShell/Resources/Assets.xcassets` with a first Accent Color and App Icon set, wired into XcodeGen via `ASSETCATALOG_COMPILER_APPICON_NAME` and `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`.
+- The bundled Whisper runtime is resolved robustly from either `Contents/Resources/Runtime` or a flattened `Contents/Resources` layout, so resource packaging changes do not break dictation startup.
 - Diagnostics are shown in a compressed preview first and can be expanded for the full log text, which can also be copied to the clipboard.
 - Streaming quality now uses the capability preset values for beam size, decode cadence, and thread count rather than only switching the model file; `balanced` and `accurate` also use a more conservative streaming commit strategy than `fast`.
 - Basic speech-activity gating suppresses no-speech hallucinations so short idle outputs such as `Musik` are less likely to be inserted when the microphone captures no real dictation.

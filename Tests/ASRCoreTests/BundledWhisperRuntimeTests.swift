@@ -4,6 +4,24 @@ import XCTest
 @testable import ASRCore
 
 final class BundledWhisperRuntimeTests: XCTestCase {
+    func testBundledRuntimeDirectorySupportsFlatResourceLayout() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_flat_test_\(UUID().uuidString)")
+        let resources = root.appendingPathComponent("Resources", isDirectory: true)
+        let models = resources.appendingPathComponent("models", isDirectory: true)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: models, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho test\n".utf8).write(to: resources.appendingPathComponent("whisper-cli"))
+        try Data([0x01]).write(to: models.appendingPathComponent("ggml-base.bin"))
+
+        let bundle = Bundle(url: root)!
+        let detected = BundledWhisperRuntimeInstaller.bundledRuntimeDirectory(in: bundle)
+
+        XCTAssertEqual(detected?.standardizedFileURL, resources.standardizedFileURL)
+    }
+
     func testInstallRuntimeCopiesCLIAndModels() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("runtime_test_\(UUID().uuidString)")

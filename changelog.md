@@ -2,9 +2,29 @@
 
 ## Fixes
 
+- 2026-03-26: Bundled-Whisper-Runtime akzeptiert im macOS-App-Bundle jetzt sowohl verschachtelte als auch flache Resource-Layouts.
+  - Dateien: `Sources/ASRCore/BundledWhisperRuntime.swift`, `Tests/ASRCoreTests/BundledWhisperRuntimeTests.swift`, `apps/macos/WisprLocalMac/project.yml`, `scripts/smoke_test_macos_app.sh`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Die App findet `whisper-cli` und `models/` jetzt sowohl unter `Contents/Resources/Runtime` als auch direkt unter `Contents/Resources`, wodurch Diktierstarts nach XcodeGen-/Asset-Catalog-Anpassungen nicht mehr mit `Bundled runtime directory not found` abbrechen. Zusätzlich bevorzugt das macOS-Projekt wieder die konservative Folder-Resource-Einbindung für `Runtime`, und der Smoke-Test validiert beide Bundle-Varianten.
+
+- 2026-03-26: macOS-Settings und Menüleisten-UI stärker auf native Toolbar-/Form-/Asset-Catalog-Strukturen zurückgeführt.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/WisprLocalMac/project.yml`, `apps/macos/AppShell/Resources/Assets.xcassets/Contents.json`, `apps/macos/AppShell/Resources/Assets.xcassets/AccentColor.colorset/Contents.json`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/*.png`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Das Settings-Fenster nutzt jetzt eine native Toolbar-Suche via `.searchable(...)` statt einer selbstgebauten Suchleiste, die Reiterinhalte sind stärker auf `Form`-/`GroupBox`-Verhalten zurückgeführt, und das Menüleisten-Menü gewichtet Primäraktion, Utility-Footer und Status-Pills klarer nach Apple-typischer Bedeutung. Zusätzlich besitzt das macOS-Target jetzt erstmals einen echten Asset Catalog mit `AccentColor` und vollständigem `AppIcon`-Set, der über XcodeGen nativ in das App-Target eingebunden wird.
+
+- 2026-03-26: macOS-Settings- und Menüleisten-Polish nähert die Oberfläche weiter an native Preferences- und Menu-Bar-Gewichtung an.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Das Settings-Fenster nutzt jetzt eine ruhigere Header-Hierarchie mit Kontextzeile, weichere Card-Radien, feinere Abstände und zurückhaltendere Labels; im Menüleisten-Menü wurden Breite, Kartenstärke, Status-Pills, Secondary-Text und Trenner reduziert, damit die Oberfläche weniger boxed und näher an nativer macOS-Preferences-/Menu-Bar-Anmutung wirkt.
+
+- 2026-03-26: macOS-Settings-Suche rendert Bereichstreffer jetzt ohne verschachtelte Reiter-Container und wirkt dadurch deutlich nativer.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Die globale Suche zeigt Treffer jetzt als echte Bereichssektionen statt komplette Pane-Container im Suchmodus; dadurch entfallen die zuvor sichtbare Reiter-/ScrollView-Verschachtelung, die History verhält sich im Suchmodus ohne innere Scrollfläche ruhiger, und das Suchfeld nutzt jetzt lokalisierte Accessibility-Hinweise und eine konsistentere native Interaktion.
+
 - 2026-03-26: macOS-Menü und Settings entfernen doppelten Verlauf, stabilisieren die History-Breite, vereinfachen Menüleisten-Optionen und zeigen Suchtreffer reiterübergreifend.
   - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/GlobalHotkeyManager.swift`, `apps/macos/README.md`, `VERSION`
   - Funktionalität: Das Menü zeigt im Idle-Zustand keinen redundanten `Bereit`-Header und keine doppelte Verlaufsvorschau mehr; die Verlaufsvorschau im Menü wird zusätzlich gekürzt, damit lange Diktate das Layout nicht aufblähen. Die Settings halten jetzt eine feste Fensterbreite, zeigen im History-Reiter kompakte, aufklappbare Verlaufskarten statt ungebremster Volltexte, entfernen den zuvor fest reservierten Notfall-Kurzbefehl vollständig aus Hotkey-Registrierung, UI und Diagnosetexten, blenden den Update-Bereich nicht mehr in den Settings ein und verwenden bei aktiver Suche eine reiterübergreifende Ergebnisansicht mit getrennten Gruppen pro Bereich.
+
+- 2026-03-26: macOS-Settings und Menüleisten-Oberfläche in einem ersten Apple-like-Conformance-Pass visuell und semantisch überarbeitet.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Die Settings ersetzen große Standard-`Form`-Blöcke jetzt schrittweise durch ruhigere Preference-Cards mit klarerer Hierarchie, kleinerem Header und systemnäherer Fenstergröße; die Suche zeigt eine Trefferzusammenfassung, gruppiert Ergebnisse semantisch und ist für Screenreader klarer ausgezeichnet. Das Menüleisten-Menü nutzt subtilere Status-Pills, leichtere Kartenflächen, eine weniger dominante Kopfzeile und explizitere Accessibility-Auszeichnungen für Status und Sprachwahl.
 
 - 2026-03-25: macOS-Diktierlauf räumt Insert-/AX-Fehler jetzt sauber auf und bleibt bei fehlendem Textziel recoverable.
   - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/MacAppState.swift`, `Sources/ASRCore/Protocols.swift`, `Sources/ASRCore/WhisperCppEngine.swift`
