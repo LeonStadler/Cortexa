@@ -32,6 +32,7 @@ validate_non_empty() {
 
 require_command rg
 require_command plutil
+require_command git
 
 validate_non_empty "WISPR_LICENSE_PUBLIC_KEY_BASE64" "${WISPR_LICENSE_PUBLIC_KEY_BASE64:-}"
 validate_non_empty "SPARKLE_FEED_URL" "${SPARKLE_FEED_URL:-}"
@@ -53,7 +54,7 @@ MODEL_COUNT=$(find "${RUNTIME_DIR}/models" -maxdepth 1 -type f -name '*.bin' | w
 [[ "${MODEL_COUNT}" -ge 1 ]] || error "Keine ggml-Modelle in ${RUNTIME_DIR}/models gefunden."
 
 log "Regenerating macOS Xcode project with production variables"
-"${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh"
+"${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh" --check
 
 plutil -lint "${INFO_PLIST}" >/dev/null
 rg -q 'SUPublicEDKey' "${INFO_PLIST}" || error "SUPublicEDKey fehlt in Info.plist"
@@ -61,6 +62,12 @@ rg -q 'SUFeedURL' "${INFO_PLIST}" || error "SUFeedURL fehlt in Info.plist"
 rg -q 'WLMLicensePublicKeyBase64' "${INFO_PLIST}" || error "WLMLicensePublicKeyBase64 fehlt in Info.plist"
 EXPECTED_VERSION_PATTERN="$(printf '%s' "${APP_VERSION}" | sed 's/\./\\./g')"
 rg -q "MARKETING_VERSION = ${EXPECTED_VERSION_PATTERN};" "${PROJECT_FILE}" || error "MARKETING_VERSION im generierten Projekt entspricht nicht VERSION"
+EXPECTED_BUILD_NUMBER="$(printf '%s' "${APP_VERSION}" | tr -cd '0-9' | sed 's/^0*//')"
+if [[ -z "${EXPECTED_BUILD_NUMBER}" ]]; then
+  EXPECTED_BUILD_NUMBER="1"
+fi
+rg -q "CURRENT_PROJECT_VERSION = ${EXPECTED_BUILD_NUMBER};" "${PROJECT_FILE}" || error "CURRENT_PROJECT_VERSION im generierten Projekt entspricht nicht VERSION"
+rg -q 'Assets\.xcassets' "${PROJECT_FILE}" || error "Asset-Katalog fehlt im generierten Projekt"
 
 log "Preflight erfolgreich"
 log "Runtime-Modelle: ${MODEL_COUNT}"

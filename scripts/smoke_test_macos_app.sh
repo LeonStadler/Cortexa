@@ -12,6 +12,7 @@ RUNTIME_DIR="${APP_PATH}/Contents/Resources/Runtime"
 FALLBACK_RUNTIME_DIR="${APP_PATH}/Contents/Resources"
 LOG_PATH="${ROOT_DIR}/artifacts/mac/dev-run.log"
 KEEP_RUNNING=0
+SKIP_LAUNCH=0
 
 log() {
   echo "[smoke_test_macos_app] $*"
@@ -43,6 +44,10 @@ while [[ $# -gt 0 ]]; do
       KEEP_RUNNING=1
       shift
       ;;
+    --skip-launch)
+      SKIP_LAUNCH=1
+      shift
+      ;;
     *)
       error "Unknown argument: $1"
       ;;
@@ -53,20 +58,13 @@ require_command xcodebuild
 require_command plutil
 require_command pgrep
 
-if [[ ! -d "${PROJECT_PATH}" ]] && ! command -v xcodegen >/dev/null 2>&1 && ! command -v brew >/dev/null 2>&1 \
-  && [[ ! -x /opt/homebrew/bin/xcodegen ]] && [[ ! -x /usr/local/bin/xcodegen ]] \
-  && [[ ! -x /opt/homebrew/bin/brew ]] && [[ ! -x /usr/local/bin/brew ]]; then
-  print_xcodegen_preflight_help
-  exit 1
-fi
-
 mkdir -p "${ROOT_DIR}/artifacts/mac"
 
 log "Preparing runtime bundle"
 "${ROOT_DIR}/scripts/prepare_runtime_bundle.sh"
 
 log "Generating macOS Xcode project"
-"${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh"
+"${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh" --check
 
 if [[ -d "${DERIVED_DATA_PATH}" ]]; then
   log "Removing previous derived data"
@@ -101,6 +99,11 @@ LSUIELEMENT=$(/usr/libexec/PlistBuddy -c "Print :LSUIElement" "${APP_INFO_PLIST}
 
 log "Info.plist summary"
 plutil -p "${APP_INFO_PLIST}" | sed -n '1,80p'
+
+if [[ "${SKIP_LAUNCH}" -eq 1 ]]; then
+  log "Skipping app launch; build and bundle validation completed."
+  exit 0
+fi
 
 log "Killing any previous WisprLocalMac process"
 pkill -f "${APP_BINARY}" >/dev/null 2>&1 || true

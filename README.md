@@ -70,7 +70,7 @@ Details: `docs/build-xcframework.md`.
 3. Run target `WisprLocalMac`.
 4. In app settings grant:
 - Microphone
-- Accessibility
+- Accessibility for direct text insertion
 5. Start/stop dictation:
 - Menu bar button
 - Global hotkey `Option + Space`
@@ -88,6 +88,7 @@ Features implemented in macOS app shell:
 - Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI
 - Sparkle-kompatibler Auto-Updater mit optionalem Feed-Check im Menü und in den Settings
 - Lifecycle-Refresh nach App-Aktivierung und System-Wake für Berechtigungen, Runtime und Hotkey-Registrierung
+- Eingeschränkter Transkriptionsmodus ohne Bedienungshilfen; direktes Einfügen bleibt dann deaktiviert, Verlauf und Zwischenablage bleiben nutzbar
 
 ## macOS Release Archive
 
@@ -170,6 +171,12 @@ If you want the app to remain running after the smoke test:
 ./scripts/smoke_test_macos_app.sh --keep-running
 ```
 
+For CI or headless verification without launching the app process:
+
+```bash
+./scripts/smoke_test_macos_app.sh --skip-launch
+```
+
 ## iOS / iPadOS Project Run
 
 1. Generate the iOS project:
@@ -187,5 +194,5 @@ bash ./scripts/generate_ios_xcodeproj.sh
 
 Features implemented in iOS shell:
 - Host app with shared snippets, transcript history and offline license UI
-- Keyboard extension with latest-transcript insert and shared snippet quick insert
-- Shared App Group persistence for snippets/history/audit state
+- Keyboard extension with latest approved transcript insert and shared snippet quick insert
+- Shared App Group persistence is required; there is no silent local fallback when the group is unavailable

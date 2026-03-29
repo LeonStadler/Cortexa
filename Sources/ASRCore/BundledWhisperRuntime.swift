@@ -4,11 +4,34 @@ public struct InstalledWhisperRuntime: Sendable, Equatable {
     public let rootDirectoryURL: URL
     public let cliURL: URL
     public let modelsDirectoryURL: URL
+    public let availableModelFileNames: [String]
+    public let defaultModelFileName: String
+    public let manifest: BundledWhisperRuntimeManifest?
 
-    public init(rootDirectoryURL: URL, cliURL: URL, modelsDirectoryURL: URL) {
+    public init(
+        rootDirectoryURL: URL,
+        cliURL: URL,
+        modelsDirectoryURL: URL,
+        availableModelFileNames: [String],
+        defaultModelFileName: String,
+        manifest: BundledWhisperRuntimeManifest?
+    ) {
         self.rootDirectoryURL = rootDirectoryURL
         self.cliURL = cliURL
         self.modelsDirectoryURL = modelsDirectoryURL
+        self.availableModelFileNames = availableModelFileNames
+        self.defaultModelFileName = defaultModelFileName
+        self.manifest = manifest
+    }
+}
+
+public struct BundledWhisperRuntimeManifest: Sendable, Codable, Equatable {
+    public let defaultModelFileName: String
+    public let modelFileNames: [String]?
+
+    public init(defaultModelFileName: String, modelFileNames: [String]? = nil) {
+        self.defaultModelFileName = defaultModelFileName
+        self.modelFileNames = modelFileNames
     }
 }
 
@@ -17,6 +40,8 @@ public enum BundledWhisperRuntimeError: Error, LocalizedError {
     case sourceCLIMissing(URL)
     case sourceModelsDirectoryMissing(URL)
     case noModelsFound(URL)
+    case invalidManifest(URL)
+    case manifestDefaultModelMissing(String, URL)
 
     public var errorDescription: String? {
         switch self {
@@ -28,6 +53,10 @@ public enum BundledWhisperRuntimeError: Error, LocalizedError {
             return "Bundled model directory is missing at \(path.path)."
         case let .noModelsFound(path):
             return "No .bin models found in \(path.path)."
+        case let .invalidManifest(path):
+            return "Bundled runtime manifest is invalid at \(path.path)."
+        case let .manifestDefaultModelMissing(modelFileName, modelsDirectory):
+            return "Bundled runtime manifest default model \(modelFileName) does not exist in \(modelsDirectory.path)."
         }
     }
 }
@@ -36,6 +65,7 @@ public enum BundledWhisperRuntimeInstaller {
     private static let runtimeSubdirectory = "Runtime"
     private static let modelsSubdirectory = "models"
     private static let cliName = "whisper-cli"
+    private static let manifestFileName = "runtime-manifest.json"
 
     public static func bundledRuntimeDirectory(in bundle: Bundle = .main, resourceSubdirectory: String = "Runtime") -> URL? {
         guard let resourceURL = bundle.resourceURL else { return nil }
@@ -105,11 +135,28 @@ public enum BundledWhisperRuntimeInstaller {
             throw BundledWhisperRuntimeError.noModelsFound(sourceModels)
         }
 
+        let availableModelFileNames = modelFiles
+            .map(\.lastPathComponent)
+            .sorted()
+        let manifest = try loadManifest(in: sourceRuntimeDirectory, fileManager: fileManager)
+        let defaultModelFileName = try resolveDefaultModelFileName(
+            manifest: manifest,
+            availableModelFileNames: availableModelFileNames,
+            sourceModelsDirectory: sourceModels
+        )
+
         let destinationRoot = try destinationRuntimeDirectory ?? defaultInstallDirectory(appName: appName, fileManager: fileManager)
         let destinationModels = destinationRoot.appendingPathComponent(modelsSubdirectory, isDirectory: true)
         let destinationCLI = destinationRoot.appendingPathComponent(cliName)
+        let destinationManifest = destinationRoot.appendingPathComponent(manifestFileName)
 
         try fileManager.createDirectory(at: destinationModels, withIntermediateDirectories: true)
+        try pruneStaleRuntimeAssets(
+            destinationRoot: destinationRoot,
+            destinationModels: destinationModels,
+            expectedModelFileNames: Set(availableModelFileNames),
+            fileManager: fileManager
+        )
 
         try copyIfChanged(from: sourceCLI, to: destinationCLI, fileManager: fileManager)
         try makeExecutable(destinationCLI, fileManager: fileManager)
@@ -119,10 +166,20 @@ public enum BundledWhisperRuntimeInstaller {
             try copyIfChanged(from: modelFile, to: target, fileManager: fileManager)
         }
 
+        try syncManifest(
+            manifest: manifest,
+            sourceRuntimeDirectory: sourceRuntimeDirectory,
+            destinationManifest: destinationManifest,
+            fileManager: fileManager
+        )
+
         return InstalledWhisperRuntime(
             rootDirectoryURL: destinationRoot,
             cliURL: destinationCLI,
-            modelsDirectoryURL: destinationModels
+            modelsDirectoryURL: destinationModels,
+            availableModelFileNames: availableModelFileNames,
+            defaultModelFileName: defaultModelFileName,
+            manifest: manifest
         )
     }
 
@@ -153,6 +210,71 @@ public enum BundledWhisperRuntimeInstaller {
         _ = fileURL
         _ = fileManager
         #endif
+    }
+
+    private static func loadManifest(in runtimeDirectory: URL, fileManager: FileManager) throws -> BundledWhisperRuntimeManifest? {
+        let manifestURL = runtimeDirectory.appendingPathComponent(manifestFileName)
+        guard fileManager.fileExists(atPath: manifestURL.path) else {
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: manifestURL)
+            return try JSONDecoder().decode(BundledWhisperRuntimeManifest.self, from: data)
+        } catch {
+            throw BundledWhisperRuntimeError.invalidManifest(manifestURL)
+        }
+    }
+
+    private static func resolveDefaultModelFileName(
+        manifest: BundledWhisperRuntimeManifest?,
+        availableModelFileNames: [String],
+        sourceModelsDirectory: URL
+    ) throws -> String {
+        if let manifest {
+            guard availableModelFileNames.contains(manifest.defaultModelFileName) else {
+                throw BundledWhisperRuntimeError.manifestDefaultModelMissing(manifest.defaultModelFileName, sourceModelsDirectory)
+            }
+            return manifest.defaultModelFileName
+        }
+
+        return availableModelFileNames[0]
+    }
+
+    private static func pruneStaleRuntimeAssets(
+        destinationRoot: URL,
+        destinationModels: URL,
+        expectedModelFileNames: Set<String>,
+        fileManager: FileManager
+    ) throws {
+        if fileManager.fileExists(atPath: destinationModels.path) {
+            let existingModelFiles = try fileManager.contentsOfDirectory(at: destinationModels, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension.lowercased() == "bin" }
+
+            for existingModelFile in existingModelFiles where !expectedModelFileNames.contains(existingModelFile.lastPathComponent) {
+                try fileManager.removeItem(at: existingModelFile)
+            }
+        }
+
+        let destinationManifest = destinationRoot.appendingPathComponent(manifestFileName)
+        if fileManager.fileExists(atPath: destinationManifest.path) {
+            try fileManager.removeItem(at: destinationManifest)
+        }
+    }
+
+    private static func syncManifest(
+        manifest: BundledWhisperRuntimeManifest?,
+        sourceRuntimeDirectory: URL,
+        destinationManifest: URL,
+        fileManager: FileManager
+    ) throws {
+        let sourceManifest = sourceRuntimeDirectory.appendingPathComponent(manifestFileName)
+
+        guard manifest != nil else {
+            return
+        }
+
+        try copyIfChanged(from: sourceManifest, to: destinationManifest, fileManager: fileManager)
     }
 
     private static func isValidRuntimeDirectory(_ directory: URL, fileManager: FileManager) -> Bool {

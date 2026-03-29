@@ -6,6 +6,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var appState: MacAppState
     @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.german.rawValue
+
     @State private var selectedTab: SettingsTab = .general
     @State private var diagnosticsExpanded = false
     @State private var newSnippetTrigger: String = ""
@@ -23,12 +24,21 @@ struct SettingsView: View {
         AppLanguage(rawValue: uiLanguageRaw) ?? .german
     }
 
+    private func text(_ german: String, _ english: String) -> String {
+        appLanguage.text(german, english)
+    }
+
     private var searchQuery: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private var isSearching: Bool {
         !searchQuery.isEmpty
+    }
+
+    private func matches(_ keywords: [String]) -> Bool {
+        guard isSearching else { return true }
+        return keywords.contains { $0.lowercased().contains(searchQuery) }
     }
 
     private var filteredHistory: [TranscriptHistoryEntry] {
@@ -42,6 +52,13 @@ struct SettingsView: View {
         }
     }
 
+    private var compactHistoryEntries: [TranscriptHistoryEntry] {
+        if isSearching {
+            return filteredHistory
+        }
+        return Array(filteredHistory.prefix(12))
+    }
+
     private var filteredSnippets: [SnippetRule] {
         guard isSearching else {
             return appState.snippetRules
@@ -52,66 +69,28 @@ struct SettingsView: View {
         }
     }
 
-    private func text(_ german: String, _ english: String) -> String {
-        appLanguage.text(german, english)
-    }
-
-    private func matches(_ keywords: [String]) -> Bool {
-        guard isSearching else { return true }
-        return keywords.contains { $0.lowercased().contains(searchQuery) }
-    }
-
-    private func copyToClipboard(_ string: String) {
-        guard !string.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(string, forType: .string)
-    }
-
-    private var compactHistoryEntries: [TranscriptHistoryEntry] {
-        if !isSearching {
-            return Array(filteredHistory.prefix(12))
-        }
-        return filteredHistory
-    }
-
-    private var generalTabHasMatches: Bool {
+    private var generalHasMatches: Bool {
         matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints", "zugriff", "permissions", "berechtigungen", "mikrofon", "accessibility", "bedienungshilfen"])
     }
 
-    private var dictationTabHasMatches: Bool {
+    private var dictationHasMatches: Bool {
         matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert", "delivery"])
     }
 
-    private var shortcutsTabHasMatches: Bool {
-        matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"])
+    private var shortcutsHasMatches: Bool {
+        matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) 
     }
 
-    private var historyTabHasMatches: Bool {
+    private var historyHasMatches: Bool {
         matches(["history", "verlauf", "transkript", "dictation", "diktat"]) || !filteredHistory.isEmpty
     }
 
-    private var advancedTabHasMatches: Bool {
+    private var advancedHasMatches: Bool {
         matches(["snippet", "textbaustein", "replacement", "trigger", "diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) ||
-        !filteredSnippets.isEmpty ||
-        appState.diagnosticsText.lowercased().contains(searchQuery) ||
-        appState.licenseStatusText.lowercased().contains(searchQuery) ||
-        appState.capabilitySummary.lowercased().contains(searchQuery)
-    }
-
-    private var searchResultSectionCount: Int {
-        [generalTabHasMatches, dictationTabHasMatches, shortcutsTabHasMatches, historyTabHasMatches, advancedTabHasMatches]
-            .filter { $0 }
-            .count
-    }
-
-    private var searchResultItemCount: Int {
-        var count = 0
-        if generalTabHasMatches { count += 1 }
-        if dictationTabHasMatches { count += 1 }
-        if shortcutsTabHasMatches { count += 1 }
-        if historyTabHasMatches { count += compactHistoryEntries.count }
-        if advancedTabHasMatches { count += max(filteredSnippets.count, 1) }
-        return count
+            !filteredSnippets.isEmpty ||
+            appState.diagnosticsText.lowercased().contains(searchQuery) ||
+            appState.licenseStatusText.lowercased().contains(searchQuery) ||
+            appState.capabilitySummary.lowercased().contains(searchQuery)
     }
 
     private var compressedDiagnosticsText: String {
@@ -123,297 +102,306 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        Group {
-            if isSearching {
-                searchResultsView
-            } else {
-                TabView(selection: $selectedTab) {
-                    generalPane
-                        .tabItem { Label(text("Allgemein", "General"), systemImage: "gearshape") }
-                        .tag(SettingsTab.general)
-
-                    dictationPane
-                        .tabItem { Label(text("Diktat", "Dictation"), systemImage: "mic") }
-                        .tag(SettingsTab.dictation)
-
-                    shortcutsPane
-                        .tabItem { Label(text("Kurzbefehle", "Shortcuts"), systemImage: "command") }
-                        .tag(SettingsTab.shortcuts)
-
-                    historyPane
-                        .tabItem { Label(text("Verlauf", "History"), systemImage: "clock.arrow.circlepath") }
-                        .tag(SettingsTab.history)
-
-                    advancedPane
-                        .tabItem { Label(text("Erweitert", "Advanced"), systemImage: "wrench.and.screwdriver") }
-                        .tag(SettingsTab.advanced)
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                List(SettingsTab.allCases, id: \.self, selection: $selectedTab) { tab in
+                    Label(tab.title(language: appLanguage), systemImage: tab.symbolName)
+                        .tag(tab)
+                        .font(.system(size: 15, weight: .medium))
                 }
+                .listStyle(.sidebar)
+                .environment(\.defaultMinListRowHeight, 34)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 6)
             }
+            .frame(width: 250)
+            .background(Color(nsColor: .windowBackgroundColor))
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text(isSearching ? text("Suchergebnisse", "Search Results") : selectedTab.title(language: appLanguage))
+                    .font(.title2.weight(.semibold))
+                    .frame(maxWidth: 780, alignment: .leading)
+
+                NativeSearchField(
+                    placeholder: text("Einstellungen durchsuchen", "Search settings"),
+                    text: $searchText
+                )
+                .frame(maxWidth: 420)
+                .frame(maxWidth: 780, alignment: .leading)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.62))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+
+                    Group {
+                        if isSearching {
+                            searchResultsForm
+                        } else {
+                            selectedForm
+                        }
+                    }
+                    .padding(8)
+                }
+                .frame(maxWidth: 780, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 20)
         .environment(\.locale, appLanguage.locale)
-        .frame(width: 760, height: 560)
-        .background(.regularMaterial)
-        .searchable(
-            text: $searchText,
-            placement: .toolbar,
-            prompt: text("Einstellungen durchsuchen", "Search settings")
-        )
+        .frame(width: 980, height: 640)
+        .controlSize(.regular)
+        .background(.ultraThinMaterial)
     }
 
-    private var searchResultsView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                if generalTabHasMatches {
-                    SearchResultsGroup(
-                        title: text("Allgemein", "General"),
-                        systemImage: "gearshape",
-                        showsDivider: dictationTabHasMatches || shortcutsTabHasMatches || historyTabHasMatches || advancedTabHasMatches
-                    ) {
-                        generalCards
-                    }
-                }
+    private var generalForm: some View {
+        Form {
+            Section(text("App", "App")) {
+                generalAppearanceContent
+            }
+            Section(text("Zugriff", "Access")) {
+                generalPermissionsContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
 
-                if dictationTabHasMatches {
-                    SearchResultsGroup(
-                        title: text("Diktat", "Dictation"),
-                        systemImage: "mic",
-                        showsDivider: shortcutsTabHasMatches || historyTabHasMatches || advancedTabHasMatches
-                    ) {
-                        dictationCards
-                    }
-                }
+    @ViewBuilder
+    private var selectedForm: some View {
+        switch selectedTab {
+        case .general:
+            generalForm
+        case .dictation:
+            dictationForm
+        case .shortcuts:
+            shortcutsForm
+        case .history:
+            historyForm
+        case .advanced:
+            advancedForm
+        }
+    }
 
-                if shortcutsTabHasMatches {
-                    SearchResultsGroup(
-                        title: text("Kurzbefehle", "Shortcuts"),
-                        systemImage: "command",
-                        showsDivider: historyTabHasMatches || advancedTabHasMatches
-                    ) {
-                        shortcutsCards
-                    }
-                }
+    private var dictationForm: some View {
+        Form {
+            Section(text("Erkennung", "Recognition")) {
+                dictationRecognitionContent
+            }
+            Section(text("Ablage", "Delivery")) {
+                dictationDeliveryContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
 
-                if historyTabHasMatches {
-                    SearchResultsGroup(
-                        title: text("Verlauf", "History"),
-                        systemImage: "clock.arrow.circlepath",
-                        showsDivider: advancedTabHasMatches
-                    ) {
-                        historyCards
-                    }
-                }
+    private var shortcutsForm: some View {
+        Form {
+            Section(text("Start / Stopp", "Start / Stop")) {
+                startStopShortcutContent
+            }
+            Section(text("Halten zum Diktieren", "Hold to Dictate")) {
+                holdShortcutContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
 
-                if advancedTabHasMatches {
-                    SearchResultsGroup(
-                        title: text("Erweitert", "Advanced"),
-                        systemImage: "wrench.and.screwdriver",
-                        showsDivider: false
-                    ) {
-                        advancedCards
-                    }
-                }
+    private var historyForm: some View {
+        Form {
+            Section(text("Aktionen", "Actions")) {
+                historyActionContent
+            }
+            Section(text("Transkriptverlauf", "Transcript History")) {
+                historyEntriesContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
 
-                if !generalTabHasMatches && !dictationTabHasMatches && !shortcutsTabHasMatches && !historyTabHasMatches && !advancedTabHasMatches {
+    private var advancedForm: some View {
+        Form {
+            Section(text("Snippets", "Snippets")) {
+                snippetsContent
+            }
+            Section(text("Diagnose", "Diagnostics")) {
+                diagnosticsContent
+            }
+            Section(text("Lizenz", "License")) {
+                licenseContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+
+    private var searchResultsForm: some View {
+        Form {
+            if generalHasMatches {
+                Section(text("Allgemein", "General")) {
+                    generalAppearanceContent
+                    generalPermissionsContent
+                }
+            }
+
+            if dictationHasMatches {
+                Section(text("Diktat", "Dictation")) {
+                    dictationRecognitionContent
+                    dictationDeliveryContent
+                }
+            }
+
+            if shortcutsHasMatches {
+                Section(text("Kurzbefehle", "Shortcuts")) {
+                    startStopShortcutContent
+                    holdShortcutContent
+                }
+            }
+
+            if historyHasMatches {
+                Section(text("Verlauf", "History")) {
+                    historyActionContent
+                    historyEntriesContent
+                }
+            }
+
+            if advancedHasMatches {
+                Section(text("Erweitert", "Advanced")) {
+                    snippetsContent
+                    diagnosticsContent
+                    licenseContent
+                }
+            }
+
+            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !historyHasMatches && !advancedHasMatches {
+                Section {
                     Text(text("Keine passenden Einstellungen gefunden.", "No matching settings found."))
-                        .font(.footnote)
                         .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 8)
         }
-    }
-
-    private var generalPane: some View {
-        SettingsPane {
-            generalCards
-        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
     }
 
     @ViewBuilder
-    private var generalCards: some View {
+    private var generalAppearanceContent: some View {
         if matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints"]) {
-            SettingsCard(
-                title: text("App & Menüleiste", "App & Menu Bar"),
-                description: text(
-                    "Sprache und Menüleistenverhalten der App.",
-                    "Language and menu bar behavior for the app."
-                )
-            ) {
-                SettingsRow(label: text("App-Sprache", "App Language")) {
-                    Picker(text("App-Sprache", "App Language"), selection: $uiLanguageRaw) {
-                        ForEach(AppLanguage.allCases) { language in
-                            Text(language.displayName).tag(language.rawValue)
-                        }
+            LabeledContent(text("App-Sprache", "App language")) {
+                Picker(text("App-Sprache", "App Language"), selection: $uiLanguageRaw) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.displayName).tag(language.rawValue)
                     }
                 }
-
-                Toggle(text("Shortcut-Hinweise im Menüleisten-Titel anzeigen", "Show shortcut hints in the menu bar title"), isOn: $appState.showMenuBarShortcutHints)
-
-                Text(text(
-                    "Diese Option blendet oberhalb nur Zusatztext wie `Start ⌥Space` oder `Stop ⇧⌘C` ein. Das Statussymbol selbst bleibt immer sichtbar.",
-                    "This only adds helper text like `Start ⌥Space` or `Stop ⇧⌘C` to the menu bar title. The status icon itself always stays visible."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .labelsHidden()
+                .frame(minWidth: 170)
             }
-        }
 
+            Toggle(text("Kurzbefehl-Hinweise im Menüleisten-Titel anzeigen", "Show shortcut hints in menu bar title"), isOn: $appState.showMenuBarShortcutHints)
+
+            Text(text(
+                "Diese Option blendet Zusatztext wie `Start ⌥Space` oder `Stop ⇧⌘C` neben dem Symbol ein.",
+                "This option shows helper text like `Start ⌥Space` or `Stop ⇧⌘C` next to the symbol."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var generalPermissionsContent: some View {
         if matches(["mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen"]) {
-            SettingsCard(
-                title: text("Zugriff & Status", "Access & Status"),
-                description: text(
-                    "Berechtigungen und Systemzugriff für Aufnahme und Einfügen.",
-                    "Permissions and system access for recording and insertion."
-                )
-            ) {
-                PermissionStatusRow(
-                    title: text("Mikrofon", "Microphone"),
-                    status: appState.microphonePermissionStatus,
-                    detail: text("Erforderlich für die Audioaufnahme.", "Required for audio capture.")
-                )
-                PermissionStatusRow(
-                    title: text("Bedienungshilfen", "Accessibility"),
-                    status: appState.accessibilityPermissionStatus,
-                    detail: text("Erforderlich zum Einfügen in das aktive Textfeld.", "Required to insert into the active text field.")
-                )
-                HStack {
-                    Button(text("Mikrofon öffnen", "Open microphone settings")) {
-                        appState.openMicrophoneSettings()
-                    }
-                    Button(text("Bedienungshilfen öffnen", "Open accessibility settings")) {
-                        appState.openAccessibilitySettings()
-                    }
-                }
-            }
-        }
-    }
+            PermissionStatusRow(
+                title: text("Mikrofon", "Microphone"),
+                status: appState.microphonePermissionStatus,
+                detail: text("Erforderlich für die Audioaufnahme.", "Required for audio capture.")
+            )
 
-    private var dictationPane: some View {
-        SettingsPane {
-            dictationCards
+            PermissionStatusRow(
+                title: text("Bedienungshilfen", "Accessibility"),
+                status: appState.accessibilityPermissionStatus,
+                detail: text("Erforderlich zum Einfügen in das aktive Textfeld.", "Required to insert into the active text field.")
+            )
+
+            HStack(alignment: .center, spacing: 10) {
+                Button(text("Mikrofon öffnen", "Open microphone settings")) {
+                    appState.openMicrophoneSettings()
+                }
+                .buttonStyle(.bordered)
+                Button(text("Bedienungshilfen öffnen", "Open accessibility settings")) {
+                    appState.openAccessibilitySettings()
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Text(appState.dictationCapability.localizedSummary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
-    private var dictationCards: some View {
+    private var dictationRecognitionContent: some View {
         if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert"]) {
-            SettingsCard(
-                title: text("Erkennung", "Recognition"),
-                description: text(
-                    "Sprache und Qualitätsprofil für die lokale Transkription.",
-                    "Language and quality profile for local transcription."
-                )
-            ) {
-                SettingsRow(label: text("Diktatsprache", "Dictation language")) {
-                    Picker(text("Diktatsprache", "Dictation language"), selection: $appState.selectedLanguage) {
-                        ForEach(DictationLanguage.allCases) { language in
-                            Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
-                        }
+            LabeledContent(text("Diktatsprache", "Dictation language")) {
+                Picker(text("Diktatsprache", "Dictation language"), selection: $appState.selectedLanguage) {
+                    ForEach(DictationLanguage.allCases) { language in
+                        Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
                     }
                 }
-
-                SettingsRow(label: text("Erkennungsqualität", "Recognition quality")) {
-                    Picker(text("Erkennungsqualität", "Recognition quality"), selection: $appState.performanceProfile) {
-                        ForEach(DictationPerformance.allCases) { mode in
-                            Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
-                        }
-                    }
-                }
+                .labelsHidden()
+                .frame(minWidth: 170)
             }
 
-            SettingsCard(
-                title: text("Ablage", "Delivery"),
-                description: text(
-                    "Steuert, wie finale Diktate zugestellt oder zwischengespeichert werden.",
-                    "Controls how final dictation is delivered or temporarily stored."
-                )
-            ) {
-                SettingsRow(label: text("Finales Ergebnis", "Final result")) {
-                    Picker(text("Finales Ergebnis", "Final result"), selection: $appState.finalResultDeliveryMode) {
-                        Text(text("In Textfeld einfügen", "Insert into text field")).tag(FinalResultDeliveryMode.insert)
-                        Text(text("Nur in Zwischenablage kopieren", "Copy to clipboard only")).tag(FinalResultDeliveryMode.clipboardOnly)
+            LabeledContent(text("Erkennungsqualität", "Recognition quality")) {
+                Picker(text("Erkennungsqualität", "Recognition quality"), selection: $appState.performanceProfile) {
+                    ForEach(DictationPerformance.allCases) { mode in
+                        Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
                     }
                 }
-
-                Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
-                    .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
-
-                Toggle(text("Wenn kein Textfeld aktiv ist: Ergebnis in Zwischenablage kopieren", "If no text field is active: copy result to clipboard"), isOn: $appState.clipboardFallbackWhenNoTarget)
-                    .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
-
-                if appState.finalResultDeliveryMode == .clipboardOnly {
-                    Text(text(
-                        "Zwischenablage-only verwendet immer den Finalize-Pfad. Live-Insert wird dafür deaktiviert.",
-                        "Clipboard-only always uses the finalize path. Live insert is disabled in this mode."
-                    ))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
+                .labelsHidden()
+                .frame(minWidth: 170)
             }
-        }
-    }
-
-    private var shortcutsPane: some View {
-        SettingsPane {
-            shortcutsCards
         }
     }
 
     @ViewBuilder
-    private var shortcutsCards: some View {
-        if matches(["shortcut", "kurzbefehl", "hold"]) {
-            SettingsCard(
-                title: text("Start / Stopp", "Start / Stop"),
-                description: text(
-                    "Globaler Shortcut zum Starten und Stoppen des Diktats.",
-                    "Global shortcut for starting and stopping dictation."
-                )
-            ) {
-                Toggle(text("Start/Stopp-Kurzbefehl aktiv", "Enable start/stop shortcut"), isOn: $appState.toggleShortcutEnabled)
-
-                SettingsRow(label: text("Kurzbefehl", "Shortcut")) {
-                    HotkeyRecorderField(
-                        hotkey: $appState.selectedHotkey,
-                        label: text("Diktier-Kurzbefehl", "Dictation shortcut"),
-                        language: appLanguage
-                    )
+    private var dictationDeliveryContent: some View {
+        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert"]) {
+            LabeledContent(text("Finales Ergebnis", "Final result")) {
+                Picker(text("Finales Ergebnis", "Final result"), selection: $appState.finalResultDeliveryMode) {
+                    Text(text("In Textfeld einfügen", "Insert into text field")).tag(FinalResultDeliveryMode.insert)
+                    Text(text("Nur in Zwischenablage kopieren", "Copy to clipboard only")).tag(FinalResultDeliveryMode.clipboardOnly)
                 }
-
-                if let advisory = appState.hotkeyAdvisory {
-                    HotkeyAdvisoryBox(advisory: advisory)
-                }
+                .labelsHidden()
+                .frame(minWidth: 220)
             }
 
-            SettingsCard(
-                title: text("Halten zum Diktieren", "Hold to Dictate"),
-                description: text(
-                    "Separater Shortcut, der nur solange aktiv ist, wie du ihn gedrückt hältst.",
-                    "Separate shortcut that stays active only while you keep it pressed."
-                )
-            ) {
-                Toggle(text("Hold-to-dictate aktiv", "Enable hold-to-dictate"), isOn: $appState.holdToDictateEnabled)
+            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
+                .disabled(appState.finalResultDeliveryMode == .clipboardOnly || !appState.dictationCapability.allowsDirectInsertion)
 
-                SettingsRow(label: text("Hold-Kurzbefehl", "Hold shortcut")) {
-                    HotkeyRecorderField(
-                        hotkey: $appState.holdShortcut,
-                        label: text("Hold-to-dictate Kurzbefehl", "Hold-to-dictate shortcut"),
-                        language: appLanguage
-                    )
-                }
-                .disabled(!appState.holdToDictateEnabled)
+            Toggle(text("Wenn kein Textfeld aktiv ist: Ergebnis in Zwischenablage kopieren", "If no text field is active: copy result to clipboard"), isOn: $appState.clipboardFallbackWhenNoTarget)
+                .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
 
-                if appState.holdToDictateEnabled, let advisory = appState.holdShortcutAdvisory {
-                    HotkeyAdvisoryBox(advisory: advisory)
-                }
-
+            if appState.finalResultDeliveryMode == .clipboardOnly {
                 Text(text(
-                    "Fn allein wird im aktuellen globalen Hotkey-Pfad nicht zuverlässig unterstützt. Verwende eine Kombination mit Modifikatortasten.",
-                    "Fn by itself is not supported reliably in the current global hotkey path. Use a shortcut with modifier keys."
+                    "Nur Zwischenablage verwendet immer den Abschluss-Pfad. Live-Einfügen wird in diesem Modus deaktiviert.",
+                    "Clipboard-only always uses the finalize path. Live insert is disabled in this mode."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            } else if !appState.dictationCapability.allowsDirectInsertion {
+                Text(text(
+                    "Ohne Bedienungshilfen startet die Aufnahme weiterhin, aber direktes Einfügen bleibt deaktiviert.",
+                    "Without Accessibility, recording still starts, but direct insertion remains disabled."
                 ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -421,304 +409,268 @@ struct SettingsView: View {
         }
     }
 
-    private var historyPane: some View {
-        SettingsPane {
-            historyCards
+    @ViewBuilder
+    private var startStopShortcutContent: some View {
+        if matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) {
+            Toggle(text("Start/Stopp-Kurzbefehl aktiv", "Enable start/stop shortcut"), isOn: $appState.toggleShortcutEnabled)
+
+            LabeledContent(text("Kurzbefehl", "Shortcut")) {
+                HotkeyRecorderField(
+                    hotkey: $appState.selectedHotkey,
+                    label: text("Diktier-Kurzbefehl", "Dictation shortcut"),
+                    language: appLanguage
+                )
+                .frame(width: 260)
+            }
+
+            if let advisory = appState.hotkeyAdvisory {
+                HotkeyAdvisoryBox(advisory: advisory)
+            }
         }
     }
 
     @ViewBuilder
-    private var historyCards: some View {
-        SettingsCard(
-            title: text("Transkriptverlauf", "Transcript History"),
-            description: text(
-                "Finale Diktate bleiben hier zusätzlich gespeichert.",
-                "Final dictations are retained here as an additional history."
-            )
-        ) {
-            HStack {
+    private var holdShortcutContent: some View {
+        if matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) {
+            Toggle(text("Halten-zum-Diktieren aktiv", "Enable hold-to-dictate"), isOn: $appState.holdToDictateEnabled)
+
+            LabeledContent(text("Hold-Kurzbefehl", "Hold shortcut")) {
+                HotkeyRecorderField(
+                    hotkey: $appState.holdShortcut,
+                    label: text("Halten-zum-Diktieren-Kurzbefehl", "Hold-to-dictate shortcut"),
+                    language: appLanguage
+                )
+                .frame(width: 260)
+            }
+            .disabled(!appState.holdToDictateEnabled)
+
+            if appState.holdToDictateEnabled, let advisory = appState.holdShortcutAdvisory {
+                HotkeyAdvisoryBox(advisory: advisory)
+            }
+
+            Text(text(
+                "Fn allein wird im aktuellen globalen Hotkey-Pfad nicht zuverlässig unterstützt.",
+                "Fn by itself is not supported reliably in the current global hotkey path."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var historyActionContent: some View {
+        if historyHasMatches {
+            HStack(alignment: .center, spacing: 10) {
                 Button(text("Letztes Diktat kopieren", "Copy last dictation")) {
                     copyToClipboard(appState.latestDictationText)
                 }
+                .buttonStyle(.borderedProminent)
                 .disabled(appState.latestDictationText.isEmpty)
 
                 Button(text("Verlauf exportieren", "Export history")) {
                     appState.exportHistoryAsText()
                 }
+                .buttonStyle(.bordered)
 
                 Button(text("Verlauf leeren", "Clear history")) {
                     appState.clearHistory()
                 }
+                .buttonStyle(.bordered)
             }
-
-            if filteredHistory.isEmpty {
-                Text(text("Keine Transkripte gefunden.", "No transcripts found."))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else {
-                Group {
-                    if isSearching {
-                        LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(compactHistoryEntries) { entry in
-                                HistoryEntryCard(
-                                    entry: entry,
-                                    dateText: Self.historyDateFormatter.string(from: entry.createdAt),
-                                    language: appLanguage,
-                                    onCopy: { appState.copyHistoryEntry(entry) },
-                                    onDelete: { appState.removeHistoryEntry(entry.id) }
-                                )
-                            }
-                        }
-                    } else {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 12) {
-                                ForEach(compactHistoryEntries) { entry in
-                                    HistoryEntryCard(
-                                        entry: entry,
-                                        dateText: Self.historyDateFormatter.string(from: entry.createdAt),
-                                        language: appLanguage,
-                                        onCopy: { appState.copyHistoryEntry(entry) },
-                                        onDelete: { appState.removeHistoryEntry(entry.id) }
-                                    )
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(minHeight: 320, maxHeight: 360)
-                    }
-                }
-
-                if !isSearching,
-                   filteredHistory.count > compactHistoryEntries.count {
-                    Text(text(
-                        "Die Einstellungen zeigen zuerst die letzten \(compactHistoryEntries.count) Diktate. Über die Suche findest du ältere Einträge sofort wieder.",
-                        "Settings show the latest \(compactHistoryEntries.count) dictations first. Use search to jump to older entries instantly."
-                    ))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    private var advancedPane: some View {
-        SettingsPane {
-            advancedCards
         }
     }
 
     @ViewBuilder
-    private var advancedCards: some View {
-        if matches(["snippet", "textbaustein", "replacement", "trigger"]) {
-            SettingsCard(
-                title: text("Snippets", "Snippets"),
-                description: text(
-                    "Sprachbefehle für wiederkehrende Ersetzungen und Textbausteine.",
-                    "Voice triggers for repeated replacements and snippets."
+    private var historyEntriesContent: some View {
+        if filteredHistory.isEmpty {
+            Text(text("Keine Transkripte gefunden.", "No transcripts found."))
+                .foregroundStyle(.secondary)
+        } else {
+            ForEach(compactHistoryEntries) { entry in
+                HistoryEntryRow(
+                    entry: entry,
+                    dateText: Self.historyDateFormatter.string(from: entry.createdAt),
+                    language: appLanguage,
+                    onCopy: { appState.copyHistoryEntry(entry) },
+                    onDelete: { appState.removeHistoryEntry(entry.id) }
                 )
-            ) {
-                HStack {
-                    TextField(text("Trigger", "Trigger"), text: $newSnippetTrigger)
-                    TextField(text("Ersetzung", "Replacement"), text: $newSnippetReplacement)
-                    Button(text("Hinzufügen", "Add")) {
-                        appState.addSnippet(trigger: newSnippetTrigger, replacement: newSnippetReplacement)
-                        newSnippetTrigger = ""
-                        newSnippetReplacement = ""
-                    }
-                }
-
-                HStack {
-                    Button(text("JSON importieren", "Import JSON")) {
-                        appState.importSnippetsFromJSON()
-                    }
-                    Button(text("JSON exportieren", "Export JSON")) {
-                        appState.exportSnippetsToJSON()
-                    }
-                }
-
-                if filteredSnippets.isEmpty {
-                    Text(text("Keine Snippets gespeichert.", "No snippets saved."))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(filteredSnippets) { rule in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(rule.trigger)
-                                    .font(.subheadline.weight(.semibold))
-                                Text(rule.replacement)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button(text("Löschen", "Delete")) {
-                                appState.removeSnippet(ruleID: rule.id)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-            }
-        }
-
-        if matches(["diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) {
-            SettingsCard(
-                title: text("Diagnose", "Diagnostics"),
-                description: text(
-                    "Technische Laufzeitinformationen für Analyse und Support.",
-                    "Technical runtime information for analysis and support."
-                )
-            ) {
-                Text(appState.capabilitySummary)
-                    .font(.footnote)
-                    .textSelection(.enabled)
-
-                DisclosureGroup(
-                    isExpanded: $diagnosticsExpanded,
-                    content: {
-                        Text(appState.diagnosticsText)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    },
-                    label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(text("Letzte Diagnosezeilen", "Recent diagnostic lines"))
-                            Text(compressedDiagnosticsText)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                        }
-                    }
-                )
-
-                HStack {
-                    Button(text("Diagnose kopieren", "Copy diagnostics")) {
-                        copyToClipboard(compressedDiagnosticsText)
-                    }
-                    .disabled(compressedDiagnosticsText.isEmpty)
-
-                    Button(text("Diagnose exportieren", "Export diagnostics")) {
-                        appState.exportDiagnosticsReport()
-                    }
-                }
             }
 
-            SettingsCard(
-                title: text("Lizenz", "License"),
-                description: text(
-                    "Lizenzstatus und Aktivierung für zusätzliche Funktionen.",
-                    "License status and activation for additional features."
-                )
-            ) {
-                HStack {
-                    TextField(text("Lizenzschlüssel", "License key"), text: $appState.licenseInput)
-                    Button(text("Aktivieren", "Activate")) {
-                        appState.activateLicense()
-                    }
-                    Button(text("Deaktivieren", "Deactivate")) {
-                        appState.deactivateLicense()
-                    }
-                }
-                Text(appState.licenseStatusText)
-                    .foregroundStyle(appState.licensePresentationState.color)
-                    .font(.footnote)
+            if !isSearching, filteredHistory.count > compactHistoryEntries.count {
+                Text(text(
+                    "Es werden zuerst die letzten \(compactHistoryEntries.count) Diktate angezeigt. Über die Suche findest du ältere Einträge.",
+                    "The latest \(compactHistoryEntries.count) dictations are shown first. Use search to find older entries."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
         }
     }
+
+    @ViewBuilder
+    private var snippetsContent: some View {
+        if matches(["snippet", "textbaustein", "replacement", "trigger"]) {
+            HStack(alignment: .center, spacing: 10) {
+                TextField(text("Trigger", "Trigger"), text: $newSnippetTrigger)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(text("Snippet-Trigger", "Snippet trigger"))
+                TextField(text("Ersetzung", "Replacement"), text: $newSnippetReplacement)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(text("Snippet-Ersetzung", "Snippet replacement"))
+                Button(text("Hinzufügen", "Add")) {
+                    appState.addSnippet(trigger: newSnippetTrigger, replacement: newSnippetReplacement)
+                    newSnippetTrigger = ""
+                    newSnippetReplacement = ""
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            HStack(alignment: .center, spacing: 10) {
+                Button(text("JSON importieren", "Import JSON")) {
+                    appState.importSnippetsFromJSON()
+                }
+                .buttonStyle(.bordered)
+                Button(text("JSON exportieren", "Export JSON")) {
+                    appState.exportSnippetsToJSON()
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if filteredSnippets.isEmpty {
+                Text(text("Keine Snippets gespeichert.", "No snippets saved."))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(filteredSnippets) { rule in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(rule.trigger)
+                            Text(rule.replacement)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(text("Löschen", "Delete")) {
+                            appState.removeSnippet(ruleID: rule.id)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(text("Snippet löschen: ", "Delete snippet: ") + rule.trigger)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var diagnosticsContent: some View {
+        if matches(["diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) {
+            Text(appState.capabilitySummary)
+                .font(.footnote)
+                .textSelection(.enabled)
+
+            DisclosureGroup(
+                isExpanded: $diagnosticsExpanded,
+                content: {
+                    Text(appState.diagnosticsText)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                },
+                label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(text("Letzte Diagnosezeilen", "Recent diagnostic lines"))
+                        Text(compressedDiagnosticsText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            )
+
+            HStack {
+                Button(text("Diagnose kopieren", "Copy diagnostics")) {
+                    copyToClipboard(compressedDiagnosticsText)
+                }
+                .disabled(compressedDiagnosticsText.isEmpty)
+
+                Button(text("Diagnose exportieren", "Export diagnostics")) {
+                    appState.exportDiagnosticsReport()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var licenseContent: some View {
+        if matches(["diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) {
+            HStack {
+                SecureField(text("Lizenzschlüssel", "License key"), text: $appState.licenseInput)
+                    .textFieldStyle(.roundedBorder)
+                Button(text("Aktivieren", "Activate")) {
+                    appState.activateLicense()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(appState.licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button(text("Deaktivieren", "Deactivate")) {
+                    appState.deactivateLicense()
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if let storedLicenseSummary = appState.storedLicenseSummary {
+                Text(text("Gespeicherter Schlüssel", "Stored key") + ": " + storedLicenseSummary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Text(appState.licenseStatusText)
+                .foregroundStyle(appState.licensePresentationState.color)
+                .font(.footnote)
+        }
+    }
+
+    private func copyToClipboard(_ string: String) {
+        guard !string.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+    }
 }
 
-private enum SettingsTab: Hashable {
+private enum SettingsTab: Hashable, CaseIterable {
     case general
     case dictation
     case shortcuts
     case history
     case advanced
-}
 
-private struct SettingsPane<Content: View>: View {
-    @ViewBuilder let content: Content
+    var symbolName: String {
+        switch self {
+        case .general: return "gearshape"
+        case .dictation: return "mic"
+        case .shortcuts: return "command"
+        case .history: return "clock.arrow.circlepath"
+        case .advanced: return "wrench.and.screwdriver"
+        }
+    }
 
-    var body: some View {
-        Form {
-            VStack(alignment: .leading, spacing: 14) {
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 10)
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .general:
+            return language.text("Allgemein", "General")
+        case .dictation:
+            return language.text("Diktat", "Dictation")
+        case .shortcuts:
+            return language.text("Kurzbefehle", "Shortcuts")
+        case .history:
+            return language.text("Verlauf", "History")
+        case .advanced:
+            return language.text("Erweitert", "Advanced")
         }
     }
 }
 
-private struct SettingsCard<Content: View>: View {
-    let title: String
-    let description: String?
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 14) {
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline.weight(.semibold))
-                if let description, !description.isEmpty {
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .groupBoxStyle(.automatic)
-    }
-}
-
-private struct SettingsRow<Content: View>: View {
-    let label: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(label)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-            content
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct SearchResultsGroup<Content: View>: View {
-    let title: String
-    let systemImage: String
-    let showsDivider: Bool
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 2)
-
-            content
-
-            if showsDivider {
-                Divider()
-                    .padding(.top, 2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 10)
-        .accessibilityElement(children: .contain)
-    }
-}
-
-private struct HistoryEntryCard: View {
+private struct HistoryEntryRow: View {
     let entry: TranscriptHistoryEntry
     let dateText: String
     let language: AppLanguage
@@ -734,15 +686,8 @@ private struct HistoryEntryCard: View {
         entry.text.count > 180 || entry.text.split(separator: "\n").count > 3
     }
 
-    private var accessibilityPreviewLabel: String {
-        let preview = entry.text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .prefix(120)
-        return "\(dateText), \(entry.languageCode), \(entry.mode), \(preview)"
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(dateText)
                     .font(.caption)
@@ -755,44 +700,31 @@ private struct HistoryEntryCard: View {
                     onCopy()
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel(text("Diktat kopieren vom ", "Copy dictation from ") + dateText)
                 Button(text("Löschen", "Delete")) {
                     onDelete()
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel(text("Diktat löschen vom ", "Delete dictation from ") + dateText)
             }
 
             Text(entry.text)
-                .font(.body)
                 .lineLimit(3)
                 .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel(accessibilityPreviewLabel)
+                .textSelection(.enabled)
 
             if requiresExpansion {
-                DisclosureGroup(isExpanded: $isExpanded) {
+                DisclosureGroup(text("Vollständiges Diktat anzeigen", "Show full transcript"), isExpanded: $isExpanded) {
                     Text(entry.text)
-                        .font(.body)
-                        .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 4)
-                } label: {
-                    Text(text("Vollständiges Diktat anzeigen", "Show full transcript"))
-                        .font(.footnote)
+                        .textSelection(.enabled)
+                        .padding(.top, 2)
                 }
+                .font(.footnote)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(.separator.opacity(0.14), lineWidth: 1)
-        )
+        .padding(.vertical, 2)
     }
 }
 
@@ -839,14 +771,51 @@ private struct HotkeyAdvisoryBox: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 8)
                 .fill(accentColor.opacity(0.12))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(accentColor.opacity(0.35), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(accentColor.opacity(0.3), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
+    }
+}
+
+private struct NativeSearchField: NSViewRepresentable {
+    let placeholder: String
+    @Binding var text: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField(frame: .zero)
+        field.delegate = context.coordinator
+        field.placeholderString = placeholder
+        field.sendsSearchStringImmediately = true
+        return field
+    }
+
+    func updateNSView(_ nsView: NSSearchField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+        nsView.placeholderString = placeholder
+    }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        @Binding var text: String
+
+        init(text: Binding<String>) {
+            _text = text
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSSearchField else { return }
+            text = field.stringValue
+        }
     }
 }
 

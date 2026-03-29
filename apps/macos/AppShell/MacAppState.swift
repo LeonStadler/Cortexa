@@ -175,6 +175,7 @@ final class MacAppState: ObservableObject {
     @Published var accessibilityPermissionStatus: PermissionStatus = .notDetermined
 
     @Published var licenseInput: String = ""
+    @Published var storedLicenseSummary: String?
     @Published var licenseStatusText: String = "No license"
     @Published var licenseValid: Bool = false
     @Published var licensePresentationState: LicensePresentationState = .notSet
@@ -219,6 +220,18 @@ final class MacAppState: ObservableObject {
 
     var latestDictationText: String {
         transcriptHistory.first?.text ?? lastTranscript
+    }
+
+    var dictationCapability: DictationCapability {
+        if microphonePermissionStatus != .granted {
+            return .unavailable
+        }
+
+        if accessibilityPermissionStatus == .granted {
+            return .fullSystemInsertion
+        }
+
+        return .limitedTranscription
     }
 
     var hotkeyHintText: String {
@@ -284,11 +297,15 @@ final class MacAppState: ObservableObject {
     }
 
     var permissionSummary: String {
-        let missing = missingPermissionTargets
-        guard !missing.isEmpty else {
+        switch dictationCapability {
+        case .fullSystemInsertion:
             return "Alle Berechtigungen erteilt."
+        case .limitedTranscription:
+            return "Bedienungshilfen fehlen. Diktate bleiben als Verlauf oder Zwischenablage verfügbar."
+        case .unavailable:
+            let missing = missingPermissionTargets
+            return "Fehlende Berechtigungen: \(missing.joined(separator: ", "))."
         }
-        return "Fehlende Berechtigungen: \(missing.joined(separator: ", "))."
     }
 
     var missingPermissionTargets: [String] {
@@ -323,14 +340,13 @@ final class MacAppState: ObservableObject {
     private let hotkeyManager = GlobalHotkeyManager()
     private let dictationRuntime = DictationRuntime()
     private let snippetStore: SnippetStore
-    private let historyFileURL: URL
-    private let auditLogFileURL: URL
+    private let historyStore: TranscriptHistoryStore
+    private let auditLogger: AuditLogging
+    private let permissionController: PermissionControlling
     private let capabilityProfiler = CapabilityProfiler()
     private let appConfiguration: MacAppConfiguration
 
-    private let licenseStore = LicenseStore()
-    private let licenseCache: LicenseCache
-    private let licenseVerifier: LicenseVerifier?
+    private let licenseController: LicenseController
     private var didActivateApplicationObserver: NSObjectProtocol?
     private var didBecomeActiveObserver: NSObjectProtocol?
     private var didWakeObserver: NSObjectProtocol?
@@ -342,10 +358,12 @@ final class MacAppState: ObservableObject {
 
     init(
         userDefaults: UserDefaults = .standard,
-        configuration: MacAppConfiguration = .load()
+        configuration: MacAppConfiguration = .load(),
+        permissionController: PermissionControlling = PermissionController()
     ) {
         self.userDefaults = userDefaults
         self.appConfiguration = configuration
+        self.permissionController = permissionController
 
         self.streamingEnabled = userDefaults.object(forKey: UserDefaultsKeys.streamingEnabled) as? Bool ?? true
 
@@ -390,15 +408,9 @@ final class MacAppState: ObservableObject {
         self.clipboardFallbackWhenNoTarget = userDefaults.object(forKey: UserDefaultsKeys.clipboardFallbackWhenNoTarget) as? Bool ?? false
 
         self.snippetStore = SnippetStore(fileURL: Self.snippetStorageURL())
-        self.historyFileURL = Self.historyStorageURL()
-        self.auditLogFileURL = Self.auditLogStorageURL()
-        self.licenseCache = LicenseCache(fileURL: Self.licenseCacheURL())
-        if let configuredKey = configuration.licensePublicKeyBase64,
-           !configuredKey.isEmpty {
-            self.licenseVerifier = try? LicenseVerifier(defaultEmbeddedKeyBase64: configuredKey)
-        } else {
-            self.licenseVerifier = try? LicenseVerifier()
-        }
+        self.historyStore = TranscriptHistoryStore(fileURL: Self.historyStorageURL())
+        self.auditLogger = AuditLogger(fileURL: Self.auditLogStorageURL())
+        self.licenseController = LicenseController(configuration: configuration, cacheFileURL: Self.licenseCacheURL())
 
         dictationRuntime.onStatus = { [weak self] status in
             self?.recordingStatus = status
@@ -515,37 +527,23 @@ final class MacAppState: ObservableObject {
         let options = currentStartOptions()
         appendAudit("session.toggle.menuBar start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)")
 
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            // Let the MenuBarExtra menu finish closing before we try to restore
-            // the previous app and lock its focused text field.
-            try? await Task.sleep(nanoseconds: 250_000_000)
-
-            if let previousApplication = self.lastExternalApplication {
-                self.appendDiagnostic("Aktiviere die letzte App erneut, damit das Ziel-Textfeld fokussiert bleibt.")
-                previousApplication.activate(options: [.activateAllWindows])
-                try? await Task.sleep(nanoseconds: 650_000_000)
-            } else {
-                try? await Task.sleep(nanoseconds: 300_000_000)
-            }
-
-            self.dictationRuntime.start(options: options)
+        guard dictationCapability.allowsDirectInsertion else {
+            dictationRuntime.start(options: options)
+            return
         }
+
+        restorePreviousApplicationAndStart(options: options, source: "menuBar")
     }
 
     private func startTranscriptionForShortcut() {
         let options = currentStartOptions()
         appendAudit("session.toggle start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)")
 
-        if shouldRestorePreviousApplicationBeforeStarting(),
+        if dictationCapability.allowsDirectInsertion,
+           shouldRestorePreviousApplicationBeforeStarting(),
            let previousApplication = lastExternalApplication {
             appendDiagnostic("Wechsle vor dem Start zurück zur letzten App, um das fokussierte Textfeld zu verwenden.")
-            previousApplication.activate(options: [.activateAllWindows])
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                self?.dictationRuntime.start(options: options)
-            }
+            restorePreviousApplicationAndStart(options: options, source: "shortcut", preferredApplication: previousApplication)
             return
         }
 
@@ -573,6 +571,47 @@ final class MacAppState: ObservableObject {
         let ownBundleIdentifier = Bundle.main.bundleIdentifier
         let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         return frontmostBundleIdentifier == ownBundleIdentifier
+    }
+
+    private func restorePreviousApplicationAndStart(
+        options: DictationStartOptions,
+        source: String,
+        preferredApplication: NSRunningApplication? = nil
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let targetApplication = preferredApplication ?? self.lastExternalApplication
+            if let targetApplication, let bundleIdentifier = targetApplication.bundleIdentifier {
+                self.appendDiagnostic("Aktiviere die letzte App erneut, damit das Ziel-Textfeld fokussiert bleibt.")
+                targetApplication.activate(options: [.activateAllWindows])
+                _ = await self.waitForFrontmostApplication(bundleIdentifier: bundleIdentifier)
+            } else {
+                _ = await self.waitForMenuBarToClose()
+            }
+
+            self.appendAudit("session.restore_start source=\(source)")
+            self.dictationRuntime.start(options: options)
+        }
+    }
+
+    private func waitForMenuBarToClose() async -> Bool {
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        return true
+    }
+
+    private func waitForFrontmostApplication(bundleIdentifier: String, timeoutNanoseconds: UInt64 = 1_500_000_000) async -> Bool {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleIdentifier {
+                return true
+            }
+
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        return false
     }
 
     func openMicrophoneSettings() {
@@ -673,13 +712,8 @@ final class MacAppState: ObservableObject {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        let joined = transcriptHistory
-            .reversed()
-            .map { "[\(Self.displayDate($0.createdAt))] [\($0.mode)] [\($0.languageCode)] \($0.text)" }
-            .joined(separator: "\n")
-
         do {
-            try joined.write(to: url, atomically: true, encoding: .utf8)
+            try historyStore.exportText(entries: transcriptHistory, to: url)
             appendDiagnostic("History exportiert")
             appendAudit("history.export path=\(url.path)")
         } catch {
@@ -736,15 +770,7 @@ final class MacAppState: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
-            let sourceURL = auditLogFileURL
-            guard FileManager.default.fileExists(atPath: sourceURL.path) else {
-                appendDiagnostic("Audit-Log ist noch leer.")
-                return
-            }
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-            }
-            try FileManager.default.copyItem(at: sourceURL, to: url)
+            try auditLogger.export(to: url)
             appendDiagnostic("Audit-Log exportiert")
             appendAudit("audit.export path=\(url.path)")
         } catch {
@@ -760,106 +786,23 @@ final class MacAppState: ObservableObject {
     }
 
     func activateLicense() {
-        guard appConfiguration.isLicenseConfigured else {
-            licenseStatusText = "Lizenzprüfung nicht konfiguriert"
-            licensePresentationState = .notConfigured
-            licenseValid = false
-            return
-        }
+        let snapshot = licenseController.activate(licenseKey: licenseInput)
+        applyLicenseSnapshot(snapshot, clearInput: snapshot.isValid)
 
-        let key = licenseInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else {
-            licenseStatusText = "Lizenzschlüssel leer"
-            licenseValid = false
-            return
-        }
-
-        guard let licenseVerifier else {
-            licenseStatusText = "Lizenzprüfung nicht verfügbar (Public Key fehlt/ungültig)"
-            licensePresentationState = .notConfigured
-            licenseValid = false
-            return
-        }
-
-        let status = licenseVerifier.verify(key)
-        switch status {
-        case let .valid(payload):
-            do {
-                try licenseStore.saveLicenseKey(key)
-                try licenseCache.write(licenseKey: key)
-                licenseValid = true
-                licenseStatusText = "Aktiv: \(payload.productTier)"
-                licensePresentationState = .active(tier: payload.productTier)
-                appendAudit("license.activate tier=\(payload.productTier)")
-            } catch {
-                licenseValid = false
-                licenseStatusText = "Lizenz konnte nicht gespeichert werden"
-                licensePresentationState = .invalid(reason: "Speichern fehlgeschlagen")
-            }
-
-        case let .invalid(reason):
-            licenseValid = false
-            licenseStatusText = "Ungültig: \(reason.localizedDescription)"
-            licensePresentationState = .invalid(reason: reason.localizedDescription)
+        if case let .active(tier) = snapshot.status {
+            appendAudit("license.activate tier=\(tier)")
         }
     }
 
     func deactivateLicense() {
-        licenseStore.removeLicenseKey()
-        licenseValid = false
-        licenseStatusText = "Keine Lizenz gesetzt"
-        licensePresentationState = .notSet
+        licenseController.deactivate()
+        applyLicenseSnapshot(LicenseStatusSnapshot(status: .notSet, maskedKey: nil), clearInput: true)
         appendAudit("license.deactivate")
     }
 
     private func loadExistingLicense() {
-        guard appConfiguration.isLicenseConfigured else {
-            licenseStatusText = "Lizenzprüfung nicht konfiguriert"
-            licensePresentationState = .notConfigured
-            licenseValid = false
-            return
-        }
-
-        do {
-            if let cached = try licenseStore.loadLicenseKey() {
-                licenseInput = cached
-                validateLoadedLicense(cached)
-                return
-            }
-
-            if let cachedFromFile = try licenseCache.read() {
-                licenseInput = cachedFromFile
-                validateLoadedLicense(cachedFromFile)
-                return
-            }
-
-            licenseStatusText = "Keine Lizenz gesetzt"
-            licensePresentationState = .notSet
-            licenseValid = false
-        } catch {
-            licenseStatusText = "Lizenz konnte nicht geladen werden"
-            licensePresentationState = .invalid(reason: "Laden fehlgeschlagen")
-            licenseValid = false
-        }
-    }
-
-    private func validateLoadedLicense(_ key: String) {
-        guard let licenseVerifier else {
-            licenseStatusText = "Lizenzprüfung nicht verfügbar"
-            licenseValid = false
-            return
-        }
-
-        switch licenseVerifier.verify(key) {
-        case let .valid(payload):
-            licenseStatusText = "Aktiv: \(payload.productTier)"
-            licensePresentationState = .active(tier: payload.productTier)
-            licenseValid = true
-        case let .invalid(reason):
-            licenseStatusText = "Ungültig: \(reason.localizedDescription)"
-            licensePresentationState = .invalid(reason: reason.localizedDescription)
-            licenseValid = false
-        }
+        let snapshot = licenseController.loadExistingStatus()
+        applyLicenseSnapshot(snapshot, clearInput: true)
     }
 
     private func handleFinalTranscript(_ event: FinalTranscriptEvent) {
@@ -891,6 +834,30 @@ final class MacAppState: ObservableObject {
         appendAudit("transcript.final language=\(event.languageCode) mode=\(entry.mode) chars=\(trimmed.count)")
     }
 
+    private func applyLicenseSnapshot(_ snapshot: LicenseStatusSnapshot, clearInput: Bool) {
+        if clearInput {
+            licenseInput = ""
+        }
+
+        storedLicenseSummary = snapshot.maskedKey
+        licenseValid = snapshot.isValid
+
+        switch snapshot.status {
+        case .notConfigured:
+            licenseStatusText = "Lizenzprüfung nicht konfiguriert"
+            licensePresentationState = .notConfigured
+        case .notSet:
+            licenseStatusText = "Keine Lizenz gesetzt"
+            licensePresentationState = .notSet
+        case let .active(tier):
+            licenseStatusText = "Aktiv: \(tier)"
+            licensePresentationState = .active(tier: tier)
+        case let .invalid(reason):
+            licenseStatusText = "Ungültig: \(reason)"
+            licensePresentationState = .invalid(reason: reason)
+        }
+    }
+
     private func loadSnippets() {
         do {
             snippetRules = try snippetStore.load()
@@ -916,13 +883,7 @@ final class MacAppState: ObservableObject {
 
     private func loadHistory() {
         do {
-            guard FileManager.default.fileExists(atPath: historyFileURL.path) else {
-                transcriptHistory = []
-                return
-            }
-
-            let data = try Data(contentsOf: historyFileURL)
-            transcriptHistory = try JSONDecoder().decode([TranscriptHistoryEntry].self, from: data)
+            transcriptHistory = try historyStore.load()
             appendDiagnostic("History geladen: \(transcriptHistory.count)")
         } catch {
             appendDiagnostic("History-Load fehlgeschlagen: \(error.localizedDescription)")
@@ -932,13 +893,7 @@ final class MacAppState: ObservableObject {
 
     private func persistHistory() {
         do {
-            let parent = historyFileURL.deletingLastPathComponent()
-            if !FileManager.default.fileExists(atPath: parent.path) {
-                try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-            }
-
-            let data = try JSONEncoder().encode(transcriptHistory)
-            try data.write(to: historyFileURL, options: [.atomic])
+            try historyStore.save(transcriptHistory)
         } catch {
             appendDiagnostic("History-Save fehlgeschlagen: \(error.localizedDescription)")
         }
@@ -951,8 +906,8 @@ final class MacAppState: ObservableObject {
     }
 
     func refreshPermissionStates() {
-        microphonePermissionStatus = PermissionStatus.microphone(from: AVCaptureDevice.authorizationStatus(for: .audio))
-        accessibilityPermissionStatus = PermissionStatus.accessibility(isTrusted: AXIsProcessTrusted())
+        microphonePermissionStatus = permissionController.microphoneStatus()
+        accessibilityPermissionStatus = permissionController.accessibilityStatus()
     }
 
     private func schedulePermissionRefresh() {
@@ -973,43 +928,7 @@ final class MacAppState: ObservableObject {
     }
 
     private func appendAudit(_ line: String) {
-        do {
-            try rotateAuditLogIfNeeded()
-
-            let timestamp = ISO8601DateFormatter().string(from: Date())
-            let output = "[\(timestamp)] \(line)\n"
-            let parent = auditLogFileURL.deletingLastPathComponent()
-            if !FileManager.default.fileExists(atPath: parent.path) {
-                try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-            }
-
-            if !FileManager.default.fileExists(atPath: auditLogFileURL.path) {
-                try Data(output.utf8).write(to: auditLogFileURL, options: [.atomic])
-                return
-            }
-
-            let handle = try FileHandle(forWritingTo: auditLogFileURL)
-            defer { try? handle.close() }
-            try handle.seekToEnd()
-            try handle.write(contentsOf: Data(output.utf8))
-        } catch {
-            // Avoid recursive diagnostics here.
-        }
-    }
-
-    private func rotateAuditLogIfNeeded() throws {
-        let maxSizeBytes = 2 * 1024 * 1024
-        guard FileManager.default.fileExists(atPath: auditLogFileURL.path) else { return }
-
-        let attrs = try FileManager.default.attributesOfItem(atPath: auditLogFileURL.path)
-        let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
-        guard size >= maxSizeBytes else { return }
-
-        let backup = auditLogFileURL.deletingPathExtension().appendingPathExtension("1.log")
-        if FileManager.default.fileExists(atPath: backup.path) {
-            try FileManager.default.removeItem(at: backup)
-        }
-        try FileManager.default.moveItem(at: auditLogFileURL, to: backup)
+        auditLogger.append(line)
     }
 
     private func configureLifecycleObservers() {

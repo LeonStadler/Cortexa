@@ -19,3 +19,39 @@ jobs:
 
       - name: Test
         run: swift test
+
+  project-validation:
+    runs-on: macos-latest
+    needs: swift-package
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Verify generated macOS project is up to date
+        run: ./scripts/generate_macos_xcodeproj.sh --check
+
+      - name: Verify generated iOS project
+        run: bash ./scripts/generate_ios_xcodeproj.sh
+
+  macos-release-validation:
+    runs-on: macos-latest
+    needs: project-validation
+    env:
+      WISPR_LICENSE_PUBLIC_KEY_BASE64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      SPARKLE_FEED_URL: https://example.com/appcast.xml
+      SPARKLE_PUBLIC_ED_KEY: test-public-ed-key
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Run release preflight
+        run: ./scripts/preflight_macos_release.sh
+
+      - name: Run macOS smoke test
+        run: ./scripts/smoke_test_macos_app.sh --skip-launch

@@ -101,10 +101,6 @@ struct IOSHomeView: View {
                 }
 
                 Section("Transcript History") {
-                    Button("Add Demo Transcript") {
-                        appState.addTranscript("Demo transcript at \(Date().formatted())")
-                    }
-
                     Button("Clear History") {
                         appState.clearTranscriptHistory()
                     }
@@ -149,18 +145,29 @@ struct IOSHomeView: View {
                 }
 
                 Section("License") {
-                    TextField("License key", text: $appState.licenseInput)
+                    SecureField("License key", text: $appState.licenseInput)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+
+                    if let storedLicenseSummary = appState.storedLicenseSummary {
+                        Text("Stored key: \(storedLicenseSummary)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
                     HStack {
                         Button("Activate") {
                             appState.activateLicense()
                         }
+                        .disabled(appState.licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         Button("Deactivate") {
                             appState.deactivateLicense()
                         }
                     }
+
+                    Text("Activating a new key replaces the currently stored one.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
 
                     Text(appState.licenseStatusText)
                         .font(.footnote)

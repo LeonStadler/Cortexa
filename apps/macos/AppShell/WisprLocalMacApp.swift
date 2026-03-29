@@ -55,12 +55,12 @@ private final class SettingsWindowPresenter {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "WisprLocal"
         window.toolbarStyle = .preference
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
-        window.setContentSize(NSSize(width: 760, height: 560))
-        window.contentMinSize = NSSize(width: 760, height: 560)
-        window.contentMaxSize = NSSize(width: 760, height: 1_100)
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
+        window.styleMask = [.titled, .closable, .resizable]
+        window.setContentSize(NSSize(width: 980, height: 640))
+        window.contentMinSize = NSSize(width: 940, height: 620)
+        window.contentMaxSize = NSSize(width: 1_180, height: 1_080)
         window.center()
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("WisprLocalSettingsWindow")
@@ -121,7 +121,14 @@ struct MenuBarContentView: View {
         case "Error":
             return text("Aufmerksamkeit erforderlich", "Needs attention")
         case "Idle":
-            return text("Zugriff erforderlich", "Needs access")
+            switch appState.dictationCapability {
+            case .fullSystemInsertion:
+                return text("Bereit", "Ready")
+            case .limitedTranscription:
+                return text("Eingeschränkt", "Limited")
+            case .unavailable:
+                return text("Zugriff erforderlich", "Needs access")
+            }
         default:
             return text("Aktiv", "Active")
         }
@@ -205,6 +212,9 @@ struct MenuBarContentView: View {
                 MenuCard(emphasis: .strong) {
                     Text(text("Fehlende Berechtigungen", "Missing permissions"))
                         .font(.subheadline.weight(.medium))
+                    Text(appState.permissionSummary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     if appState.microphonePermissionStatus != .granted {
                         Button(text("Mikrofonzugriff öffnen", "Open microphone access")) {
                             appState.openMicrophoneSettings()
@@ -229,6 +239,7 @@ struct MenuBarContentView: View {
                         .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel(appState.latestDictationText)
                     Button(text("Letztes Diktat kopieren", "Copy last dictation")) {
                         copyToClipboard(appState.latestDictationText)
                     }

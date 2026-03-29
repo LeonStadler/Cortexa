@@ -10,6 +10,8 @@ APP_BUILD_NUMBER="$(echo "${APP_BUILD_NUMBER}" | sed 's/^0*//')"
 SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-}"
 SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
 WISPR_LICENSE_PUBLIC_KEY_BASE64="${WISPR_LICENSE_PUBLIC_KEY_BASE64:-}"
+CHECK_ONLY=0
+REQUIRE_CLEAN=0
 
 if [[ -z "${APP_BUILD_NUMBER}" ]]; then
   APP_BUILD_NUMBER="1"
@@ -30,6 +32,23 @@ Install one of the following, then re-run this script:
 After installation, make sure the `xcodegen` binary is available on your PATH.
 EOF
 }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check)
+      CHECK_ONLY=1
+      shift
+      ;;
+    --require-clean)
+      REQUIRE_CLEAN=1
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
 
 resolve_tool() {
   local tool_name="$1"
@@ -54,26 +73,12 @@ resolve_tool() {
 XCODEGEN_BIN="$(resolve_tool xcodegen /opt/homebrew/bin/xcodegen /usr/local/bin/xcodegen || true)"
 
 if [[ -z "${XCODEGEN_BIN}" ]]; then
-  BREW_BIN="$(resolve_tool brew /opt/homebrew/bin/brew /usr/local/bin/brew || true)"
-
-  if [[ -n "${PROJECT_PATH}" && -d "${PROJECT_PATH}" ]]; then
-    echo "xcodegen not found. Reusing existing project at ${PROJECT_PATH}."
-    echo "Install xcodegen later if you need to regenerate the project."
-    exit 0
-  fi
-
-  if [[ -n "${BREW_BIN}" ]]; then
-    echo "xcodegen not found. Installing via Homebrew..."
-    "${BREW_BIN}" install xcodegen
-    XCODEGEN_BIN="$(resolve_tool xcodegen /opt/homebrew/bin/xcodegen /usr/local/bin/xcodegen || true)"
-  else
-    print_xcodegen_install_help
-    exit 1
-  fi
+  print_xcodegen_install_help
+  exit 1
 fi
 
-if [[ -z "${XCODEGEN_BIN}" ]]; then
-  print_xcodegen_install_help
+if [[ "${REQUIRE_CLEAN}" -eq 1 ]] && ! git diff --quiet -- "${PROJECT_PATH}"; then
+  echo "Refusing to regenerate ${PROJECT_PATH} because it already has local modifications." >&2
   exit 1
 fi
 
@@ -88,3 +93,13 @@ fi
 )
 
 echo "Generated: ${PROJECT_PATH}"
+
+if [[ "${CHECK_ONLY}" -eq 1 ]]; then
+  if ! git diff --quiet -- "${PROJECT_PATH}"; then
+    echo "Generated macOS project is out of date. Re-run scripts/generate_macos_xcodeproj.sh and commit the result." >&2
+    git diff -- "${PROJECT_PATH}" || true
+    exit 1
+  fi
+
+  echo "Project check passed: ${PROJECT_PATH}"
+fi

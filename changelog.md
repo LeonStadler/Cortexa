@@ -2,6 +2,36 @@
 
 ## Fixes
 
+- 2026-03-28: macOS-Settings auf natives Segment-Layout umgestellt und Diktier-Runtime gegen Start-/Audio-Fehlerzustände gehärtet.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Das Settings-Fenster nutzt jetzt eine ruhigere native Segmentsteuerung oberhalb der Form-Inhalte, konsistentere deutschsprachige Labels sowie verbesserte VoiceOver-Beschriftungen für Verlauf-/Snippet-Aktionen und gekürzte Vorschautexte. Gleichzeitig verhindert die Runtime Doppelstarts während der Startphase, kann einen Start sauber abbrechen und setzt bei Audio-Push-Fehlern den Session-Zustand vollständig zurück, statt in einem fehlerhaften „läuft bereits“-Zustand zu hängen.
+
+- 2026-03-27: macOS-Diktierpfad unterstützt jetzt den dokumentierten eingeschränkten Modus ohne Bedienungshilfen und zeigt gespeicherte Lizenzen nur noch maskiert an.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/DictationCapability.swift`, `apps/macos/AppShell/PermissionController.swift`, `apps/macos/AppShell/LicenseController.swift`, `apps/macos/AppShell/AuditLogger.swift`, `apps/macos/AppShell/TranscriptHistoryStore.swift`, `README.md`, `VERSION`
+  - Funktionalität: Mikrofonzugriff blockiert weiterhin den Aufnahmebeginn, fehlende Bedienungshilfen blockieren aber nicht mehr die Transkription insgesamt; direkte Einfügepfade werden stattdessen sauber auf Verlauf/Zwischenablage degradiert. Gleichzeitig wurden Audit-, History- und Lizenzlogik in eigene Services entkoppelt und gespeicherte Lizenzschlüssel werden nicht mehr ungefragt als Klartext ins UI zurückgeladen.
+
+- 2026-03-27: iOS-Host-App und Keyboard-Extension verwenden jetzt einen expliziten App-Group-Vertrag ohne stillen Local-Fallback, und die Tastatur fügt keine Platzhalter-/Stale-Texte mehr ein.
+  - Dateien: `apps/ios/App/IOSSharedStorage.swift`, `apps/ios/App/IOSAppState.swift`, `apps/ios/App/WisprLocaliOSApp.swift`, `apps/ios/KeyboardExtension/KeyboardViewController.swift`, `apps/ios/README.md`, `README.md`, `VERSION`
+  - Funktionalität: Die Shared-Container-/Defaults-Auflösung wirft jetzt klare Fehler statt unbemerkt auf lokale Speicherorte auszuweichen; die Extension liest nur noch Snippets plus einen dedizierten Latest-Transcript-Payload und entfernt die bisherige Pseudo-Diktier-/Placeholder-Insertion. Zusätzlich zeigt der Host gespeicherte Lizenzen nur noch maskiert an und entfernt Demo-Transkript-Aktionen aus der Produktionsoberfläche.
+
+## Features
+
+- 2026-03-27: Gebündelte Whisper-Runtime besitzt jetzt einen expliziten Default-Modell-Vertrag und bereinigt veraltete installierte Runtime-Assets automatisch.
+  - Dateien: `Sources/ASRCore/BundledWhisperRuntime.swift`, `Tests/ASRCoreTests/BundledWhisperRuntimeTests.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `VERSION`
+  - Funktionalität: Die Runtime liest optional ein `runtime-manifest.json`, liefert deterministisch `defaultModelFileName` und `availableModelFileNames`, funktioniert ohne harte `ggml-base.bin`-Annahme und entfernt beim Reinstall nicht mehr referenzierte Modell-Dateien aus dem Zielverzeichnis. Die neuen Tests decken Manifest-Defaults, Fallback-Modelle und Stale-Asset-Pruning ab.
+
+- 2026-03-27: CI- und Release-Tooling validieren jetzt generierte Xcode-Projekte, Release-Konfiguration und headless macOS-Smokes explizit.
+  - Dateien: `.github/workflows/ci.yml`, `scripts/generate_macos_xcodeproj.sh`, `scripts/preflight_macos_release.sh`, `scripts/smoke_test_macos_app.sh`, `README.md`, `VERSION`
+  - Funktionalität: Die Projektgenerierung unterstützt jetzt `--check`/`--require-clean` statt stiller Auto-Install-/Reuse-Wege, der Release-Preflight prüft zusätzlich Build-/Versions-Metadaten und Asset-Wiring, und der macOS-Smoke-Test kann in CI mit `--skip-launch` Build und Bundle validieren, ohne den App-Prozess offen zu halten.
+
+## Docs
+
+- 2026-03-27: README-Dokumentation auf eingeschränkten macOS-Modus, verpflichtende App Group auf iOS und headless Smoke-Checks aktualisiert.
+  - Dateien: `README.md`, `apps/ios/README.md`, `VERSION`
+  - Funktionalität: Die Dokumentation beschreibt jetzt den Direct-Insertion-Vorbehalt für Bedienungshilfen, den neuen `--skip-launch`-Pfad für den macOS-Smoke-Test sowie den dedizierten Latest-Transcript-Payload und die fehlende Local-Fallback-Strategie im iOS-App-Group-Flow.
+
+## Fixes
+
 - 2026-03-26: Bundled-Whisper-Runtime akzeptiert im macOS-App-Bundle jetzt sowohl verschachtelte als auch flache Resource-Layouts.
   - Dateien: `Sources/ASRCore/BundledWhisperRuntime.swift`, `Tests/ASRCoreTests/BundledWhisperRuntimeTests.swift`, `apps/macos/WisprLocalMac/project.yml`, `scripts/smoke_test_macos_app.sh`, `apps/macos/README.md`, `VERSION`
   - Funktionalität: Die App findet `whisper-cli` und `models/` jetzt sowohl unter `Contents/Resources/Runtime` als auch direkt unter `Contents/Resources`, wodurch Diktierstarts nach XcodeGen-/Asset-Catalog-Anpassungen nicht mehr mit `Bundled runtime directory not found` abbrechen. Zusätzlich bevorzugt das macOS-Projekt wieder die konservative Folder-Resource-Einbindung für `Runtime`, und der Smoke-Test validiert beide Bundle-Varianten.

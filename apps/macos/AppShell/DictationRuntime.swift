@@ -191,6 +191,8 @@ final class DictationRuntime: @unchecked Sendable {
     private var runningLocale: Locale = Locale(identifier: "de_DE")
     private var target: LockedTextTarget?
     private var isRunning = false
+    private var isStarting = false
+    private var startTask: Task<Void, Never>?
     private var runtimePrepared = false
     private var latestInsertedPreview = ""
     private var stableCommitter = StreamingCommitStabilizer(stabilityThreshold: 2)
@@ -205,6 +207,7 @@ final class DictationRuntime: @unchecked Sendable {
     private var speechChunkStreak = 0
     private var maxObservedRMS: Float = 0
     private var lastRecoverableInsertDiagnosticAt: Date?
+    private var accessibilityPermissionGranted = false
     private let focusedTargetRetryCount = 8
     private let focusedTargetRetryDelayNanoseconds: UInt64 = 150_000_000
     private let pendingInsertionTimeoutNanoseconds: UInt64 = 5_000_000_000
@@ -226,10 +229,10 @@ final class DictationRuntime: @unchecked Sendable {
 
         do {
             let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(bundle: .main, appName: "WisprLocal")
-            let bootstrapModel = runtime.modelsDirectoryURL.appendingPathComponent("ggml-base.bin")
+            let bootstrapModel = runtime.modelsDirectoryURL.appendingPathComponent(runtime.defaultModelFileName)
             let bootstrapConfig = ASRConfig(
                 languageHint: "de",
-                modelID: "base-q5",
+                modelID: runtime.defaultModelFileName,
                 backend: .whisperCpp,
                 latencyProfile: .streaming,
                 threadCount: max(2, ProcessInfo.processInfo.activeProcessorCount / 2),
@@ -252,6 +255,14 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     func toggle(options: DictationStartOptions) {
+        if isStarting {
+            startTask?.cancel()
+            cleanupSession()
+            publishStatus("Idle")
+            publishDiagnostic("Start wurde abgebrochen.")
+            return
+        }
+
         if isRunning {
             Task {
                 await stop()
@@ -267,11 +278,22 @@ final class DictationRuntime: @unchecked Sendable {
             publishDiagnostic(DictationRuntimeError.alreadyRunning.localizedDescription)
             return
         }
+        guard !isStarting else {
+            publishDiagnostic("Diktat startet bereits.")
+            return
+        }
 
         prepareRuntime()
         guard runtimePrepared else { return }
 
-        Task {
+        isStarting = true
+        startTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.isStarting = false
+                self.startTask = nil
+            }
+
             let micGranted = await requestMicrophonePermission()
             guard micGranted else {
                 publishStatus("Error")
@@ -279,26 +301,33 @@ final class DictationRuntime: @unchecked Sendable {
                 return
             }
 
-            guard requestAccessibilityPermission(promptIfNeeded: true) else {
-                publishStatus("Error")
-                publishDiagnostic(DictationRuntimeError.accessibilityPermissionDenied.localizedDescription)
-                return
-            }
-
             do {
+                let requiresDirectInsertion = options.mode == .streaming || options.finalResultDeliveryMode == .insert
+                let accessibilityGranted = requestAccessibilityPermission(promptIfNeeded: requiresDirectInsertion)
+                accessibilityPermissionGranted = accessibilityGranted
                 try configureEngine(for: options)
 
-                let lockedTarget = try? await captureFocusedTextTargetWithRetry(emitWaitingDiagnostics: false)
-                target = lockedTarget
-                if let lockedTarget {
-                    lastKnownTarget = lockedTarget
-                    waitingForInsertionTarget = false
+                let effectiveMode: DictationMode = accessibilityGranted ? options.mode : .finalize
+
+                if accessibilityGranted {
+                    let lockedTarget = try? await captureFocusedTextTargetWithRetry(emitWaitingDiagnostics: false)
+                    target = lockedTarget
+                    if let lockedTarget {
+                        lastKnownTarget = lockedTarget
+                        waitingForInsertionTarget = false
+                    } else {
+                        waitingForInsertionTarget = true
+                        publishDiagnostic("Kein Textfeld aktiv. Das Diktat startet trotzdem und wartet auf ein fokussiertes Ziel.")
+                        schedulePendingStreamingInsertionIfNeeded()
+                    }
                 } else {
-                    waitingForInsertionTarget = true
-                    publishDiagnostic("Kein Textfeld aktiv. Das Diktat startet trotzdem und wartet auf ein fokussiertes Ziel.")
-                    schedulePendingStreamingInsertionIfNeeded()
+                    target = nil
+                    waitingForInsertionTarget = false
+                    if requiresDirectInsertion {
+                        publishDiagnostic("Bedienungshilfen fehlen. Das Diktat läuft im eingeschränkten Modus ohne direktes Einfügen.")
+                    }
                 }
-                runningMode = options.mode
+                runningMode = effectiveMode
                 runningLocale = options.language.locale
                 currentOptions = options
                 latestInsertedPreview = ""
@@ -314,7 +343,7 @@ final class DictationRuntime: @unchecked Sendable {
                 isRunning = true
                 publishSessionActivity(true)
                 publishStatus("Recording")
-                let modeText = options.mode == .streaming ? "Streaming Insert" : "Finalize Insert"
+                let modeText = effectiveMode == .streaming ? "Streaming Insert" : "Finalize Insert"
                 publishDiagnostic("Recording (\(modeText), \(options.language.displayName))")
             } catch {
                 abortSession(reason: "Start failed: \(error.localizedDescription)")
@@ -630,6 +659,17 @@ final class DictationRuntime: @unchecked Sendable {
             return .copiedToClipboard
         }
 
+        if !accessibilityPermissionGranted {
+            if currentOptions.clipboardFallbackWhenNoTarget {
+                copyTranscriptToClipboard(finalText)
+                publishDiagnostic("Bedienungshilfen fehlen. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert.")
+                return .copiedToClipboard
+            }
+
+            publishDiagnostic("Bedienungshilfen fehlen. Das finale Transkript bleibt in der History verfügbar.")
+            return .historyOnlyNoTarget
+        }
+
         if let resolvedTarget = resolveAvailableTextTarget() {
             do {
                 try replaceInsertedText(finalText, in: resolvedTarget, allowFallbackPaste: true)
@@ -756,8 +796,7 @@ final class DictationRuntime: @unchecked Sendable {
         do {
             try whisperEngine.pushAudioPCM16kMono(channelData, frameCount: frameCount)
         } catch {
-            publishStatus("Error")
-            publishDiagnostic("Audio push failed: \(error.localizedDescription)")
+            abortSession(reason: "Audio push failed: \(error.localizedDescription)")
         }
     }
 
@@ -937,7 +976,7 @@ final class DictationRuntime: @unchecked Sendable {
     private func configureEngine(for options: DictationStartOptions) throws {
         let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(bundle: .main, appName: "WisprLocal")
         let preset = selectEnginePreset(options: options)
-        let modelFile = selectModelFileName(runtimeModelsDirectory: runtime.modelsDirectoryURL, preset: preset, options: options)
+        let modelFile = selectModelFileName(runtime: runtime, preset: preset, options: options)
         let modelURL = runtime.modelsDirectoryURL.appendingPathComponent(modelFile)
 
         let latencyProfile = selectLatencyProfile(options: options, preset: preset)
@@ -1012,9 +1051,8 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
-    private func selectModelFileName(runtimeModelsDirectory: URL, preset: EnginePreset, options: DictationStartOptions) -> String {
-        let available = (try? FileManager.default.contentsOfDirectory(at: runtimeModelsDirectory, includingPropertiesForKeys: nil)) ?? []
-        let names = Set(available.filter { $0.pathExtension.lowercased() == "bin" }.map(\.lastPathComponent))
+    private func selectModelFileName(runtime: InstalledWhisperRuntime, preset: EnginePreset, options: DictationStartOptions) -> String {
+        let names = Set(runtime.availableModelFileNames)
 
         let preferred: [String]
         if options.mode == .streaming && options.performance == .accurate {
@@ -1035,11 +1073,15 @@ final class DictationRuntime: @unchecked Sendable {
             return candidate
         }
 
+        if names.contains(runtime.defaultModelFileName) {
+            return runtime.defaultModelFileName
+        }
+
         if let first = names.sorted().first {
             return first
         }
 
-        return "ggml-base.bin"
+        return runtime.defaultModelFileName
     }
 
     private func applySnippetsToFinalText(_ text: String, locale: Locale) -> String {
@@ -1055,6 +1097,9 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func cleanupSession() {
+        startTask?.cancel()
+        startTask = nil
+        isStarting = false
         stopAudioCapture()
         audioEngine.reset()
         converter = nil
@@ -1072,6 +1117,7 @@ final class DictationRuntime: @unchecked Sendable {
         speechChunkStreak = 0
         maxObservedRMS = 0
         lastRecoverableInsertDiagnosticAt = nil
+        accessibilityPermissionGranted = false
         stableCommitter.reset()
         publishSessionActivity(false)
     }

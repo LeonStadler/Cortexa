@@ -9,37 +9,51 @@ final class IOSAppState: ObservableObject {
     @Published var transcriptHistory: [IOSTranscriptHistoryEntry] = []
     @Published var selectedLanguageCode: String {
         didSet {
-            sharedDefaults.set(selectedLanguageCode, forKey: SharedDefaultsKeys.languageCode)
+            sharedDefaults?.set(selectedLanguageCode, forKey: SharedDefaultsKeys.languageCode)
         }
     }
     @Published var lastDiagnostics: String = "Ready"
     @Published var licenseInput: String = ""
+    @Published var storedLicenseSummary: String?
     @Published var licenseStatusText: String = "No license"
     @Published var licenseValid: Bool = false
 
     private static let defaultLanguage = "de"
 
     private let storage = IOSSharedStorage()
-    private let sharedDefaults: UserDefaults
+    private let sharedDefaults: UserDefaults?
     private let licenseStore = LicenseStore(service: "com.wisprlocal.ios.license", account: "primary")
-    private let licenseCache: LicenseCache
+    private let licenseCache: LicenseCache?
     private let licenseVerifier: LicenseVerifier?
 
     init() {
-        self.sharedDefaults = storage.sharedDefaults()
-        self.selectedLanguageCode = sharedDefaults.string(forKey: SharedDefaultsKeys.languageCode) ?? Self.defaultLanguage
-        try? storage.ensureSharedContainer()
-        self.licenseCache = LicenseCache(fileURL: storage.sharedContainerURL().appendingPathComponent("ios-license-cache.json"))
+        self.sharedDefaults = try? storage.sharedDefaults()
+        self.selectedLanguageCode = self.sharedDefaults?.string(forKey: SharedDefaultsKeys.languageCode) ?? Self.defaultLanguage
+        self.licenseCache = (try? storage.sharedContainerURL()).map {
+            LicenseCache(fileURL: $0.appendingPathComponent("ios-license-cache.json"))
+        }
         self.licenseVerifier = try? LicenseVerifier()
+
+        do {
+            try storage.ensureSharedContainer()
+        } catch {
+            self.lastDiagnostics = "Shared App Group unavailable: \(error.localizedDescription)"
+        }
 
         reload()
         loadExistingLicense()
     }
 
     func reload() {
-        snippetRules = storage.loadSnippets()
-        transcriptHistory = storage.loadTranscriptHistory()
-        writeDiagnostic("Shared data loaded")
+        do {
+            snippetRules = try storage.loadSnippets()
+            transcriptHistory = try storage.loadTranscriptHistory()
+            writeDiagnostic("Shared data loaded")
+        } catch {
+            snippetRules = []
+            transcriptHistory = []
+            writeDiagnostic("Shared storage unavailable: \(error.localizedDescription)")
+        }
     }
 
     func addSnippet(trigger: String, replacement: String) {
@@ -136,6 +150,12 @@ final class IOSAppState: ObservableObject {
             return
         }
 
+        guard let licenseCache else {
+            licenseStatusText = "Shared App Group storage is unavailable"
+            licenseValid = false
+            return
+        }
+
         switch licenseVerifier.verify(key) {
         case let .valid(payload):
             do {
@@ -143,7 +163,9 @@ final class IOSAppState: ObservableObject {
                 try licenseCache.write(licenseKey: key)
                 licenseValid = true
                 licenseStatusText = "Active: \(payload.productTier)"
-                storage.appendAudit("license.activate tier=\(payload.productTier)")
+                storedLicenseSummary = Self.maskedLicense(key)
+                licenseInput = ""
+                try? storage.appendAudit("license.activate tier=\(payload.productTier)")
             } catch {
                 licenseValid = false
                 licenseStatusText = "Could not store license"
@@ -159,7 +181,13 @@ final class IOSAppState: ObservableObject {
         licenseStore.removeLicenseKey()
         licenseValid = false
         licenseStatusText = "No license"
-        storage.appendAudit("license.deactivate")
+        storedLicenseSummary = nil
+        licenseInput = ""
+        if let cacheURL = try? storage.sharedContainerURL().appendingPathComponent("ios-license-cache.json"),
+           FileManager.default.fileExists(atPath: cacheURL.path) {
+            try? FileManager.default.removeItem(at: cacheURL)
+        }
+        try? storage.appendAudit("license.deactivate")
     }
 
     private func persistSnippets() {
@@ -174,6 +202,7 @@ final class IOSAppState: ObservableObject {
     private func persistTranscriptHistory() {
         do {
             try storage.saveTranscriptHistory(transcriptHistory)
+            try syncKeyboardInsertionState()
             writeDiagnostic("Transcript history saved: \(transcriptHistory.count)")
         } catch {
             writeDiagnostic("Transcript history save failed: \(error.localizedDescription)")
@@ -189,13 +218,11 @@ final class IOSAppState: ObservableObject {
 
         do {
             if let key = try licenseStore.loadLicenseKey() {
-                licenseInput = key
                 validateLoadedLicense(key)
                 return
             }
 
-            if let cachedKey = try licenseCache.read() {
-                licenseInput = cachedKey
+            if let cachedKey = try licenseCache?.read() {
                 validateLoadedLicense(cachedKey)
                 return
             }
@@ -216,14 +243,39 @@ final class IOSAppState: ObservableObject {
         case let .valid(payload):
             licenseStatusText = "Active: \(payload.productTier)"
             licenseValid = true
+            storedLicenseSummary = Self.maskedLicense(key)
         case let .invalid(reason):
             licenseStatusText = "Invalid: \(reason.localizedDescription)"
             licenseValid = false
+            storedLicenseSummary = Self.maskedLicense(key)
         }
     }
 
     private func writeDiagnostic(_ line: String) {
         lastDiagnostics = line
-        storage.appendAudit("diag \(line)")
+        try? storage.appendAudit("diag \(line)")
+    }
+
+    private func syncKeyboardInsertionState() throws {
+        if let latest = transcriptHistory.first {
+            try storage.saveKeyboardInsertionState(
+                IOSKeyboardInsertionState(
+                    text: latest.text,
+                    languageCode: latest.languageCode,
+                    updatedAt: latest.createdAt
+                )
+            )
+        } else {
+            try storage.clearKeyboardInsertionState()
+        }
+    }
+
+    private static func maskedLicense(_ key: String) -> String {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 8 else {
+            return String(repeating: "•", count: max(trimmed.count, 4))
+        }
+
+        return "\(trimmed.prefix(4))••••\(trimmed.suffix(4))"
     }
 }
