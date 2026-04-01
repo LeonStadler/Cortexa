@@ -14,8 +14,13 @@ public final class SnippetStore {
             return []
         }
 
-        let data = try Data(contentsOf: fileURL)
-        return try JSONDecoder().decode([SnippetRule].self, from: data)
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try JSONDecoder().decode([SnippetRule].self, from: data)
+        } catch {
+            quarantineCorruptedSnippets(reason: "corrupt")
+            return []
+        }
     }
 
     public func save(_ rules: [SnippetRule]) throws {
@@ -43,5 +48,27 @@ public final class SnippetStore {
 
         let data = try JSONEncoder().encode(rules)
         try data.write(to: destinationURL, options: [.atomic])
+    }
+
+    private func quarantineCorruptedSnippets(reason: String) {
+        guard fileManager.fileExists(atPath: fileURL.path) else {
+            return
+        }
+
+        let parent = fileURL.deletingLastPathComponent()
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let quarantineURL = parent.appendingPathComponent(
+            "\(fileURL.lastPathComponent).corrupt-\(reason)-\(timestamp)-\(UUID().uuidString)"
+        )
+
+        do {
+            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: quarantineURL.path) {
+                try fileManager.removeItem(at: quarantineURL)
+            }
+            try fileManager.moveItem(at: fileURL, to: quarantineURL)
+        } catch {
+            // Best-effort quarantine only.
+        }
     }
 }

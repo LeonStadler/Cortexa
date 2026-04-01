@@ -60,6 +60,10 @@ let package = Package(
         .testTarget(
             name: "CapabilityCoreTests",
             dependencies: ["CapabilityCore"]
+        ),
+        .testTarget(
+            name: "DocsContractTests",
+            dependencies: []
         )
     ]
 )

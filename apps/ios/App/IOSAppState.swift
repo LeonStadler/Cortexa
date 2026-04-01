@@ -45,14 +45,26 @@ final class IOSAppState: ObservableObject {
     }
 
     func reload() {
+        var loadedAnyData = false
+
         do {
-            snippetRules = try storage.loadSnippets()
-            transcriptHistory = try storage.loadTranscriptHistory()
-            writeDiagnostic("Shared data loaded")
+            let loadedSnippets = try storage.loadSnippets()
+            snippetRules = loadedSnippets
+            loadedAnyData = true
         } catch {
-            snippetRules = []
-            transcriptHistory = []
-            writeDiagnostic("Shared storage unavailable: \(error.localizedDescription)")
+            writeDiagnostic("Snippet storage unavailable: \(error.localizedDescription)")
+        }
+
+        do {
+            let loadedHistory = try storage.loadTranscriptHistory()
+            transcriptHistory = loadedHistory
+            loadedAnyData = true
+        } catch {
+            writeDiagnostic("Transcript storage unavailable: \(error.localizedDescription)")
+        }
+
+        if loadedAnyData {
+            writeDiagnostic("Shared data loaded")
         }
     }
 
@@ -183,10 +195,7 @@ final class IOSAppState: ObservableObject {
         licenseStatusText = "No license"
         storedLicenseSummary = nil
         licenseInput = ""
-        if let cacheURL = try? storage.sharedContainerURL().appendingPathComponent("ios-license-cache.json"),
-           FileManager.default.fileExists(atPath: cacheURL.path) {
-            try? FileManager.default.removeItem(at: cacheURL)
-        }
+        try? storage.clearLicenseCache()
         try? storage.appendAudit("license.deactivate")
     }
 

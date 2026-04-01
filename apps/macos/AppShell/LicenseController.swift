@@ -83,6 +83,7 @@ final class LicenseController {
 
     func deactivate() {
         store.removeLicenseKey()
+        try? cache.clear()
     }
 
     func loadExistingStatus() -> LicenseStatusSnapshot {

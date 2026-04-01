@@ -1,4 +1,5 @@
 #if canImport(XCTest)
+import CryptoKit
 import Foundation
 import XCTest
 @testable import ASRCore
@@ -111,6 +112,71 @@ final class BundledWhisperRuntimeTests: XCTestCase {
         XCTAssertTrue(fm.fileExists(atPath: destinationRuntime.appendingPathComponent("runtime-manifest.json").path))
     }
 
+    func testInstallRuntimeVerifiesManifestChecksumsWhenPresent() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_checksum_test_\(UUID().uuidString)")
+        let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
+        let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
+        let destinationRuntime = root.appendingPathComponent("destination/Runtime", isDirectory: true)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: sourceModels, withIntermediateDirectories: true)
+
+        let sourceCLI = sourceRuntime.appendingPathComponent("whisper-cli")
+        let cliData = Data("#!/bin/sh\necho test\n".utf8)
+        try cliData.write(to: sourceCLI)
+
+        let modelData = Data([0x01, 0x02, 0x03, 0x04])
+        let modelFile = sourceModels.appendingPathComponent("ggml-base.bin")
+        try modelData.write(to: modelFile)
+
+        let manifest = BundledWhisperRuntimeManifest(
+            defaultModelFileName: "ggml-base.bin",
+            modelFileNames: ["ggml-base.bin"],
+            cliChecksumSHA256: sha256Hex(of: cliData),
+            modelChecksumsSHA256: ["ggml-base.bin": sha256Hex(of: modelData)]
+        )
+        try JSONEncoder().encode(manifest).write(to: sourceRuntime.appendingPathComponent("runtime-manifest.json"))
+
+        let runtime = try BundledWhisperRuntimeInstaller.installRuntime(
+            from: sourceRuntime,
+            destinationRuntimeDirectory: destinationRuntime,
+            appName: "WisprLocalTest"
+        )
+
+        XCTAssertEqual(runtime.defaultModelFileName, "ggml-base.bin")
+        XCTAssertEqual(runtime.manifest, manifest)
+        XCTAssertTrue(fm.fileExists(atPath: destinationRuntime.appendingPathComponent("runtime-manifest.json").path))
+    }
+
+    func testInstallRuntimeRejectsManifestModelListMismatch() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_model_list_mismatch_test_\(UUID().uuidString)")
+        let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
+        let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: sourceModels, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho test\n".utf8).write(to: sourceRuntime.appendingPathComponent("whisper-cli"))
+        try Data([0x01]).write(to: sourceModels.appendingPathComponent("ggml-base.bin"))
+
+        let manifest = BundledWhisperRuntimeManifest(
+            defaultModelFileName: "ggml-base.bin",
+            modelFileNames: ["ggml-base.bin", "ggml-small.bin"]
+        )
+        try JSONEncoder().encode(manifest).write(to: sourceRuntime.appendingPathComponent("runtime-manifest.json"))
+
+        XCTAssertThrowsError(
+            try BundledWhisperRuntimeInstaller.installRuntime(from: sourceRuntime, appName: "WisprLocalTest")
+        ) { error in
+            guard case BundledWhisperRuntimeError.manifestModelFileNamesMismatch(_, _, _) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
     func testInstallRuntimeRejectsManifestDefaultThatDoesNotExist() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("runtime_invalid_manifest_test_\(UUID().uuidString)")
@@ -130,6 +196,34 @@ final class BundledWhisperRuntimeTests: XCTestCase {
             try BundledWhisperRuntimeInstaller.installRuntime(from: sourceRuntime, appName: "WisprLocalTest")
         ) { error in
             guard case BundledWhisperRuntimeError.manifestDefaultModelMissing = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testInstallRuntimeRejectsManifestChecksumMismatch() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_checksum_mismatch_test_\(UUID().uuidString)")
+        let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
+        let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: sourceModels, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho test\n".utf8).write(to: sourceRuntime.appendingPathComponent("whisper-cli"))
+        try Data([0x01, 0x02, 0x03]).write(to: sourceModels.appendingPathComponent("ggml-base.bin"))
+
+        let manifest = BundledWhisperRuntimeManifest(
+            defaultModelFileName: "ggml-base.bin",
+            modelFileNames: ["ggml-base.bin"],
+            modelChecksumsSHA256: ["ggml-base.bin": "deadbeef"]
+        )
+        try JSONEncoder().encode(manifest).write(to: sourceRuntime.appendingPathComponent("runtime-manifest.json"))
+
+        XCTAssertThrowsError(
+            try BundledWhisperRuntimeInstaller.installRuntime(from: sourceRuntime, appName: "WisprLocalTest")
+        ) { error in
+            guard case BundledWhisperRuntimeError.manifestChecksumMismatch(_, _) = error else {
                 return XCTFail("Unexpected error: \(error)")
             }
         }
@@ -162,6 +256,11 @@ final class BundledWhisperRuntimeTests: XCTestCase {
         XCTAssertEqual(runtime.availableModelFileNames, ["ggml-small.bin"])
         XCTAssertFalse(fm.fileExists(atPath: destinationModels.appendingPathComponent("ggml-old.bin").path))
         XCTAssertFalse(fm.fileExists(atPath: destinationRuntime.appendingPathComponent("runtime-manifest.json").path))
+    }
+
+    private func sha256Hex(of data: Data) -> String {
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
 #endif

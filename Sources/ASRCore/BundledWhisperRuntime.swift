@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public struct InstalledWhisperRuntime: Sendable, Equatable {
@@ -28,10 +29,19 @@ public struct InstalledWhisperRuntime: Sendable, Equatable {
 public struct BundledWhisperRuntimeManifest: Sendable, Codable, Equatable {
     public let defaultModelFileName: String
     public let modelFileNames: [String]?
+    public let cliChecksumSHA256: String?
+    public let modelChecksumsSHA256: [String: String]?
 
-    public init(defaultModelFileName: String, modelFileNames: [String]? = nil) {
+    public init(
+        defaultModelFileName: String,
+        modelFileNames: [String]? = nil,
+        cliChecksumSHA256: String? = nil,
+        modelChecksumsSHA256: [String: String]? = nil
+    ) {
         self.defaultModelFileName = defaultModelFileName
         self.modelFileNames = modelFileNames
+        self.cliChecksumSHA256 = cliChecksumSHA256
+        self.modelChecksumsSHA256 = modelChecksumsSHA256
     }
 }
 
@@ -42,6 +52,8 @@ public enum BundledWhisperRuntimeError: Error, LocalizedError {
     case noModelsFound(URL)
     case invalidManifest(URL)
     case manifestDefaultModelMissing(String, URL)
+    case manifestModelFileNamesMismatch([String], [String], URL)
+    case manifestChecksumMismatch(String, URL)
 
     public var errorDescription: String? {
         switch self {
@@ -57,6 +69,10 @@ public enum BundledWhisperRuntimeError: Error, LocalizedError {
             return "Bundled runtime manifest is invalid at \(path.path)."
         case let .manifestDefaultModelMissing(modelFileName, modelsDirectory):
             return "Bundled runtime manifest default model \(modelFileName) does not exist in \(modelsDirectory.path)."
+        case let .manifestModelFileNamesMismatch(expected, actual, modelsDirectory):
+            return "Bundled runtime manifest model list \(expected) does not match available models \(actual) in \(modelsDirectory.path)."
+        case let .manifestChecksumMismatch(artifactName, manifestURL):
+            return "Bundled runtime manifest checksum for \(artifactName) did not match at \(manifestURL.path)."
         }
     }
 }
@@ -143,6 +159,14 @@ public enum BundledWhisperRuntimeInstaller {
             manifest: manifest,
             availableModelFileNames: availableModelFileNames,
             sourceModelsDirectory: sourceModels
+        )
+        try validateManifestIntegrity(
+            manifest: manifest,
+            availableModelFileNames: availableModelFileNames,
+            sourceCLI: sourceCLI,
+            sourceModelsDirectory: sourceModels,
+            sourceRuntimeDirectory: sourceRuntimeDirectory,
+            modelFiles: modelFiles
         )
 
         let destinationRoot = try destinationRuntimeDirectory ?? defaultInstallDirectory(appName: appName, fileManager: fileManager)
@@ -239,6 +263,73 @@ public enum BundledWhisperRuntimeInstaller {
         }
 
         return availableModelFileNames[0]
+    }
+
+    private static func validateManifestIntegrity(
+        manifest: BundledWhisperRuntimeManifest?,
+        availableModelFileNames: [String],
+        sourceCLI: URL,
+        sourceModelsDirectory: URL,
+        sourceRuntimeDirectory: URL,
+        modelFiles: [URL]
+    ) throws {
+        guard let manifest else {
+            return
+        }
+
+        if let declaredModelFileNames = manifest.modelFileNames {
+            let declared = declaredModelFileNames.sorted()
+            let available = availableModelFileNames.sorted()
+            guard declared == available else {
+                throw BundledWhisperRuntimeError.manifestModelFileNamesMismatch(declared, available, sourceModelsDirectory)
+            }
+        }
+
+        if let cliChecksumSHA256 = manifest.cliChecksumSHA256 {
+            try validateChecksum(
+                of: sourceCLI,
+                expectedSHA256: cliChecksumSHA256,
+                artifactName: sourceCLI.lastPathComponent,
+                artifactURL: sourceCLI
+            )
+        }
+
+        if let modelChecksumsSHA256 = manifest.modelChecksumsSHA256 {
+            let availableModels = Set(availableModelFileNames)
+            guard Set(modelChecksumsSHA256.keys) == availableModels else {
+                throw BundledWhisperRuntimeError.manifestChecksumMismatch("model checksum keys", sourceRuntimeDirectory)
+            }
+
+            for modelFile in modelFiles {
+                guard let expectedChecksum = modelChecksumsSHA256[modelFile.lastPathComponent] else {
+                    throw BundledWhisperRuntimeError.manifestChecksumMismatch(modelFile.lastPathComponent, sourceModelsDirectory)
+                }
+                try validateChecksum(
+                    of: modelFile,
+                    expectedSHA256: expectedChecksum,
+                    artifactName: modelFile.lastPathComponent,
+                    artifactURL: modelFile
+                )
+            }
+        }
+    }
+
+    private static func validateChecksum(
+        of fileURL: URL,
+        expectedSHA256: String,
+        artifactName: String,
+        artifactURL: URL
+    ) throws {
+        let data = try Data(contentsOf: fileURL)
+        let actualChecksum = sha256Hex(of: data)
+        guard actualChecksum.caseInsensitiveCompare(expectedSHA256) == .orderedSame else {
+            throw BundledWhisperRuntimeError.manifestChecksumMismatch(artifactName, artifactURL)
+        }
+    }
+
+    private static func sha256Hex(of data: Data) -> String {
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     private static func pruneStaleRuntimeAssets(

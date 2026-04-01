@@ -32,12 +32,12 @@
 ## Storage
 
 - primary: Keychain (`kSecClassGenericPassword`)
-- secondary: local cache with integrity tag (tamper-light detection)
+- secondary: local cache with integrity tag (tamper-light detection) that is cleared on macOS deactivate
 
 ## Anti-tamper (lightweight)
 
 - signed payload verification is the primary protection
-- local cache integrity tag prevents simple cache edits
+- local cache integrity tag prevents simple cache edits and should never be treated as a security boundary
 - no kernel hooks, no invasive anti-debug controls
 
 ## Operational policy
@@ -52,7 +52,7 @@
   - license key input
   - activate/deactivate actions
   - current validation status text
-- successful activation stores key in Keychain and writes integrity-protected cache file
+- successful activation stores key in Keychain and writes integrity-protected cache file; macOS deactivate should remove both the keychain entry and the cache fallback
 - on startup app tries Keychain first, then cache fallback, then validates locally
 - the macOS app reads the production public key from the bundle key `WLMLicensePublicKeyBase64`
 - if no production key is injected, the UI stays usable but marks licensing as "not configured"

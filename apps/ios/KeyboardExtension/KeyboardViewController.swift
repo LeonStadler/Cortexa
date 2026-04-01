@@ -89,8 +89,6 @@ final class KeyboardViewController: UIInputViewController {
             latestInsertionState = try storage.loadKeyboardInsertionState()
             storageErrorDescription = nil
         } catch {
-            snippetRules = []
-            latestInsertionState = nil
             storageErrorDescription = error.localizedDescription
         }
         rebuildSnippetsUI()

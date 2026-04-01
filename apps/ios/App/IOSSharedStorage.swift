@@ -21,8 +21,21 @@ struct IOSKeyboardInsertionState: Codable, Equatable {
     let updatedAt: Date
 }
 
+private struct VersionedSharedPayload<Payload: Codable>: Codable {
+    let version: Int
+    let payload: Payload
+
+    init(payload: Payload, version: Int = 1) {
+        self.version = version
+        self.payload = payload
+    }
+}
+
 struct IOSSharedStorage {
     static let appGroupIdentifier = "group.com.wisprlocal.shared"
+    private static let currentSchemaVersion = 1
+    private static let auditLogMaximumBytes = 256_000
+    private static let auditLogBackupCount = 3
 
     let fileManager: FileManager
 
@@ -70,54 +83,27 @@ struct IOSSharedStorage {
     }
 
     func loadSnippets() throws -> [SnippetRule] {
-        let store = SnippetStore(fileURL: try snippetsURL(), fileManager: fileManager)
-        return try store.load()
+        try loadVersionedArray(from: snippetsURL())
     }
 
     func saveSnippets(_ rules: [SnippetRule]) throws {
-        let store = SnippetStore(fileURL: try snippetsURL(), fileManager: fileManager)
-        try store.save(rules)
+        try saveVersionedArray(rules, to: snippetsURL())
     }
 
     func loadTranscriptHistory() throws -> [IOSTranscriptHistoryEntry] {
-        let url = try transcriptHistoryURL()
-        guard fileManager.fileExists(atPath: url.path) else {
-            return []
-        }
-
-        let data = try Data(contentsOf: url)
-        return try JSONDecoder().decode([IOSTranscriptHistoryEntry].self, from: data)
+        try loadVersionedArray(from: transcriptHistoryURL())
     }
 
     func saveTranscriptHistory(_ entries: [IOSTranscriptHistoryEntry]) throws {
-        let url = try transcriptHistoryURL()
-        let parent = url.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: parent.path) {
-            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-        }
-        let data = try JSONEncoder().encode(entries)
-        try data.write(to: url, options: [.atomic])
+        try saveVersionedArray(entries, to: transcriptHistoryURL())
     }
 
     func loadKeyboardInsertionState() throws -> IOSKeyboardInsertionState? {
-        let url = try keyboardInsertionStateURL()
-        guard fileManager.fileExists(atPath: url.path) else {
-            return nil
-        }
-
-        let data = try Data(contentsOf: url)
-        return try JSONDecoder().decode(IOSKeyboardInsertionState.self, from: data)
+        try loadVersionedOptionalPayload(from: keyboardInsertionStateURL())
     }
 
     func saveKeyboardInsertionState(_ state: IOSKeyboardInsertionState) throws {
-        let url = try keyboardInsertionStateURL()
-        let parent = url.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: parent.path) {
-            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-        }
-
-        let data = try JSONEncoder().encode(state)
-        try data.write(to: url, options: [.atomic])
+        try saveVersionedOptionalPayload(state, to: keyboardInsertionStateURL())
     }
 
     func clearKeyboardInsertionState() throws {
@@ -126,24 +112,199 @@ struct IOSSharedStorage {
         try fileManager.removeItem(at: url)
     }
 
+    func clearLicenseCache() throws {
+        let url = try sharedContainerURL().appendingPathComponent("ios-license-cache.json", isDirectory: false)
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.removeItem(at: url)
+    }
+
     func appendAudit(_ line: String) throws {
         let url = try auditLogURL()
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let output = "[\(timestamp)] \(line)\n"
+        let outputData = Data(output.utf8)
+        try ensureParentDirectory(for: url)
+
+        let currentData = (try? coordinatedReadData(at: url)) ?? Data()
+        if currentData.count + outputData.count > Self.auditLogMaximumBytes {
+            try rotateAuditLog(at: url)
+            try coordinatedWriteData(outputData, to: url)
+            return
+        }
+
+        var combinedData = currentData
+        combinedData.append(outputData)
+        try coordinatedWriteData(combinedData, to: url)
+    }
+
+    private func loadVersionedArray<Item: Codable>(from url: URL) throws -> [Item] {
+        guard fileManager.fileExists(atPath: url.path) else {
+            return []
+        }
+
+        do {
+            let data = try coordinatedReadData(at: url)
+            return try decodeVersionedPayload(from: data)
+        } catch {
+            try quarantineCorruptItem(at: url, reason: error.localizedDescription)
+            throw error
+        }
+    }
+
+    private func saveVersionedArray<Item: Codable>(_ payload: [Item], to url: URL) throws {
+        let data = try JSONEncoder().encode(VersionedSharedPayload(payload: payload, version: Self.currentSchemaVersion))
+        try ensureParentDirectory(for: url)
+        try coordinatedWriteData(data, to: url)
+    }
+
+    private func loadVersionedOptionalPayload<Payload: Codable>(from url: URL) throws -> Payload? {
+        guard fileManager.fileExists(atPath: url.path) else {
+            return nil
+        }
+
+        do {
+            let data = try coordinatedReadData(at: url)
+            return try decodeVersionedPayload(from: data)
+        } catch {
+            try quarantineCorruptItem(at: url, reason: error.localizedDescription)
+            throw error
+        }
+    }
+
+    private func saveVersionedOptionalPayload<Payload: Codable>(_ payload: Payload, to url: URL) throws {
+        let data = try JSONEncoder().encode(VersionedSharedPayload(payload: payload, version: Self.currentSchemaVersion))
+        try ensureParentDirectory(for: url)
+        try coordinatedWriteData(data, to: url)
+    }
+
+    private func decodeVersionedPayload<Payload: Codable>(from data: Data) throws -> Payload {
+        if let envelope = try? JSONDecoder().decode(VersionedSharedPayload<Payload>.self, from: data) {
+            guard envelope.version == Self.currentSchemaVersion else {
+                throw CocoaError(.coderReadCorrupt)
+            }
+            return envelope.payload
+        }
+
+        return try JSONDecoder().decode(Payload.self, from: data)
+    }
+
+    private func coordinatedReadData(at url: URL) throws -> Data {
+        try coordinate(reading: url) { readingURL in
+            try Data(contentsOf: readingURL)
+        }
+    }
+
+    private func coordinatedWriteData(_ data: Data, to url: URL) throws {
+        try coordinate(writing: url) { writingURL in
+            try data.write(to: writingURL, options: [.atomic])
+        }
+    }
+
+    private func coordinate<T>(reading url: URL, _ action: (URL) throws -> T) throws -> T {
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var result: Result<T, Error>?
+
+        coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
+            do {
+                result = .success(try action(coordinatedURL))
+            } catch {
+                result = .failure(error)
+            }
+        }
+
+        if let coordinationError {
+            throw coordinationError
+        }
+
+        switch result {
+        case let .success(value):
+            return value
+        case let .failure(error):
+            throw error
+        case nil:
+            throw CocoaError(.fileReadUnknown)
+        }
+    }
+
+    private func coordinate<T>(writing url: URL, _ action: (URL) throws -> T) throws -> T {
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var result: Result<T, Error>?
+
+        coordinator.coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { coordinatedURL in
+            do {
+                result = .success(try action(coordinatedURL))
+            } catch {
+                result = .failure(error)
+            }
+        }
+
+        if let coordinationError {
+            throw coordinationError
+        }
+
+        switch result {
+        case let .success(value):
+            return value
+        case let .failure(error):
+            throw error
+        case nil:
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private func ensureParentDirectory(for url: URL) throws {
         let parent = url.deletingLastPathComponent()
         if !fileManager.fileExists(atPath: parent.path) {
             try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
         }
+    }
+
+    private func quarantineCorruptItem(at url: URL, reason _: String) throws {
+        guard fileManager.fileExists(atPath: url.path) else { return }
 
         let timestamp = ISO8601DateFormatter().string(from: Date())
-        let output = "[\(timestamp)] \(line)\n"
-        if !fileManager.fileExists(atPath: url.path) {
-            try Data(output.utf8).write(to: url, options: [.atomic])
-            return
+            .replacingOccurrences(of: ":", with: "-")
+        let quarantineName = "\(url.lastPathComponent).corrupt-\(timestamp)-\(UUID().uuidString)"
+        let quarantineURL = url.deletingLastPathComponent().appendingPathComponent(quarantineName)
+        do {
+            try fileManager.moveItem(at: url, to: quarantineURL)
+        } catch {
+            if fileManager.fileExists(atPath: url.path) {
+                try? fileManager.removeItem(at: url)
+            }
+        }
+    }
+
+    private func rotateAuditLog(at url: URL) throws {
+        let oldestBackupURL = rotatedAuditLogURL(baseURL: url, backupIndex: Self.auditLogBackupCount)
+        if fileManager.fileExists(atPath: oldestBackupURL.path) {
+            try fileManager.removeItem(at: oldestBackupURL)
         }
 
-        let handle = try FileHandle(forWritingTo: url)
-        defer { try? handle.close() }
-        try handle.seekToEnd()
-        try handle.write(contentsOf: Data(output.utf8))
+        if Self.auditLogBackupCount >= 2 {
+            for index in stride(from: Self.auditLogBackupCount, to: 1, by: -1) {
+                let sourceURL = rotatedAuditLogURL(baseURL: url, backupIndex: index - 1)
+                let destinationURL = rotatedAuditLogURL(baseURL: url, backupIndex: index)
+                guard fileManager.fileExists(atPath: sourceURL.path) else { continue }
+                if fileManager.fileExists(atPath: destinationURL.path) {
+                    try fileManager.removeItem(at: destinationURL)
+                }
+                try fileManager.moveItem(at: sourceURL, to: destinationURL)
+            }
+        }
+
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        let firstBackupURL = rotatedAuditLogURL(baseURL: url, backupIndex: 1)
+        if fileManager.fileExists(atPath: firstBackupURL.path) {
+            try fileManager.removeItem(at: firstBackupURL)
+        }
+        try fileManager.moveItem(at: url, to: firstBackupURL)
+    }
+
+    private func rotatedAuditLogURL(baseURL: URL, backupIndex: Int) -> URL {
+        baseURL.deletingLastPathComponent().appendingPathComponent("\(baseURL.lastPathComponent).\(backupIndex)")
     }
 }
 

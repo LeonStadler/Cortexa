@@ -108,12 +108,16 @@ struct SettingsView: View {
         matches(["history", "verlauf", "transkript", "dictation", "diktat"]) || !filteredHistory.isEmpty
     }
 
+    private var snippetsHasMatches: Bool {
+        matches(["snippet", "textbaustein", "replacement", "trigger"]) || !filteredSnippets.isEmpty
+    }
+
     private var advancedHasMatches: Bool {
-        matches(["snippet", "textbaustein", "replacement", "trigger", "diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) ||
-            !filteredSnippets.isEmpty ||
+        matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) ||
             appState.diagnosticsText.lowercased().contains(searchQuery) ||
             appState.licenseStatusText.lowercased().contains(searchQuery) ||
-            appState.capabilitySummary.lowercased().contains(searchQuery)
+            appState.capabilitySummary.lowercased().contains(searchQuery) ||
+            appState.updaterStatusText.lowercased().contains(searchQuery)
     }
 
     private var compressedDiagnosticsText: String {
@@ -211,6 +215,8 @@ struct SettingsView: View {
             shortcutsForm
         case .history:
             historyForm
+        case .snippets:
+            snippetsForm
         case .advanced:
             advancedForm
         }
@@ -258,10 +264,20 @@ struct SettingsView: View {
         .frame(maxWidth: 760, alignment: .leading)
     }
 
-    private var advancedForm: some View {
+    private var snippetsForm: some View {
         Form {
             Section(text("Snippets", "Snippets")) {
                 snippetsContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+
+    private var advancedForm: some View {
+        Form {
+            Section(text("Updates", "Updates")) {
+                updatesContent
             }
             Section(text("Diagnose", "Diagnostics")) {
                 diagnosticsContent
@@ -305,15 +321,21 @@ struct SettingsView: View {
                 }
             }
 
+            if snippetsHasMatches {
+                Section(text("Snippets", "Snippets")) {
+                    snippetsContent
+                }
+            }
+
             if advancedHasMatches {
                 Section(text("Erweitert", "Advanced")) {
-                    snippetsContent
+                    updatesContent
                     diagnosticsContent
                     licenseContent
                 }
             }
 
-            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !historyHasMatches && !advancedHasMatches {
+            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !historyHasMatches && !snippetsHasMatches && !advancedHasMatches {
                 Section {
                     Text(text("Keine passenden Einstellungen gefunden.", "No matching settings found."))
                         .foregroundStyle(.secondary)
@@ -345,6 +367,26 @@ struct SettingsView: View {
             ))
             .font(.footnote)
             .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var updatesContent: some View {
+        if matches(["update", "updates", "aktualisierung"]) {
+            HStack(alignment: .center, spacing: 10) {
+                Button(text("Nach Updates suchen", "Check for updates")) {
+                    appState.checkForUpdates()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!appState.updaterConfigured)
+
+                if !appState.updaterStatusText.isEmpty {
+                    Text(appState.updaterStatusText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
         }
     }
 
@@ -711,6 +753,7 @@ private enum SettingsTab: Hashable, CaseIterable {
     case dictation
     case shortcuts
     case history
+    case snippets
     case advanced
 
     var symbolName: String {
@@ -719,6 +762,7 @@ private enum SettingsTab: Hashable, CaseIterable {
         case .dictation: return "mic"
         case .shortcuts: return "command"
         case .history: return "clock.arrow.circlepath"
+        case .snippets: return "text.badge.plus"
         case .advanced: return "wrench.and.screwdriver"
         }
     }
@@ -733,6 +777,8 @@ private enum SettingsTab: Hashable, CaseIterable {
             return language.text("Kurzbefehle", "Shortcuts")
         case .history:
             return language.text("Verlauf", "History")
+        case .snippets:
+            return language.text("Snippets", "Snippets")
         case .advanced:
             return language.text("Erweitert", "Advanced")
         }

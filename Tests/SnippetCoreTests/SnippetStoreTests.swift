@@ -51,6 +51,26 @@ final class SnippetStoreTests: XCTestCase {
         XCTAssertEqual(exported, expectedRules)
     }
 
+    func testLoadQuarantinesCorruptedStoreAndReturnsEmptyArray() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snippet_store_corrupt_\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let fileURL = directory.appendingPathComponent("snippets.json")
+        let store = SnippetStore(fileURL: fileURL)
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("broken".utf8).write(to: fileURL, options: [.atomic])
+
+        let loaded = try store.load()
+        XCTAssertEqual(loaded, [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+
+        let quarantineFiles = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("snippets.json.corrupt-") }
+        XCTAssertEqual(quarantineFiles.count, 1)
+    }
+
     private func makeRule(
         id: UUID,
         trigger: String,

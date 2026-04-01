@@ -7,22 +7,25 @@ enum WhisperCLIExecutor {
             return explicitPath
         }
 
+        let installedRuntimeCLI = (try? BundledWhisperRuntimeInstaller.defaultInstallDirectory())?.appendingPathComponent("whisper-cli")
+        let bundledRuntimeCLI = BundledWhisperRuntimeInstaller.bundledRuntimeDirectory()?.appendingPathComponent("whisper-cli")
+        var candidates: [URL] = [installedRuntimeCLI, bundledRuntimeCLI].compactMap { $0 }
+
+        #if DEBUG
         let environment = ProcessInfo.processInfo.environment
         if let envPath = environment["WHISPER_CLI_PATH"], FileManager.default.isExecutableFile(atPath: envPath) {
             return URL(fileURLWithPath: envPath)
         }
 
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let installedRuntimeCLI = (try? BundledWhisperRuntimeInstaller.defaultInstallDirectory())?.appendingPathComponent("whisper-cli")
-        let bundledRuntimeCLI = BundledWhisperRuntimeInstaller.bundledRuntimeDirectory()?.appendingPathComponent("whisper-cli")
-
-        let candidates: [URL] = [
+        candidates.insert(contentsOf: [
             cwd.appendingPathComponent("third_party/whisper.cpp/build/bin/whisper-cli"),
             cwd.appendingPathComponent("artifacts/whisper/whisper-cli"),
             URL(fileURLWithPath: "/usr/local/bin/whisper-cli"),
             URL(fileURLWithPath: "/opt/homebrew/bin/whisper-cli"),
             modelPath.deletingLastPathComponent().appendingPathComponent("whisper-cli")
-        ] + [installedRuntimeCLI, bundledRuntimeCLI].compactMap { $0 }
+        ], at: 0)
+        #endif
 
         return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0.path) })
         #else

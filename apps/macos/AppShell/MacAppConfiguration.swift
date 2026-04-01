@@ -29,8 +29,23 @@ struct MacAppConfiguration {
 
         return MacAppConfiguration(
             licensePublicKeyBase64: rawLicenseKey?.isEmpty == true ? nil : rawLicenseKey,
-            sparkleFeedURL: rawFeedURL.flatMap(URL.init(string:)),
+            sparkleFeedURL: validatedUpdaterFeedURL(rawFeedURL),
             sparklePublicEDKey: rawSparkleKey?.isEmpty == true ? nil : rawSparkleKey
         )
+    }
+
+    private static func validatedUpdaterFeedURL(_ rawFeedURL: String?) -> URL? {
+        guard let rawFeedURL else { return nil }
+
+        let trimmed = rawFeedURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else {
+            return nil
+        }
+
+        guard url.scheme?.lowercased() == "https" else {
+            return nil
+        }
+
+        return url
     }
 }

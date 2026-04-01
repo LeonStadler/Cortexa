@@ -44,19 +44,52 @@ public struct EnginePreset: Codable, Sendable, Equatable {
 }
 
 public final class CapabilityProfiler {
+    private struct CacheEntry {
+        let fingerprint: ProfileFingerprint
+        let profile: CapabilityProfile
+    }
+
+    private struct ProfileFingerprint: Equatable {
+        let processorCount: Int
+        let activeProcessorCount: Int
+        let physicalMemoryBytes: UInt64
+        let thermalState: String
+    }
+
+    private let cacheLock = NSLock()
+    private var cachedProfile: CacheEntry?
+
     public init() {}
 
     public func profile() -> CapabilityProfile {
         let processInfo = ProcessInfo.processInfo
-        let score = runQuickBenchmark()
-
-        return CapabilityProfile(
+        let fingerprint = ProfileFingerprint(
             processorCount: processInfo.processorCount,
             activeProcessorCount: processInfo.activeProcessorCount,
             physicalMemoryBytes: processInfo.physicalMemory,
-            thermalState: thermalStateLabel(processInfo.thermalState),
+            thermalState: thermalStateLabel(processInfo.thermalState)
+        )
+
+        cacheLock.lock()
+        if let cachedProfile, cachedProfile.fingerprint == fingerprint {
+            cacheLock.unlock()
+            return cachedProfile.profile
+        }
+        cacheLock.unlock()
+
+        let score = runQuickBenchmark()
+        let profile = CapabilityProfile(
+            processorCount: fingerprint.processorCount,
+            activeProcessorCount: fingerprint.activeProcessorCount,
+            physicalMemoryBytes: fingerprint.physicalMemoryBytes,
+            thermalState: fingerprint.thermalState,
             benchmarkScore: score
         )
+
+        cacheLock.lock()
+        cachedProfile = CacheEntry(fingerprint: fingerprint, profile: profile)
+        cacheLock.unlock()
+        return profile
     }
 
     public func streamingPreset(for profile: CapabilityProfile, override: QualityOverride = .auto) -> EnginePreset {
@@ -102,7 +135,7 @@ public final class CapabilityProfiler {
         return streamingPreset(for: profile)
     }
 
-    private func runQuickBenchmark(iterations: Int = 100_000) -> Double {
+    private func runQuickBenchmark(iterations: Int = 25_000) -> Double {
         let start = CFAbsoluteTimeGetCurrent()
         var total = 0.0
         for value in 1...iterations {

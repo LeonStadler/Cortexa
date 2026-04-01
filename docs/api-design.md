@@ -68,11 +68,15 @@ struct DictationStartOptions {
     let mode: DictationMode            // .finalize | .streaming
     let language: DictationLanguage    // de | en | auto
     let performance: DictationPerformance // auto | fast | balanced | accurate
+    let liveRewriteScope: LiveRewriteScope
     let snippetRules: [SnippetRule]
+    let finalResultDeliveryMode: FinalResultDeliveryMode
+    let clipboardFallbackWhenNoTarget: Bool
 }
 ```
 
 The macOS app shell uses these options to:
 - select model/config dynamically before session start
-- apply stable streaming patching
+- apply stable streaming patching with a bounded mutable tail
 - apply snippet substitutions for streaming commits and final transcript
+- choose whether the final transcript is inserted or copied, and whether clipboard fallback is allowed when no text target is available

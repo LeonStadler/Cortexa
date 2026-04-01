@@ -25,6 +25,7 @@ struct WisprLocalMacApp: App {
         MenuBarExtra {
             MenuBarContentView()
                 .environmentObject(appState)
+                .environmentObject(updaterController)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: appState.menuBarIconName)
@@ -79,6 +80,7 @@ private final class SettingsWindowPresenter {
 
 struct MenuBarContentView: View {
     @EnvironmentObject private var appState: MacAppState
+    @EnvironmentObject private var updaterController: SparkleUpdaterController
     @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.german.rawValue
 
     private var appLanguage: AppLanguage {
@@ -100,9 +102,7 @@ struct MenuBarContentView: View {
     }
 
     private var showsUpdateMenuItem: Bool {
-        let status = appState.updaterStatusText.lowercased()
-        return (status.contains("update") || status.contains("aktualisierung")) &&
-            (status.contains("verfügbar") || status.contains("available"))
+        updaterController.state.allowsManualCheck
     }
 
     private var showsStatusHeader: Bool {
@@ -287,7 +287,7 @@ struct MenuBarContentView: View {
             openSettingsButton
 
             if showsUpdateMenuItem {
-                Button(text("Update verfügbar…", "Update available…")) {
+                Button(text("Nach Updates suchen", "Check for updates")) {
                     appState.checkForUpdates()
                 }
             }

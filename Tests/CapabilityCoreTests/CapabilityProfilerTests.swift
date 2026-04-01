@@ -33,5 +33,14 @@ final class CapabilityProfilerTests: XCTestCase {
         XCTAssertEqual(preset.modelID, "base-q5")
         XCTAssertEqual(preset.beamSize, 1)
     }
+
+    func testProfileCachesRepeatedCallsForSameFingerprint() {
+        let profiler = CapabilityProfiler()
+
+        let first = profiler.profile()
+        let second = profiler.profile()
+
+        XCTAssertEqual(first, second)
+    }
 }
 #endif

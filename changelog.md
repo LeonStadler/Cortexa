@@ -12,6 +12,12 @@
   - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`
   - Funktionalität: In den Einstellungen gibt es jetzt einen sichtbaren Live-Rewrite-Radius von `Nur aktueller Satz` bis `Ganzer aktueller Absatz`. Die Auswahl wird persistent in `UserDefaults` gespeichert und steuert, wie stark die laufende Eingabe bei neuen Partial-Ergebnissen noch umgeschrieben werden darf.
 
+## Docs
+
+- 2026-04-01: API-, System-, Licensing- und README-Verträge an die aktuellen AppShell-Optionen und den manuellen Update-Flow angepasst, und das Repo auf `0.21.0` angehoben.
+  - Dateien: `docs/api-design.md`, `docs/system-design.md`, `docs/licensing.md`, `README.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `Package.swift`
+  - Funktionalität: Die Dokumentation beschreibt jetzt die aktuellen Dictation-Optionen inklusive `liveRewriteScope`, Delivery-Mode und Clipboard-Fallback, die Mutable-Tail-Semantik beim Streaming, den macOS-Lizenzcache als löschbaren Fallback und den permanent sichtbaren manuellen Update-Check.
+
 ## Fixes
 
 - 2026-03-28: macOS-Settings auf natives Segment-Layout umgestellt und Diktier-Runtime gegen Start-/Audio-Fehlerzustände gehärtet.

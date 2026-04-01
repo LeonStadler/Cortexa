@@ -83,10 +83,10 @@ Features implemented in macOS app shell:
 - Snippet replacement + snippet import/export (JSON)
 - Transkript-History mit Copy/Delete/Clear + Export (TXT), lokal persistent
 - Language switch (`de`, `en`, `auto`) and profile presets (`auto`, `fast`, `balanced`, `accurate`)
-- Offline licensing UI (key input, local verification, keychain/cache persistence)
+- Offline licensing UI (key input, local verification, keychain/cache persistence with explicit cache invalidation on deactivate)
 - Lokales Audit-Log mit Rotation (`~/Library/Application Support/WisprLocal/audit.log`)
 - Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI
-- Sparkle-kompatibler Auto-Updater mit optionalem Feed-Check im Menü und in den Settings
+- Sparkle-kompatibler Auto-Updater mit permanent sichtbarem manuellen Check im Menü und in den Settings
 - Lifecycle-Refresh nach App-Aktivierung und System-Wake für Berechtigungen, Runtime und Hotkey-Registrierung
 - Eingeschränkter Transkriptionsmodus ohne Bedienungshilfen; direktes Einfügen bleibt dann deaktiviert, Verlauf und Zwischenablage bleiben nutzbar
 

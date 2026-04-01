@@ -20,8 +20,13 @@ struct TranscriptHistoryStore: TranscriptHistoryStoring {
             return []
         }
 
-        let data = try Data(contentsOf: fileURL)
-        return try JSONDecoder().decode([TranscriptHistoryEntry].self, from: data)
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try JSONDecoder().decode([TranscriptHistoryEntry].self, from: data)
+        } catch {
+            quarantineCorruptedHistory(reason: "corrupt")
+            return []
+        }
     }
 
     func save(_ entries: [TranscriptHistoryEntry]) throws {
@@ -48,4 +53,26 @@ struct TranscriptHistoryStore: TranscriptHistoryStoring {
         formatter.timeStyle = .medium
         return formatter
     }()
+
+    private func quarantineCorruptedHistory(reason: String) {
+        guard fileManager.fileExists(atPath: fileURL.path) else {
+            return
+        }
+
+        let parent = fileURL.deletingLastPathComponent()
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let quarantineURL = parent.appendingPathComponent(
+            "\(fileURL.lastPathComponent).corrupt-\(reason)-\(timestamp)-\(UUID().uuidString)"
+        )
+
+        do {
+            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: quarantineURL.path) {
+                try fileManager.removeItem(at: quarantineURL)
+            }
+            try fileManager.moveItem(at: fileURL, to: quarantineURL)
+        } catch {
+            // Best-effort quarantine only.
+        }
+    }
 }

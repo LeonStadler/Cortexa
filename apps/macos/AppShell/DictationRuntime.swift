@@ -185,6 +185,7 @@ final class DictationRuntime: @unchecked Sendable {
     private let processQueue = DispatchQueue(label: "wispr.dictation.process", qos: .userInitiated)
     private let insertionQueue = DispatchQueue(label: "wispr.dictation.insert", qos: .userInitiated)
     private let capabilityProfiler = CapabilityProfiler()
+    private let sessionLock = NSLock()
 
     private let audioEngine = AVAudioEngine()
     private var converter: AVAudioConverter?
@@ -216,6 +217,12 @@ final class DictationRuntime: @unchecked Sendable {
     private let speechRMSActivationThreshold: Float = 0.008
     private let speechRMSReleaseThreshold: Float = 0.004
     private let speechActivationChunkCount = 3
+
+    private func withSessionLock<T>(_ work: () throws -> T) rethrows -> T {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        return try work()
+    }
 
     private func runOnMainThread<T>(_ work: () throws -> T) throws -> T {
         if Thread.isMainThread {
@@ -256,7 +263,11 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     func toggle(options: DictationStartOptions) {
-        if isStarting {
+        let snapshot = withSessionLock {
+            (isStarting: isStarting, isRunning: isRunning)
+        }
+
+        if snapshot.isStarting {
             startTask?.cancel()
             cleanupSession()
             publishStatus("Idle")
@@ -264,7 +275,7 @@ final class DictationRuntime: @unchecked Sendable {
             return
         }
 
-        if isRunning {
+        if snapshot.isRunning {
             Task {
                 await stop()
             }
@@ -275,24 +286,37 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     func start(options: DictationStartOptions) {
-        guard !isRunning else {
-            publishDiagnostic(DictationRuntimeError.alreadyRunning.localizedDescription)
-            return
+        let startPermissionMessage = withSessionLock { () -> String? in
+            if isRunning {
+                return DictationRuntimeError.alreadyRunning.localizedDescription
+            }
+            if isStarting {
+                return "Diktat startet bereits."
+            }
+            isStarting = true
+            return nil
         }
-        guard !isStarting else {
-            publishDiagnostic("Diktat startet bereits.")
+
+        if let startPermissionMessage {
+            publishDiagnostic(startPermissionMessage)
             return
         }
 
         prepareRuntime()
-        guard runtimePrepared else { return }
+        guard runtimePrepared else {
+            withSessionLock {
+                isStarting = false
+            }
+            return
+        }
 
-        isStarting = true
         startTask = Task { [weak self] in
             guard let self else { return }
             defer {
-                self.isStarting = false
-                self.startTask = nil
+                self.withSessionLock {
+                    self.isStarting = false
+                    self.startTask = nil
+                }
             }
 
             let micGranted = await requestMicrophonePermission()
@@ -312,36 +336,46 @@ final class DictationRuntime: @unchecked Sendable {
 
                 if accessibilityGranted {
                     let lockedTarget = try? await captureFocusedTextTargetWithRetry(emitWaitingDiagnostics: false)
-                    target = lockedTarget
-                    if let lockedTarget {
-                        lastKnownTarget = lockedTarget
-                        waitingForInsertionTarget = false
-                    } else {
-                        waitingForInsertionTarget = true
+                    withSessionLock {
+                        self.target = lockedTarget
+                        if let lockedTarget {
+                            self.lastKnownTarget = lockedTarget
+                            self.waitingForInsertionTarget = false
+                        } else {
+                            self.waitingForInsertionTarget = true
+                        }
+                    }
+                    if lockedTarget == nil {
                         publishDiagnostic("Kein Textfeld aktiv. Das Diktat startet trotzdem und wartet auf ein fokussiertes Ziel.")
                         schedulePendingStreamingInsertionIfNeeded()
                     }
                 } else {
-                    target = nil
-                    waitingForInsertionTarget = false
+                    withSessionLock {
+                        self.target = nil
+                        self.waitingForInsertionTarget = false
+                    }
                     if requiresDirectInsertion {
                         publishDiagnostic("Bedienungshilfen fehlen. Das Diktat läuft im eingeschränkten Modus ohne direktes Einfügen.")
                     }
                 }
-                runningMode = effectiveMode
-                runningLocale = options.language.locale
-                currentOptions = options
-                latestInsertedPreview = ""
-                speechActivityDetected = false
-                speechChunkStreak = 0
-                maxObservedRMS = 0
-                stableCommitter = makeStreamingCommitStabilizer(for: options)
-                snippetMatcher = DefaultSnippetMatcher(rules: options.snippetRules)
+                withSessionLock {
+                    self.runningMode = effectiveMode
+                    self.runningLocale = options.language.locale
+                    self.currentOptions = options
+                    self.latestInsertedPreview = ""
+                    self.speechActivityDetected = false
+                    self.speechChunkStreak = 0
+                    self.maxObservedRMS = 0
+                    self.stableCommitter = self.makeStreamingCommitStabilizer(for: options)
+                    self.snippetMatcher = DefaultSnippetMatcher(rules: options.snippetRules)
+                }
 
                 try whisperEngine.startStreaming()
                 try startAudioCapture()
 
-                isRunning = true
+                withSessionLock {
+                    self.isRunning = true
+                }
                 publishSessionActivity(true)
                 publishStatus("Recording")
                 let modeText = effectiveMode == .streaming ? "Streaming Insert" : "Finalize Insert"
@@ -353,7 +387,8 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     func stop() async {
-        guard isRunning else {
+        let isCurrentlyRunning = withSessionLock { isRunning }
+        guard isCurrentlyRunning else {
             publishDiagnostic(DictationRuntimeError.notRunning.localizedDescription)
             return
         }
@@ -375,16 +410,22 @@ final class DictationRuntime: @unchecked Sendable {
             let deliveryOutcome = await deliverFinalText(finalText)
 
             publishTranscript(finalText)
+            let finalEventMetadata = withSessionLock {
+                (
+                    languageCode: currentOptions?.language.rawValue ?? "auto",
+                    mode: currentOptions?.mode ?? .finalize
+                )
+            }
             publishFinalTranscript(
                 FinalTranscriptEvent(
                     text: finalText,
-                    languageCode: currentOptions?.language.rawValue ?? "auto",
-                    mode: currentOptions?.mode ?? .finalize,
+                    languageCode: finalEventMetadata.languageCode,
+                    mode: finalEventMetadata.mode,
                     deliveryOutcome: deliveryOutcome
                 )
             )
             publishStatus("Idle")
-            publishDiagnostic("Last transcript: \(finalText)")
+            publishDiagnostic("Letztes Transkript verarbeitet.")
         } catch {
             abortSession(reason: "Stop failed: \(error.localizedDescription)")
             return
@@ -404,8 +445,15 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func handlePartialText(_ text: String) {
-        guard isRunning, runningMode == .streaming else { return }
-        guard speechActivityDetected else { return }
+        let snapshot = withSessionLock {
+            (
+                isRunning: isRunning,
+                runningMode: runningMode,
+                speechActivityDetected: speechActivityDetected
+            )
+        }
+        guard snapshot.isRunning, snapshot.runningMode == .streaming else { return }
+        guard snapshot.speechActivityDetected else { return }
 
         let normalized = normalizeText(text)
         guard !normalized.isEmpty else { return }
@@ -427,20 +475,25 @@ final class DictationRuntime: @unchecked Sendable {
                     if let resolvedTarget = self.resolveAvailableTextTarget() {
                         target = resolvedTarget
                     } else {
-                        self.waitingForInsertionTarget = true
-                        self.latestInsertedPreview = patchText
+                        self.withSessionLock {
+                            self.waitingForInsertionTarget = true
+                            self.latestInsertedPreview = patchText
+                        }
                         self.publishTranscript(patchText)
                         self.schedulePendingStreamingInsertionIfNeeded()
                         return
                     }
                 }
 
+                let maximumMutableCharacterCount = self.withSessionLock {
+                    self.currentOptions?.liveRewriteScope.maximumMutableCharacterCount ?? 72
+                }
                 let preservePrefixLength = self.target == nil
                     ? 0
                     : self.streamingPreservedPrefixLength(
                         previousText: self.latestInsertedPreview,
                         newText: patchText,
-                        maximumMutableCharacterCount: self.currentOptions?.liveRewriteScope.maximumMutableCharacterCount ?? 72
+                        maximumMutableCharacterCount: maximumMutableCharacterCount
                     )
 
                 if patchText == self.latestInsertedPreview, self.target != nil {
@@ -456,13 +509,17 @@ final class DictationRuntime: @unchecked Sendable {
                         preservingPrefixLength: preservePrefixLength
                     )
                     activeTarget.insertedLength = patchText.count
-                    self.target = activeTarget
-                    self.lastKnownTarget = activeTarget
-                    self.waitingForInsertionTarget = false
-                    self.latestInsertedPreview = patchText
+                    self.withSessionLock {
+                        self.target = activeTarget
+                        self.lastKnownTarget = activeTarget
+                        self.waitingForInsertionTarget = false
+                        self.latestInsertedPreview = patchText
+                    }
                     self.publishTranscript(patchText)
                 } catch {
-                    self.target = nil
+                    self.withSessionLock {
+                        self.target = nil
+                    }
                     if let resolvedTarget = self.resolveAvailableTextTarget() {
                         var reboundTarget = resolvedTarget
                         try self.replaceInsertedText(
@@ -472,14 +529,18 @@ final class DictationRuntime: @unchecked Sendable {
                             preservingPrefixLength: preservePrefixLength
                         )
                         reboundTarget.insertedLength = patchText.count
-                        self.target = reboundTarget
-                        self.lastKnownTarget = reboundTarget
-                        self.waitingForInsertionTarget = false
-                        self.latestInsertedPreview = patchText
+                        self.withSessionLock {
+                            self.target = reboundTarget
+                            self.lastKnownTarget = reboundTarget
+                            self.waitingForInsertionTarget = false
+                            self.latestInsertedPreview = patchText
+                        }
                         self.publishTranscript(patchText)
                     } else {
-                        self.waitingForInsertionTarget = true
-                        self.latestInsertedPreview = patchText
+                        self.withSessionLock {
+                            self.waitingForInsertionTarget = true
+                            self.latestInsertedPreview = patchText
+                        }
                         self.publishTranscript(patchText)
                         self.schedulePendingStreamingInsertionIfNeeded()
                     }
@@ -667,14 +728,16 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func deliverFinalText(_ finalText: String) async -> FinalTranscriptDeliveryOutcome {
-        guard let currentOptions else {
+        guard let currentOptions = withSessionLock({ currentOptions }) else {
             return .failed("Fehlende Diktat-Optionen.")
         }
 
         if currentOptions.finalResultDeliveryMode == .clipboardOnly {
             copyTranscriptToClipboard(finalText)
             publishDiagnostic("Finales Transkript wurde in die Zwischenablage kopiert.")
-            waitingForInsertionTarget = false
+            withSessionLock {
+                waitingForInsertionTarget = false
+            }
             return .copiedToClipboard
         }
 
@@ -692,7 +755,9 @@ final class DictationRuntime: @unchecked Sendable {
         if let activeStreamingTarget = target {
             do {
                 try replaceInsertedText(finalText, in: activeStreamingTarget, allowFallbackPaste: true)
-                waitingForInsertionTarget = false
+                withSessionLock {
+                    waitingForInsertionTarget = false
+                }
                 return .inserted
             } catch {
                 publishDiagnostic("Vorhandenes Live-Textziel konnte nicht aktualisiert werden. Versuche das aktuelle Fokusziel erneut.")
@@ -702,29 +767,39 @@ final class DictationRuntime: @unchecked Sendable {
         if let resolvedTarget = resolveAvailableTextTarget() {
             do {
                 try replaceInsertedText(finalText, in: resolvedTarget, allowFallbackPaste: true)
-                waitingForInsertionTarget = false
+                withSessionLock {
+                    waitingForInsertionTarget = false
+                }
                 return .inserted
             } catch {
                 return .failed(error.localizedDescription)
             }
         }
 
-        waitingForInsertionTarget = true
+        withSessionLock {
+            waitingForInsertionTarget = true
+        }
         publishDiagnostic("Kein Textfeld aktiv. Warte bis zu 5 Sekunden auf ein Ziel für das finale Transkript.")
 
         if let delayedTarget = await waitForAvailableTextTarget(timeoutNanoseconds: pendingInsertionTimeoutNanoseconds) {
             do {
                 try replaceInsertedText(finalText, in: delayedTarget, allowFallbackPaste: true)
-                waitingForInsertionTarget = false
+                withSessionLock {
+                    waitingForInsertionTarget = false
+                }
                 publishDiagnostic("Textziel erkannt. Finales Transkript wurde eingefügt.")
                 return .inserted
             } catch {
-                waitingForInsertionTarget = false
+                withSessionLock {
+                    waitingForInsertionTarget = false
+                }
                 return .failed(error.localizedDescription)
             }
         }
 
-        waitingForInsertionTarget = false
+        withSessionLock {
+            waitingForInsertionTarget = false
+        }
         if currentOptions.clipboardFallbackWhenNoTarget {
             copyTranscriptToClipboard(finalText)
             publishDiagnostic("Kein Textfeld gewählt. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert.")
@@ -736,34 +811,67 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func schedulePendingStreamingInsertionIfNeeded() {
-        guard pendingStreamingInsertionTask == nil else { return }
-        guard runningMode == .streaming else { return }
+        let shouldSchedule = withSessionLock { () -> Bool in
+            guard pendingStreamingInsertionTask == nil, runningMode == .streaming else {
+                return false
+            }
+            return true
+        }
+        guard shouldSchedule else { return }
 
-        pendingStreamingInsertionTask = Task { [weak self] in
-            defer { self?.pendingStreamingInsertionTask = nil }
+        let task = Task { [weak self] in
+            defer {
+                self?.withSessionLock {
+                    self?.pendingStreamingInsertionTask = nil
+                }
+            }
 
-            while let self, self.isRunning, self.waitingForInsertionTarget, self.runningMode == .streaming {
+            while let self {
+                let loopSnapshot = self.withSessionLock {
+                    (
+                        isRunning: self.isRunning,
+                        waitingForInsertionTarget: self.waitingForInsertionTarget,
+                        runningMode: self.runningMode
+                    )
+                }
+                guard loopSnapshot.isRunning,
+                      loopSnapshot.waitingForInsertionTarget,
+                      loopSnapshot.runningMode == .streaming else {
+                    break
+                }
                 try? await Task.sleep(nanoseconds: pendingInsertionPollNanoseconds)
 
                 self.insertionQueue.async { [weak self] in
                     guard let self else { return }
-                    guard self.isRunning, self.waitingForInsertionTarget else { return }
-                    guard !self.latestInsertedPreview.isEmpty else { return }
+                    let insertionSnapshot = self.withSessionLock {
+                        (
+                            isRunning: self.isRunning,
+                            waitingForInsertionTarget: self.waitingForInsertionTarget,
+                            latestInsertedPreview: self.latestInsertedPreview
+                        )
+                    }
+                    guard insertionSnapshot.isRunning, insertionSnapshot.waitingForInsertionTarget else { return }
+                    guard !insertionSnapshot.latestInsertedPreview.isEmpty else { return }
                     guard let resolvedTarget = self.resolveAvailableTextTarget() else { return }
 
                     do {
                         var activeTarget = resolvedTarget
-                        try self.replaceInsertedText(self.latestInsertedPreview, in: activeTarget, allowFallbackPaste: false)
-                        activeTarget.insertedLength = self.latestInsertedPreview.count
-                        self.target = activeTarget
-                        self.lastKnownTarget = activeTarget
-                        self.waitingForInsertionTarget = false
+                        try self.replaceInsertedText(insertionSnapshot.latestInsertedPreview, in: activeTarget, allowFallbackPaste: false)
+                        activeTarget.insertedLength = insertionSnapshot.latestInsertedPreview.count
+                        self.withSessionLock {
+                            self.target = activeTarget
+                            self.lastKnownTarget = activeTarget
+                            self.waitingForInsertionTarget = false
+                        }
                         self.publishDiagnostic("Textziel erkannt. Der aktuelle Streaming-Text wird jetzt eingefügt.")
                     } catch {
                         // Keep waiting; the target may have changed again.
                     }
                 }
             }
+        }
+        withSessionLock {
+            pendingStreamingInsertionTask = task
         }
     }
 
@@ -797,7 +905,8 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func handleAudioBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) {
-        guard isRunning else { return }
+        let isCurrentlyRunning = withSessionLock { isRunning }
+        guard isCurrentlyRunning else { return }
         guard let converter else { return }
 
         let capacity = AVAudioFrameCount((Double(buffer.frameLength) * targetFormat.sampleRate) / inputFormat.sampleRate) + 64
@@ -839,15 +948,17 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         let rms = sqrt(sumSquares / Float(frameCount))
-        maxObservedRMS = max(maxObservedRMS, rms)
+        withSessionLock {
+            maxObservedRMS = max(maxObservedRMS, rms)
 
-        if rms >= speechRMSActivationThreshold {
-            speechChunkStreak += 1
-            if speechChunkStreak >= speechActivationChunkCount {
-                speechActivityDetected = true
+            if rms >= speechRMSActivationThreshold {
+                speechChunkStreak += 1
+                if speechChunkStreak >= speechActivationChunkCount {
+                    speechActivityDetected = true
+                }
+            } else if rms < speechRMSReleaseThreshold {
+                speechChunkStreak = max(0, speechChunkStreak - 1)
             }
-        } else if rms < speechRMSReleaseThreshold {
-            speechChunkStreak = max(0, speechChunkStreak - 1)
         }
     }
 
@@ -856,9 +967,11 @@ final class DictationRuntime: @unchecked Sendable {
             return false
         }
 
-        target = nil
-        waitingForInsertionTarget = true
-        latestInsertedPreview = patchText
+        withSessionLock {
+            target = nil
+            waitingForInsertionTarget = true
+            latestInsertedPreview = patchText
+        }
         publishTranscript(patchText)
         schedulePendingStreamingInsertionIfNeeded()
         emitRecoverableInsertionDiagnosticIfNeeded(error)
@@ -910,7 +1023,10 @@ final class DictationRuntime: @unchecked Sendable {
             return true
         }
 
-        if !speechActivityDetected || maxObservedRMS < speechRMSActivationThreshold {
+        let speechSnapshot = withSessionLock {
+            (speechActivityDetected: speechActivityDetected, maxObservedRMS: maxObservedRMS)
+        }
+        if !speechSnapshot.speechActivityDetected || speechSnapshot.maxObservedRMS < speechRMSActivationThreshold {
             if normalized.count <= 24 {
                 return true
             }
@@ -1190,27 +1306,32 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func cleanupSession() {
-        startTask?.cancel()
-        startTask = nil
-        isStarting = false
+        let tasksToCancel = withSessionLock { () -> (Task<Void, Never>?, Task<Void, Never>?) in
+            let startTask = self.startTask
+            let pendingTask = self.pendingStreamingInsertionTask
+            self.startTask = nil
+            self.isStarting = false
+            self.isRunning = false
+            self.runningMode = nil
+            self.currentOptions = nil
+            self.target = nil
+            self.latestInsertedPreview = ""
+            self.snippetMatcher = nil
+            self.waitingForInsertionTarget = false
+            self.pendingStreamingInsertionTask = nil
+            self.speechActivityDetected = false
+            self.speechChunkStreak = 0
+            self.maxObservedRMS = 0
+            self.lastRecoverableInsertDiagnosticAt = nil
+            self.accessibilityPermissionGranted = false
+            return (startTask, pendingTask)
+        }
+        tasksToCancel.0?.cancel()
+        tasksToCancel.1?.cancel()
         stopAudioCapture()
         audioEngine.reset()
         converter = nil
         whisperEngine.resetStreaming()
-        isRunning = false
-        runningMode = nil
-        currentOptions = nil
-        target = nil
-        latestInsertedPreview = ""
-        snippetMatcher = nil
-        waitingForInsertionTarget = false
-        pendingStreamingInsertionTask?.cancel()
-        pendingStreamingInsertionTask = nil
-        speechActivityDetected = false
-        speechChunkStreak = 0
-        maxObservedRMS = 0
-        lastRecoverableInsertDiagnosticAt = nil
-        accessibilityPermissionGranted = false
         stableCommitter.reset()
         publishSessionActivity(false)
     }
@@ -1255,7 +1376,7 @@ final class DictationRuntime: @unchecked Sendable {
 private extension String {
     func commonPrefixLength(with other: String) -> Int {
         var lhsIndex = startIndex
-        var rhs = other
+        let rhs = other
         var rhsIndex = rhs.startIndex
         var length = 0
 
