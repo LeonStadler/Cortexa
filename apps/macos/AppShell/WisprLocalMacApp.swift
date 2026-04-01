@@ -22,9 +22,17 @@ struct WisprLocalMacApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra(appState.menuBarTitle, systemImage: appState.menuBarIconName) {
+        MenuBarExtra {
             MenuBarContentView()
                 .environmentObject(appState)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: appState.menuBarIconName)
+                if !appState.menuBarTitle.isEmpty {
+                    Text(appState.menuBarTitle)
+                        .lineLimit(1)
+                }
+            }
         }
     }
 }
@@ -158,183 +166,152 @@ struct MenuBarContentView: View {
         return nil
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    Text("WisprLocal")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    if showsUpdateBadge {
-                        StatusPill(text: text("Update", "Update"), color: .blue, emphasis: .secondary)
-                    }
-                    if showsStatusHeader {
-                        StatusPill(text: statusLine, color: statusColor, emphasis: .primary)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                if let secondaryLine {
-                    Text(secondaryLine)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-
+    @ViewBuilder
+    private var startDictationButton: some View {
+        if appState.showMenuBarShortcutHints,
+           let keyEquivalent = appState.selectedHotkey.swiftUIKeyEquivalent {
             Button {
                 appState.toggleTranscriptionFromMenuBar()
             } label: {
-                PrimaryMenuActionLabel(
+                MenuActionLabel(
                     title: primaryActionTitle,
-                    shortcutGlyph: appState.toggleShortcutEnabled ? appState.selectedHotkey.menuBarHint : nil,
-                    shortcutText: appState.toggleShortcutEnabled ? appState.selectedHotkey.displayName : nil
+                    shortcutGlyph: nil,
+                    shortcutText: appState.selectedHotkey.displayName
                 )
             }
-            .buttonStyle(.plain)
-            .padding(.bottom, 2)
+            .keyboardShortcut(keyEquivalent, modifiers: appState.selectedHotkey.swiftUIEventModifiers)
+        } else {
+            Button {
+                appState.toggleTranscriptionFromMenuBar()
+            } label: {
+                MenuActionLabel(
+                    title: primaryActionTitle,
+                    shortcutGlyph: nil,
+                    shortcutText: nil
+                )
+            }
+        }
+    }
 
-            if !appState.hasPermissionProblems {
-                MenuCard(emphasis: .subtle) {
-                    Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
-                        .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
+    @ViewBuilder
+    private var copyLastDictationButton: some View {
+        if appState.showMenuBarShortcutHints {
+            Button {
+                copyToClipboard(appState.latestDictationText)
+            } label: {
+                MenuActionLabel(
+                    title: text("Letztes Diktat kopieren", "Copy last dictation"),
+                    shortcutGlyph: nil,
+                    shortcutText: "Command + Shift + C"
+                )
+            }
+            .keyboardShortcut("c", modifiers: [.command, .shift])
+        } else {
+            Button {
+                copyToClipboard(appState.latestDictationText)
+            } label: {
+                MenuActionLabel(
+                    title: text("Letztes Diktat kopieren", "Copy last dictation"),
+                    shortcutGlyph: nil,
+                    shortcutText: nil
+                )
+            }
+        }
+    }
 
-                    Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
-                        ForEach(DictationLanguage.allCases) { language in
-                            Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
-                        }
-                    }
-                    .labelsHidden()
-                    .accessibilityLabel(text("Diktatsprache", "Dictation language"))
+    @ViewBuilder
+    private var openSettingsButton: some View {
+        if appState.showMenuBarShortcutHints {
+            Button {
+                appState.openSettingsWindow()
+            } label: {
+                MenuActionLabel(
+                    title: text("Einstellungen…", "Settings…"),
+                    shortcutGlyph: nil,
+                    shortcutText: "Command + ,"
+                )
+            }
+            .keyboardShortcut(",", modifiers: [.command])
+        } else {
+            Button {
+                appState.openSettingsWindow()
+            } label: {
+                MenuActionLabel(
+                    title: text("Einstellungen…", "Settings…"),
+                    shortcutGlyph: nil,
+                    shortcutText: nil
+                )
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            startDictationButton
+
+            Divider()
+
+            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
+                .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
+
+            Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
+                ForEach(DictationLanguage.allCases) { language in
+                    Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
                 }
             }
 
             if appState.hasPermissionProblems {
-                MenuCard(emphasis: .strong) {
-                    Text(text("Fehlende Berechtigungen", "Missing permissions"))
-                        .font(.subheadline.weight(.medium))
-                    Text(appState.permissionSummary)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    if appState.microphonePermissionStatus != .granted {
-                        Button(text("Mikrofonzugriff öffnen", "Open microphone access")) {
-                            appState.openMicrophoneSettings()
-                        }
+                Divider()
+                Text(text("Berechtigungen erforderlich", "Permissions required"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if appState.microphonePermissionStatus != .granted {
+                    Button(text("Mikrofonzugriff öffnen", "Open microphone access")) {
+                        appState.openMicrophoneSettings()
                     }
-                    if appState.accessibilityPermissionStatus != .granted {
-                        Button(text("Bedienungshilfen öffnen", "Open accessibility access")) {
-                            appState.openAccessibilitySettings()
-                        }
+                }
+                if appState.accessibilityPermissionStatus != .granted {
+                    Button(text("Bedienungshilfen öffnen", "Open accessibility access")) {
+                        appState.openAccessibilitySettings()
                     }
                 }
             }
 
             if !appState.latestDictationText.isEmpty {
-                MenuCard(emphasis: .strong) {
-                    Text(text("Letztes Diktat", "Last dictation"))
-                        .font(.subheadline.weight(.medium))
-                    Text(latestDictationPreview)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityLabel(appState.latestDictationText)
-                    Button(text("Letztes Diktat kopieren", "Copy last dictation")) {
-                        copyToClipboard(appState.latestDictationText)
-                    }
-                }
+                Divider()
+                copyLastDictationButton
             }
 
             Divider()
-                .padding(.top, 2)
-                .padding(.bottom, 2)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Button {
-                    appState.openSettingsWindow()
-                } label: {
-                    MenuActionLabel(
-                        title: text("Einstellungen…", "Settings…"),
-                        shortcutGlyph: nil,
-                        shortcutText: nil
-                    )
-                }
-                .buttonStyle(.plain)
-                .controlSize(.small)
+            openSettingsButton
 
-                Button(text("Nach Updates suchen", "Check for updates")) {
-                    appState.checkForUpdates()
-                }
-                .disabled(!appState.updaterConfigured)
-                .buttonStyle(.plain)
-                .controlSize(.small)
+            Button(text("Nach Updates suchen", "Check for updates")) {
+                appState.checkForUpdates()
+            }
+            .disabled(!appState.updaterConfigured)
 
-                Button(text("Beenden", "Quit")) {
-                    NSApplication.shared.terminate(nil)
-                }
-                .buttonStyle(.plain)
-                .controlSize(.small)
+            Divider()
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                MenuActionLabel(
+                    title: text("Beenden", "Quit"),
+                    shortcutGlyph: appState.showMenuBarShortcutHints ? "⌘Q" : nil,
+                    shortcutText: appState.showMenuBarShortcutHints ? "Command + Q" : nil
+                )
             }
         }
-        .padding(12)
-        .frame(width: 324)
-        .background(.regularMaterial)
+        .padding(10)
+        .frame(width: 320)
+        .controlSize(.small)
     }
 
     private func copyToClipboard(_ string: String) {
         guard !string.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(string, forType: .string)
-    }
-}
-
-private struct StatusPill: View {
-    enum Emphasis {
-        case primary
-        case secondary
-    }
-
-    let text: String
-    let color: Color
-    let emphasis: Emphasis
-
-    var body: some View {
-        Text(text)
-            .font((emphasis == .primary ? Font.caption2.weight(.semibold) : Font.caption2.weight(.medium)))
-            .padding(.horizontal, emphasis == .primary ? 8 : 7)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(color.opacity(emphasis == .primary ? 0.1 : 0.06))
-            )
-            .foregroundStyle(color)
-    }
-}
-
-private enum MenuCardEmphasis {
-    case subtle
-    case strong
-}
-
-private struct MenuCard<Content: View>: View {
-    let emphasis: MenuCardEmphasis
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            content
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(emphasis == .strong ? .thinMaterial : .ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(.separator.opacity(emphasis == .strong ? 0.12 : 0.05), lineWidth: 1)
-        )
     }
 }
 
@@ -354,6 +331,7 @@ private struct MenuActionLabel: View {
                     .accessibilityHidden(true)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(shortcutText.map { "\(title), \($0)" } ?? title)
     }

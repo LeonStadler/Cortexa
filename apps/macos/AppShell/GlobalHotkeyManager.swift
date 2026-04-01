@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Foundation
+import SwiftUI
 
 enum HotkeyAdvisorySeverity: String, Equatable {
     case critical
@@ -31,6 +32,35 @@ struct HotkeyBinding: Codable, Equatable, Hashable, Identifiable {
 
     var menuBarHint: String {
         modifierMenuBarParts.joined() + keyMenuBarName
+    }
+
+    var swiftUIKeyEquivalent: KeyEquivalent? {
+        switch keyCode {
+        case UInt32(kVK_Space): return .space
+        case UInt32(kVK_Return): return .return
+        case UInt32(kVK_Tab): return .tab
+        case UInt32(kVK_Delete): return .delete
+        case UInt32(kVK_Escape): return .escape
+        case UInt32(kVK_LeftArrow): return .leftArrow
+        case UInt32(kVK_RightArrow): return .rightArrow
+        case UInt32(kVK_UpArrow): return .upArrow
+        case UInt32(kVK_DownArrow): return .downArrow
+        default:
+            guard let string = Self.translatedKeyString(for: keyCode)?.lowercased(),
+                  let character = string.first else {
+                return nil
+            }
+            return KeyEquivalent(character)
+        }
+    }
+
+    var swiftUIEventModifiers: SwiftUI.EventModifiers {
+        var modifiers: SwiftUI.EventModifiers = []
+        if carbonModifiers & UInt32(controlKey) != 0 { modifiers.insert(.control) }
+        if carbonModifiers & UInt32(optionKey) != 0 { modifiers.insert(.option) }
+        if carbonModifiers & UInt32(shiftKey) != 0 { modifiers.insert(.shift) }
+        if carbonModifiers & UInt32(cmdKey) != 0 { modifiers.insert(.command) }
+        return modifiers
     }
 
     var isValidRecorderSelection: Bool {

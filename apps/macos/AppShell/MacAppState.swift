@@ -196,18 +196,7 @@ final class MacAppState: ObservableObject {
     }
 
     var menuBarTitle: String {
-        guard showMenuBarShortcutHints else {
-            return ""
-        }
-
-        switch recordingStatus {
-        case "Recording":
-            return "Stop \(selectedHotkey.menuBarHint)"
-        case "Error":
-            return "Fehler"
-        default:
-            return "Start \(selectedHotkey.menuBarHint)"
-        }
+        ""
     }
 
     var hotkeyDisplayText: String {

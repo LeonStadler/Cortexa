@@ -104,18 +104,23 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
-                List(SettingsTab.allCases, id: \.self, selection: $selectedTab) { tab in
-                    Label(tab.title(language: appLanguage), systemImage: tab.symbolName)
-                        .tag(tab)
-                        .font(.system(size: 15, weight: .medium))
+                List(selection: $selectedTab) {
+                    Section {
+                        ForEach(SettingsTab.allCases, id: \.self) { tab in
+                            Label(tab.title(language: appLanguage), systemImage: tab.symbolName)
+                                .tag(tab)
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                    }
                 }
                 .listStyle(.sidebar)
-                .environment(\.defaultMinListRowHeight, 34)
+                .environment(\.defaultMinListRowHeight, 32)
                 .scrollContentBackground(.hidden)
+                .safeAreaPadding(.top, 8)
                 .padding(.horizontal, 6)
             }
-            .frame(width: 250)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .frame(width: 260)
+            .background(.regularMaterial)
 
             Divider()
 
@@ -128,7 +133,7 @@ struct SettingsView: View {
                     placeholder: text("Einstellungen durchsuchen", "Search settings"),
                     text: $searchText
                 )
-                .frame(maxWidth: 420)
+                .frame(width: 360)
                 .frame(maxWidth: 780, alignment: .leading)
 
                 ZStack {
@@ -154,7 +159,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .environment(\.locale, appLanguage.locale)
-        .frame(width: 980, height: 640)
+        .frame(width: 1000, height: 650)
         .controlSize(.regular)
         .background(.ultraThinMaterial)
     }
@@ -305,11 +310,11 @@ struct SettingsView: View {
                 .frame(minWidth: 170)
             }
 
-            Toggle(text("Kurzbefehl-Hinweise im Menüleisten-Titel anzeigen", "Show shortcut hints in menu bar title"), isOn: $appState.showMenuBarShortcutHints)
+            Toggle(text("Kurzbefehl-Hinweise im Menü anzeigen", "Show shortcut hints in menu"), isOn: $appState.showMenuBarShortcutHints)
 
             Text(text(
-                "Diese Option blendet Zusatztext wie `Start ⌥Space` oder `Stop ⇧⌘C` neben dem Symbol ein.",
-                "This option shows helper text like `Start ⌥Space` or `Stop ⇧⌘C` next to the symbol."
+                "Diese Option zeigt Tastenkombinationen direkt neben passenden Einträgen im Dropdown-Menü an.",
+                "This option shows keyboard shortcuts next to matching items in the dropdown menu."
             ))
             .font(.footnote)
             .foregroundStyle(.secondary)
