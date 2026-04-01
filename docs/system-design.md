@@ -72,7 +72,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 1. Start session and capture immutable target.
 2. Partial segments arrive continuously.
 3. Stabilizer computes `committedPrefix` and `tail`.
-4. Inserter patches only tracked insert region.
+4. Inserter patches only the mutable tail while preserving committed text already shown to the user.
 5. Focus changes are ignored (target remains locked).
 6. Stop finalizes tail and closes session.
 
@@ -102,6 +102,7 @@ Core invariants:
 - `committedText` is append-only.
 - Only `uncommittedTail` may be replaced.
 - Insert operation IDs are idempotent.
+- The live rewrite scope determines how much recent text may still be reshaped before it is considered committed.
 
 ## Permission / Security Matrix
 

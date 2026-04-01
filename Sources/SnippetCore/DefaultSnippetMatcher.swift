@@ -5,7 +5,6 @@ public final class DefaultSnippetMatcher: SnippetMatcher {
     private let rules: [SnippetRule]
     private var tokenWindow: [String] = []
     private let maxWindowTokens: Int
-    private let tokenizer = NLTokenizer(unit: .word)
 
     public init(rules: [SnippetRule], maxWindowTokens: Int = 8) {
         self.rules = rules
@@ -80,7 +79,15 @@ public final class DefaultSnippetMatcher: SnippetMatcher {
             let candidate = Array(tokenWindow.suffix(triggerTokens.count))
             if matches(candidateTokens: candidate, triggerTokens: triggerTokens, rule: rule, locale: Locale(identifier: rule.localeIdentifier ?? "en_US")) {
                 tokenWindow.removeLast(triggerTokens.count)
-                tokenWindow.append(rule.replacement)
+                let replacementTokens = Self.tokenizePhrase(rule.replacement)
+                if replacementTokens.isEmpty {
+                    tokenWindow.append(rule.replacement)
+                } else {
+                    tokenWindow.append(contentsOf: replacementTokens)
+                }
+                if tokenWindow.count > maxWindowTokens {
+                    tokenWindow.removeFirst(tokenWindow.count - maxWindowTokens)
+                }
 
                 return [
                     SnippetReplacementOp(
@@ -120,6 +127,7 @@ public final class DefaultSnippetMatcher: SnippetMatcher {
     }
 
     private func tokenizeWithRanges(_ text: String, locale: Locale) -> [(token: String, range: Range<String.Index>)] {
+        let tokenizer = NLTokenizer(unit: .word)
         tokenizer.string = text
         tokenizer.setLanguage(NLLanguage(rawValue: locale.language.languageCode?.identifier ?? "en"))
 

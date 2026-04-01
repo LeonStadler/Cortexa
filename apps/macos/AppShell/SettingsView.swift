@@ -74,7 +74,30 @@ struct SettingsView: View {
     }
 
     private var dictationHasMatches: Bool {
-        matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert", "delivery"])
+        matches([
+            "sprache",
+            "language",
+            "qualität",
+            "quality",
+            "streaming",
+            "clipboard",
+            "zwischenablage",
+            "insert",
+            "delivery",
+            "anpassung",
+            "anpassungsradius",
+            "anpassen",
+            "rückwirkung",
+            "rückwirkend",
+            "rückwirkungsbereich",
+            "rueckwirkung",
+            "rueckwirkend",
+            "rueckwirkungsbereich",
+            "rewrite",
+            "kontext",
+            "retroaktiv",
+            "weit zurück"
+        ])
     }
 
     private var shortcutsHasMatches: Bool {
@@ -198,6 +221,9 @@ struct SettingsView: View {
             Section(text("Erkennung", "Recognition")) {
                 dictationRecognitionContent
             }
+            Section(text("Live-Anpassung", "Live rewriting")) {
+                liveRewriteContent
+            }
             Section(text("Ablage", "Delivery")) {
                 dictationDeliveryContent
             }
@@ -260,6 +286,7 @@ struct SettingsView: View {
             if dictationHasMatches {
                 Section(text("Diktat", "Dictation")) {
                     dictationRecognitionContent
+                    liveRewriteContent
                     dictationDeliveryContent
                 }
             }
@@ -375,6 +402,43 @@ struct SettingsView: View {
                 .labelsHidden()
                 .frame(minWidth: 170)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var liveRewriteContent: some View {
+        if matches([
+            "anpassung",
+            "anpassungsradius",
+            "anpassen",
+            "rückwirkung",
+            "rückwirkend",
+            "rückwirkungsbereich",
+            "rueckwirkung",
+            "rueckwirkend",
+            "rueckwirkungsbereich",
+            "rewrite",
+            "kontext",
+            "retroaktiv",
+            "weit zurück",
+            "live"
+        ]) {
+            LabeledContent(text("Anpassungsradius", "Adjustment radius")) {
+                Picker(text("Anpassungsradius", "Adjustment radius"), selection: $appState.liveRewriteScope) {
+                    ForEach(LiveRewriteScope.allCases) { scope in
+                        Text(scope.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(scope)
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 260)
+            }
+
+            Text(text(
+                "Kleinere Bereiche sind stabiler und greifen nur am aktuellen Satz an; größere Bereiche glätten stärker, können aber weiter zurückliegende Wörter erneut anfassen.",
+                "Smaller scopes are more stable and only touch the current sentence; larger scopes smooth more aggressively and can revisit words further back."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
     }
 

@@ -14,6 +14,7 @@ The active global hotkey can be recorded directly in the app settings; valid sho
 The settings also warn when the chosen shortcut overlaps with common macOS/system shortcuts such as Spotlight, input-source switching, app switching, quit, or common `Command` editing shortcuts.
 An optional hold-to-dictate shortcut can be configured separately from the normal toggle shortcut and can also be disabled independently.
 Final transcript delivery can be configured independently from recognition mode: insert into the current text target, or copy only to the clipboard.
+The dictation settings also include a live rewrite scope that limits how far back partial transcripts may be reshaped while you keep speaking, so older sentences stabilize sooner instead of being rewritten wholesale.
 
 Operational notes:
 
@@ -39,6 +40,7 @@ Operational notes:
 - The bundled Whisper runtime is resolved robustly from either `Contents/Resources/Runtime` or a flattened `Contents/Resources` layout, so resource packaging changes do not break dictation startup.
 - Diagnostics are shown in a compressed preview first and can be expanded for the full log text, which can also be copied to the clipboard.
 - Streaming quality now uses the capability preset values for beam size, decode cadence, and thread count rather than only switching the model file; `balanced` and `accurate` also use a more conservative streaming commit strategy than `fast`.
+- The live rewrite scope in settings lets you choose how aggressively the current streaming tail may adapt, from only the current sentence up to a much wider context.
 - Basic speech-activity gating suppresses no-speech hallucinations so short idle outputs such as `Musik` are less likely to be inserted when the microphone captures no real dictation.
 - If the focused text element briefly disappears during startup, the dictation runtime can recover by reusing the last known AX text target in the same frontmost app.
 - Dictation can start even when no text field is currently active; streaming waits and inserts once a target is focused, and the final transcript waits up to five seconds after stop before either inserting, copying to the clipboard, or falling back to history-only retention depending on the chosen delivery mode.

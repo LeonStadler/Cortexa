@@ -98,6 +98,54 @@ enum PermissionStatus: String {
     }
 }
 
+enum LiveRewriteScope: String, CaseIterable, Identifiable {
+    case currentSentence
+    case currentSentenceAndPreviousSentence
+    case currentSentenceAndTwoPreviousSentences
+    case currentParagraph
+
+    var id: String { rawValue }
+
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        if interfaceLanguageCode == "en" {
+            switch self {
+            case .currentSentence:
+                return "Current sentence only"
+            case .currentSentenceAndPreviousSentence:
+                return "Current sentence + 1 previous sentence"
+            case .currentSentenceAndTwoPreviousSentences:
+                return "Current sentence + 2 previous sentences"
+            case .currentParagraph:
+                return "Current paragraph"
+            }
+        } else {
+            switch self {
+            case .currentSentence:
+                return "Nur aktueller Satz"
+            case .currentSentenceAndPreviousSentence:
+                return "Aktueller Satz + 1 vorheriger Satz"
+            case .currentSentenceAndTwoPreviousSentences:
+                return "Aktueller Satz + 2 vorherige Sätze"
+            case .currentParagraph:
+                return "Ganzer aktueller Absatz"
+            }
+        }
+    }
+
+    var maximumMutableCharacterCount: Int {
+        switch self {
+        case .currentSentence:
+            return 40
+        case .currentSentenceAndPreviousSentence:
+            return 72
+        case .currentSentenceAndTwoPreviousSentences:
+            return 128
+        case .currentParagraph:
+            return 220
+        }
+    }
+}
+
 @MainActor
 final class MacAppState: ObservableObject {
     @Published var streamingEnabled: Bool {
@@ -155,6 +203,12 @@ final class MacAppState: ObservableObject {
     @Published var clipboardFallbackWhenNoTarget: Bool {
         didSet {
             userDefaults.set(clipboardFallbackWhenNoTarget, forKey: UserDefaultsKeys.clipboardFallbackWhenNoTarget)
+        }
+    }
+
+    @Published var liveRewriteScope: LiveRewriteScope {
+        didSet {
+            userDefaults.set(liveRewriteScope.rawValue, forKey: UserDefaultsKeys.liveRewriteScope)
         }
     }
 
@@ -322,6 +376,7 @@ final class MacAppState: ObservableObject {
         static let holdShortcut = "wispr.settings.holdShortcut"
         static let finalResultDeliveryMode = "wispr.settings.finalResultDeliveryMode"
         static let clipboardFallbackWhenNoTarget = "wispr.settings.clipboardFallbackWhenNoTarget"
+        static let liveRewriteScope = "wispr.settings.liveRewriteScope"
         static let showMenuBarShortcutHints = "wispr.settings.showMenuBarShortcutHints"
     }
 
@@ -395,6 +450,13 @@ final class MacAppState: ObservableObject {
             self.finalResultDeliveryMode = .insert
         }
         self.clipboardFallbackWhenNoTarget = userDefaults.object(forKey: UserDefaultsKeys.clipboardFallbackWhenNoTarget) as? Bool ?? false
+
+        if let rawLiveRewriteScope = userDefaults.string(forKey: UserDefaultsKeys.liveRewriteScope),
+           let parsedLiveRewriteScope = LiveRewriteScope(rawValue: rawLiveRewriteScope) {
+            self.liveRewriteScope = parsedLiveRewriteScope
+        } else {
+            self.liveRewriteScope = .currentSentence
+        }
 
         self.snippetStore = SnippetStore(fileURL: Self.snippetStorageURL())
         self.historyStore = TranscriptHistoryStore(fileURL: Self.historyStorageURL())
@@ -550,6 +612,7 @@ final class MacAppState: ObservableObject {
             mode: mode,
             language: selectedLanguage,
             performance: performanceProfile,
+            liveRewriteScope: liveRewriteScope,
             snippetRules: snippetRules,
             finalResultDeliveryMode: finalResultDeliveryMode,
             clipboardFallbackWhenNoTarget: clipboardFallbackWhenNoTarget

@@ -99,7 +99,7 @@ struct MenuBarContentView: View {
         return "\(normalized.prefix(140))…"
     }
 
-    private var showsUpdateBadge: Bool {
+    private var showsUpdateMenuItem: Bool {
         let status = appState.updaterStatusText.lowercased()
         return (status.contains("update") || status.contains("aktualisierung")) &&
             (status.contains("verfügbar") || status.contains("available"))
@@ -286,10 +286,11 @@ struct MenuBarContentView: View {
 
             openSettingsButton
 
-            Button(text("Nach Updates suchen", "Check for updates")) {
-                appState.checkForUpdates()
+            if showsUpdateMenuItem {
+                Button(text("Update verfügbar…", "Update available…")) {
+                    appState.checkForUpdates()
+                }
             }
-            .disabled(!appState.updaterConfigured)
 
             Divider()
 

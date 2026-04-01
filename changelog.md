@@ -2,6 +2,18 @@
 
 ## Fixes
 
+- 2026-04-01: Live-Diktat begrenzt rückwirkende Umschreibungen, verwirft `Blank Audio`-Platzhalter und macht Snippet-Replacements robuster.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `Sources/SessionCore/StreamingCommitStabilizer.swift`, `Sources/SnippetCore/DefaultSnippetMatcher.swift`, `Tests/SessionCoreTests/StreamingCommitStabilizerTests.swift`
+  - Funktionalität: Streaming-Updates ersetzen jetzt nur noch den wirklich veränderlichen Textbereich statt den kompletten sichtbaren Satz bei jeder Partial-Antwort neu zu schreiben. Dadurch bleiben ältere Wörter und Sätze stabiler, während der neue `Blank Audio`-Filter leere oder placeholderartige Finals zuverlässig verwirft. Zusätzlich ist der Snippet-Matcher thread-sicherer und behandelt tokenisierte Ersetzungen robuster, damit finale Textersetzungen nicht unnötig an der laufenden Streaming-Logik hängen.
+
+## Features
+
+- 2026-04-01: Neue Live-Anpassungs-Einstellung in den macOS-Diktatsettings eingeführt.
+  - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`
+  - Funktionalität: In den Einstellungen gibt es jetzt einen sichtbaren Live-Rewrite-Radius von `Nur aktueller Satz` bis `Ganzer aktueller Absatz`. Die Auswahl wird persistent in `UserDefaults` gespeichert und steuert, wie stark die laufende Eingabe bei neuen Partial-Ergebnissen noch umgeschrieben werden darf.
+
+## Fixes
+
 - 2026-03-28: macOS-Settings auf natives Segment-Layout umgestellt und Diktier-Runtime gegen Start-/Audio-Fehlerzustände gehärtet.
   - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/README.md`, `VERSION`
   - Funktionalität: Das Settings-Fenster nutzt jetzt eine ruhigere native Segmentsteuerung oberhalb der Form-Inhalte, konsistentere deutschsprachige Labels sowie verbesserte VoiceOver-Beschriftungen für Verlauf-/Snippet-Aktionen und gekürzte Vorschautexte. Gleichzeitig verhindert die Runtime Doppelstarts während der Startphase, kann einen Start sauber abbrechen und setzt bei Audio-Push-Fehlern den Session-Zustand vollständig zurück, statt in einem fehlerhaften „läuft bereits“-Zustand zu hängen.

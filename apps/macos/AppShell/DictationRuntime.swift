@@ -107,6 +107,7 @@ struct DictationStartOptions {
     let mode: DictationMode
     let language: DictationLanguage
     let performance: DictationPerformance
+    let liveRewriteScope: LiveRewriteScope
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
@@ -434,13 +435,26 @@ final class DictationRuntime: @unchecked Sendable {
                     }
                 }
 
+                let preservePrefixLength = self.target == nil
+                    ? 0
+                    : self.streamingPreservedPrefixLength(
+                        previousText: self.latestInsertedPreview,
+                        newText: patchText,
+                        maximumMutableCharacterCount: self.currentOptions?.liveRewriteScope.maximumMutableCharacterCount ?? 72
+                    )
+
                 if patchText == self.latestInsertedPreview, self.target != nil {
                     return
                 }
 
                 do {
                     guard var activeTarget = target else { return }
-                    try self.replaceInsertedText(patchText, in: activeTarget, allowFallbackPaste: false)
+                    try self.replaceInsertedText(
+                        patchText,
+                        in: activeTarget,
+                        allowFallbackPaste: false,
+                        preservingPrefixLength: preservePrefixLength
+                    )
                     activeTarget.insertedLength = patchText.count
                     self.target = activeTarget
                     self.lastKnownTarget = activeTarget
@@ -451,7 +465,12 @@ final class DictationRuntime: @unchecked Sendable {
                     self.target = nil
                     if let resolvedTarget = self.resolveAvailableTextTarget() {
                         var reboundTarget = resolvedTarget
-                        try self.replaceInsertedText(patchText, in: reboundTarget, allowFallbackPaste: false)
+                        try self.replaceInsertedText(
+                            patchText,
+                            in: reboundTarget,
+                            allowFallbackPaste: false,
+                            preservingPrefixLength: preservePrefixLength
+                        )
                         reboundTarget.insertedLength = patchText.count
                         self.target = reboundTarget
                         self.lastKnownTarget = reboundTarget
@@ -609,7 +628,7 @@ final class DictationRuntime: @unchecked Sendable {
                 insertionLocation: range.location,
                 originalSelectedLength: range.length,
                 fallbackBundleIdentifier: target.fallbackBundleIdentifier,
-                insertedLength: range.length
+                insertedLength: max(range.length, target.insertedLength)
             )
         }
     }
@@ -668,6 +687,16 @@ final class DictationRuntime: @unchecked Sendable {
 
             publishDiagnostic("Bedienungshilfen fehlen. Das finale Transkript bleibt in der History verfügbar.")
             return .historyOnlyNoTarget
+        }
+
+        if let activeStreamingTarget = target {
+            do {
+                try replaceInsertedText(finalText, in: activeStreamingTarget, allowFallbackPaste: true)
+                waitingForInsertionTarget = false
+                return .inserted
+            } catch {
+                publishDiagnostic("Vorhandenes Live-Textziel konnte nicht aktualisiert werden. Versuche das aktuelle Fokusziel erneut.")
+            }
         }
 
         if let resolvedTarget = resolveAvailableTextTarget() {
@@ -865,6 +894,21 @@ final class DictationRuntime: @unchecked Sendable {
         let lowered = normalized.lowercased()
         let normalizedToken = lowered.replacingOccurrences(of: "[^a-zA-ZäöüÄÖÜß]", with: "", options: .regularExpression)
         let suspiciousTokens: Set<String> = ["musik", "music", "you", "thanks"]
+        let placeholderTokens: Set<String> = [
+            "blank audio",
+            "blankaudio",
+            "blank-audio",
+            "no audio",
+            "noaudio",
+            "no speech",
+            "nospeech",
+            "silence",
+            "stille"
+        ]
+
+        if placeholderTokens.contains(lowered) || placeholderTokens.contains(normalizedToken) {
+            return true
+        }
 
         if !speechActivityDetected || maxObservedRMS < speechRMSActivationThreshold {
             if normalized.count <= 24 {
@@ -878,7 +922,12 @@ final class DictationRuntime: @unchecked Sendable {
         return false
     }
 
-    private func replaceInsertedText(_ text: String, in lockedTarget: LockedTextTarget, allowFallbackPaste: Bool) throws {
+    private func replaceInsertedText(
+        _ text: String,
+        in lockedTarget: LockedTextTarget,
+        allowFallbackPaste: Bool,
+        preservingPrefixLength: Int = 0
+    ) throws {
         try runOnMainThread {
             var valueRef: CFTypeRef?
             let readResult = AXUIElementCopyAttributeValue(lockedTarget.element, kAXValueAttribute as CFString, &valueRef)
@@ -896,14 +945,18 @@ final class DictationRuntime: @unchecked Sendable {
 
             let currentValue = (valueRef as? String) ?? ""
             let location = min(max(0, lockedTarget.insertionLocation), currentValue.count)
-            let replacementLength = max(0, lockedTarget.insertedLength)
-            let upperBound = min(location + replacementLength, currentValue.count)
+            let preservedLength = Swift.min(
+                Swift.min(max(0, preservingPrefixLength), text.count),
+                Swift.min(lockedTarget.insertedLength, max(0, currentValue.count - location))
+            )
+            let replacementStart = min(location + preservedLength, currentValue.count)
+            let replacementEnd = min(location + max(0, lockedTarget.insertedLength), currentValue.count)
 
-            let startIndex = currentValue.index(currentValue.startIndex, offsetBy: location)
-            let endIndex = currentValue.index(currentValue.startIndex, offsetBy: upperBound)
+            let startIndex = currentValue.index(currentValue.startIndex, offsetBy: replacementStart)
+            let endIndex = currentValue.index(currentValue.startIndex, offsetBy: replacementEnd)
 
             var updatedValue = currentValue
-            updatedValue.replaceSubrange(startIndex..<endIndex, with: text)
+            updatedValue.replaceSubrange(startIndex..<endIndex, with: String(text.dropFirst(preservedLength)))
 
             let setResult = AXUIElementSetAttributeValue(lockedTarget.element, kAXValueAttribute as CFString, updatedValue as CFTypeRef)
             if setResult != .success {
@@ -929,6 +982,14 @@ final class DictationRuntime: @unchecked Sendable {
                 _ = AXUIElementSetAttributeValue(lockedTarget.element, kAXSelectedTextRangeAttribute as CFString, axRange)
             }
         }
+    }
+
+    private func streamingPreservedPrefixLength(previousText: String, newText: String, maximumMutableCharacterCount: Int) -> Int {
+        guard !previousText.isEmpty, !newText.isEmpty else { return 0 }
+
+        let commonPrefixLength = previousText.commonPrefixLength(with: newText)
+        let hardFloor = max(0, previousText.count - max(0, maximumMutableCharacterCount))
+        return min(newText.count, max(commonPrefixLength, hardFloor))
     }
 
     private func pasteIntoFallbackTarget(_ target: LockedTextTarget, text: String) throws {
@@ -1035,19 +1096,51 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func makeStreamingCommitStabilizer(for options: DictationStartOptions) -> StreamingCommitStabilizer {
+        let rewriteScope: StreamingRewriteScope
+        switch options.liveRewriteScope {
+        case .currentSentence:
+            rewriteScope = .currentSentence
+        case .currentSentenceAndPreviousSentence:
+            rewriteScope = .recentContext
+        case .currentSentenceAndTwoPreviousSentences:
+            rewriteScope = .wideContext
+        case .currentParagraph:
+            rewriteScope = .currentParagraph
+        }
+
         switch options.performance {
         case .fast:
-            return StreamingCommitStabilizer(stabilityThreshold: 2, minimumCommitExtensionLength: 1)
+            return StreamingCommitStabilizer(
+                stabilityThreshold: 2,
+                minimumCommitExtensionLength: 1,
+                rewriteScope: rewriteScope
+            )
         case .balanced:
-            return StreamingCommitStabilizer(stabilityThreshold: 3, minimumCommitExtensionLength: 4)
+            return StreamingCommitStabilizer(
+                stabilityThreshold: 3,
+                minimumCommitExtensionLength: 4,
+                rewriteScope: rewriteScope
+            )
         case .accurate:
-            return StreamingCommitStabilizer(stabilityThreshold: 3, minimumCommitExtensionLength: 6)
+            return StreamingCommitStabilizer(
+                stabilityThreshold: 3,
+                minimumCommitExtensionLength: 6,
+                rewriteScope: rewriteScope
+            )
         case .auto:
             let preset = selectEnginePreset(options: options)
             if preset.beamSize > 1 {
-                return StreamingCommitStabilizer(stabilityThreshold: 3, minimumCommitExtensionLength: 4)
+                return StreamingCommitStabilizer(
+                    stabilityThreshold: 3,
+                    minimumCommitExtensionLength: 4,
+                    rewriteScope: rewriteScope
+                )
             }
-            return StreamingCommitStabilizer(stabilityThreshold: 2, minimumCommitExtensionLength: 2)
+            return StreamingCommitStabilizer(
+                stabilityThreshold: 2,
+                minimumCommitExtensionLength: 2,
+                rewriteScope: rewriteScope
+            )
         }
     }
 
@@ -1156,5 +1249,24 @@ final class DictationRuntime: @unchecked Sendable {
         DispatchQueue.main.async { [weak self] in
             self?.onSessionActivityChanged?(isActive)
         }
+    }
+}
+
+private extension String {
+    func commonPrefixLength(with other: String) -> Int {
+        var lhsIndex = startIndex
+        var rhs = other
+        var rhsIndex = rhs.startIndex
+        var length = 0
+
+        while lhsIndex < endIndex,
+              rhsIndex < rhs.endIndex,
+              self[lhsIndex] == rhs[rhsIndex] {
+            length += 1
+            formIndex(after: &lhsIndex)
+            rhs.formIndex(after: &rhsIndex)
+        }
+
+        return length
     }
 }
