@@ -23,15 +23,30 @@ final class SparkleUpdaterController: ObservableObject {
         var statusText: String {
             switch self {
             case .unavailableFramework:
-                return "Sparkle-Framework nicht verfügbar"
+                return "Sparkle nicht verfügbar"
             case .notConfigured:
-                return "Updater nicht konfiguriert"
+                return "Updates noch nicht konfiguriert"
             case .ready:
-                return "Updater konfiguriert"
+                return "Automatische Update-Prüfung aktiv"
             case .checking:
-                return "Suche nach Updates gestartet"
+                return "Prüfe auf Updates..."
             case .updateAvailable:
-                return "Update verfügbar"
+                return "Neues Update verfügbar"
+            }
+        }
+
+        var detailText: String {
+            switch self {
+            case .unavailableFramework:
+                return "Die Update-Engine ist in diesem Build nicht eingebunden."
+            case .notConfigured:
+                return "Sparkle ist vorhanden, aber der Release-Feed ist noch nicht konfiguriert."
+            case .ready:
+                return "WisprLocal prüft Updates im Hintergrund und GitHub Releases dienen als Veröffentlichungsquelle."
+            case .checking:
+                return "Der Appcast-Feed wird gerade abgefragt."
+            case .updateAvailable:
+                return "Ein neues Release kann jetzt installiert werden."
             }
         }
     }
@@ -40,10 +55,11 @@ final class SparkleUpdaterController: ObservableObject {
     @Published private(set) var feedURLDescription: String
 
     private let updaterController: SPUStandardUpdaterController?
+    private var pendingStateResetTask: Task<Void, Never>?
 
     init(configuration: MacAppConfiguration = .load()) {
         self.state = configuration.isUpdaterConfigured ? .ready : .notConfigured
-        self.feedURLDescription = configuration.sparkleFeedURL?.absoluteString ?? ""
+        self.feedURLDescription = configuration.sparkleFeedDisplayText
 
         guard configuration.isUpdaterConfigured else {
             self.updaterController = nil
@@ -72,6 +88,15 @@ final class SparkleUpdaterController: ObservableObject {
         }
 
         state = .checking
+        pendingStateResetTask?.cancel()
+        pendingStateResetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            if self.state == .checking {
+                self.state = .ready
+            }
+        }
         updaterController.checkForUpdates(nil)
     }
 }
@@ -114,6 +139,7 @@ final class SparkleUpdaterController: ObservableObject {
 
     @Published private(set) var state: UpdaterState = .unavailableFramework
     @Published private(set) var feedURLDescription: String = ""
+    private var pendingStateResetTask: Task<Void, Never>?
 
     var statusText: String {
         state.statusText
@@ -125,11 +151,20 @@ final class SparkleUpdaterController: ObservableObject {
 
     init(configuration: MacAppConfiguration = .load()) {
         state = configuration.isUpdaterConfigured ? .ready : .notConfigured
-        feedURLDescription = configuration.sparkleFeedURL?.absoluteString ?? ""
+        feedURLDescription = configuration.sparkleFeedDisplayText
     }
 
     func checkForUpdates() {
         state = .checking
+        pendingStateResetTask?.cancel()
+        pendingStateResetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            if self.state == .checking {
+                self.state = .ready
+            }
+        }
     }
 }
 #endif

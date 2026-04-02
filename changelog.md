@@ -2,15 +2,24 @@
 
 ## Fixes
 
+- 2026-04-02: Sicherheitsrelevante Persistenzpfade gehärtet, Klartext-Lizenzcache entfernt und Clipboard-Tradeoff deutlicher gemacht.
+  - Dateien: `Sources/LicenseCore/LicenseStore.swift`, `apps/macos/AppShell/LicenseController.swift`, `apps/ios/App/IOSAppState.swift`, `apps/ios/App/IOSSharedStorage.swift`, `apps/ios/KeyboardExtension/KeyboardViewController.swift`, `Sources/SnippetCore/SecurePersistence.swift`, `Sources/SnippetCore/SnippetStore.swift`, `apps/macos/AppShell/TranscriptHistoryStore.swift`, `apps/macos/AppShell/AuditLogger.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/ios/App/WisprLocaliOSApp.swift`, `docs/licensing.md`, `docs/api-design.md`, `docs/system-design.md`, `README.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalität: Roh-Lizenzschlüssel werden jetzt nur noch im Keychain gehalten; der bisherige Klartext-Cache-Fallback auf macOS/iOS wird nicht mehr verwendet und alte Cache-Dateien werden bei Nutzung älterer Builds aktiv entfernt, auch wenn zuerst nur die iOS-Keyboard-Extension geöffnet wird. Zusätzlich werden lokale Snippet-, Verlauf-, Audit- und App-Group-Dateien jetzt mit gehärteten Dateirechten bzw. iOS-Dateischutz geschrieben, rotierte/quarantänisierte Dateien nach dem Verschieben erneut gehärtet und der iOS-Transkriptverlauf aus dem Shared-App-Group-Container in host-app-lokalen Speicher verlagert. Der Zwischenablage-Fallback bleibt als absichtlicher Zustellpfad erhalten, wird in der Oberfläche aber explizit als weniger privater Tradeoff kommuniziert.
+
 - 2026-04-01: Live-Diktat begrenzt rückwirkende Umschreibungen, verwirft `Blank Audio`-Platzhalter und macht Snippet-Replacements robuster.
   - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `Sources/SessionCore/StreamingCommitStabilizer.swift`, `Sources/SnippetCore/DefaultSnippetMatcher.swift`, `Tests/SessionCoreTests/StreamingCommitStabilizerTests.swift`
   - Funktionalität: Streaming-Updates ersetzen jetzt nur noch den wirklich veränderlichen Textbereich statt den kompletten sichtbaren Satz bei jeder Partial-Antwort neu zu schreiben. Dadurch bleiben ältere Wörter und Sätze stabiler, während der neue `Blank Audio`-Filter leere oder placeholderartige Finals zuverlässig verwirft. Zusätzlich ist der Snippet-Matcher thread-sicherer und behandelt tokenisierte Ersetzungen robuster, damit finale Textersetzungen nicht unnötig an der laufenden Streaming-Logik hängen.
 
 ## Features
 
+- 2026-04-02: macOS-Update-Flow für Sparkle + GitHub Releases konzeptionell geschärft und Status-Texte vereinheitlicht.
+  - Dateien: `apps/macos/AppShell/SparkleUpdaterController.swift`, `apps/macos/AppShell/MacAppConfiguration.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Der Updater beschreibt jetzt klarer, ob Sparkle verfügbar ist, ob Updates bereits konfiguriert sind, ob gerade geprüft wird oder ob ein neues Release vorliegt. Der manuelle Check setzt den Status nicht mehr dauerhaft auf „Prüfe…“, sondern fällt nach kurzer Zeit wieder in den Bereitschaftszustand zurück, falls Sparkle selbst keine neue Zustandsmeldung liefert. Außerdem wird die Veröffentlichungsquelle in der Konfiguration lesbarer als `GitHub Releases Appcast` beschrieben, und die README erklärt den eingebetteten Sparkle-Flow ohne eigenes Backend.
+
 - 2026-04-02: macOS-Settings um überarbeiteten `About`-Reiter und vorbereitete interne Lizenz-/Support-Gates erweitert.
   - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppConfiguration.swift`, `apps/macos/README.md`, `VERSION`
   - Funktionalität: Die Settings besitzen jetzt einen eigenen `About`-Bereich mit persönlicher Kurzvorstellung auf Basis von `leon-stadler.com/startseite/ueber-mich/`, einer offenen Projektbeschreibung und einem Link zur Website. Support-/Donation-Elemente sowie die Lizenzinfrastruktur bleiben intern vorbereitet, werden aber in öffentlichen Builds nicht angezeigt; Lizenz- und Support-UI erscheinen nur noch über den expliziten `WLMEnableInternalLicenseUI`-Schalter. Der Bereich `Erweitert` konzentriert sich damit öffentlich auf Sparkle-Updates und Diagnose.
+  - UI-Polish: Der `About`-Reiter nutzt jetzt eine klarere native Hierarchie mit persönlichem Intro, kurzen Faktenblöcken und einem zurückhaltenden Website-Einstieg statt eines reinen Fließtext-Layouts.
 
 - 2026-04-01: Neue Live-Anpassungs-Einstellung in den macOS-Diktatsettings eingeführt.
   - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`

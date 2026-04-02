@@ -298,6 +298,9 @@ struct SettingsView: View {
 
     private var advancedForm: some View {
         Form {
+            Section {
+                advancedOverviewContent
+            }
             Section(text("Updates", "Updates")) {
                 updatesContent
             }
@@ -362,6 +365,7 @@ struct SettingsView: View {
 
             if advancedHasMatches {
                 Section(text("Erweitert", "Advanced")) {
+                    advancedOverviewContent
                     updatesContent
                     diagnosticsContent
                     if appState.isLicenseUIEnabledForDevelopment {
@@ -406,35 +410,58 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var advancedOverviewContent: some View {
+        if matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit"]) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(text(
+                    "Hier bündelt WisprLocal alles, was eher administrativ ist: Update-Status, technische Diagnose und interne Prüfpfade.",
+                    "This section groups the more administrative parts of WisprLocal: update status, technical diagnostics, and internal inspection paths."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+                Text(text(
+                    "Updates laufen im Hintergrund über Sparkle; manuelle Checks bleiben hier erreichbar.",
+                    "Updates run in the background through Sparkle; manual checks remain available here."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var updatesContent: some View {
         if matches(["update", "updates", "aktualisierung"]) {
-            Text(text(
-                "WisprLocal nutzt Sparkle direkt in der App und prüft Updates automatisch im Hintergrund. Hier kannst du die Suche zusätzlich manuell anstoßen.",
-                "WisprLocal uses Sparkle directly inside the app and checks for updates automatically in the background. You can also trigger a manual check here."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(text(
+                    "WisprLocal nutzt Sparkle direkt in der App und sucht automatisch im Hintergrund nach Aktualisierungen.",
+                    "WisprLocal uses Sparkle directly inside the app and checks for updates automatically in the background."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
-            HStack(alignment: .center, spacing: 10) {
-                Button(text("Nach Updates suchen", "Check for updates")) {
-                    appState.checkForUpdates()
+                HStack(alignment: .center, spacing: 10) {
+                    Button(text("Nach Updates suchen", "Check for updates")) {
+                        appState.checkForUpdates()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!appState.updaterConfigured)
+
+                    if !appState.updaterStatusText.isEmpty {
+                        Text(appState.updaterStatusText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                 }
-                .buttonStyle(.bordered)
-                .disabled(!appState.updaterConfigured)
 
-                if !appState.updaterStatusText.isEmpty {
-                    Text(appState.updaterStatusText)
-                        .font(.footnote)
+                if !appState.updaterFeedURLText.isEmpty {
+                    Text(appState.updaterFeedURLText)
+                        .font(.footnote.monospaced())
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .textSelection(.enabled)
                 }
-            }
-
-            if !appState.updaterFeedURLText.isEmpty {
-                Text(appState.updaterFeedURLText)
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
             }
         }
     }
@@ -442,24 +469,60 @@ struct SettingsView: View {
     @ViewBuilder
     private var aboutProfileContent: some View {
         if matches(["about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource", "open source", "intermedia", "design", "fotografie", "vorarlberg"]) {
-            Text(text(
-                "Ich bin Leon Stadler, Kommunikationsdesigner und Entwickler mit Fokus auf zeitgemäße digitale Produkte. Ich bin in München aufgewachsen, lebe am Bodensee und studiere Intermedia in Dornbirn, Vorarlberg. WisprLocal verbindet meine Arbeit an Design, Technik und kreativen digitalen Lösungen mit dem Ziel, lokale Offline-Diktierung auf dem Mac ruhig, nativ und alltagstauglich zu machen.",
-                "I'm Leon Stadler, a communication designer and developer focused on contemporary digital products. I grew up in Munich, now live near Lake Constance, and study Intermedia in Dornbirn, Vorarlberg. WisprLocal brings together my work in design, technology, and creative digital problem-solving with the goal of making local offline dictation on the Mac feel calm, native, and practical."
-            ))
-            .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .center, spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(.quaternary.opacity(0.55))
+                            .frame(width: 52, height: 52)
 
-            Text(text(
-                "Neben Webdesign und UX/UI interessiere ich mich besonders für Fotografie, Film, Prototyping und kreative technische Systeme. Mehr über meinen Hintergrund und meine Projekte findest du auf meiner Website.",
-                "Alongside web design and UX/UI, I'm especially interested in photography, film, prototyping, and creative technical systems. You can find more about my background and projects on my website."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+                        Text("LS")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                    }
 
-            Link(destination: personalWebsiteURL) {
-                Label(text("Mehr über mich", "Learn more about me"), systemImage: "globe")
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Leon Stadler")
+                            .font(.title3.weight(.semibold))
+
+                        Text(text(
+                            "Kommunikationsdesigner, Entwickler und Intermedia-Student",
+                            "Communication designer, developer, and Intermedia student"
+                        ))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text(text(
+                    "Ich bin in München aufgewachsen, lebe heute am Bodensee und arbeite an zeitgemäßen digitalen Produkten zwischen Design, Technik und kreativer Problemlösung. WisprLocal ist aus genau diesem Zusammenspiel entstanden: eine lokale Offline-Diktierlösung für den Mac, die ruhig, nativ und alltagstauglich wirkt.",
+                    "I grew up in Munich, now live near Lake Constance, and work on contemporary digital products across design, technology, and creative problem-solving. WisprLocal grew out of exactly that intersection: a local offline dictation tool for the Mac that aims to feel calm, native, and genuinely useful in everyday work."
+                ))
+                .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    AboutFactRow(
+                        title: text("Schwerpunkte", "Focus"),
+                        detail: text("Webdesign, UX/UI, Prototyping, Fotografie und kreative technische Systeme", "Web design, UX/UI, prototyping, photography, and creative technical systems")
+                    )
+                    AboutFactRow(
+                        title: text("Standort", "Location"),
+                        detail: text("Bodensee / Dornbirn, Vorarlberg", "Lake Constance / Dornbirn, Vorarlberg")
+                    )
+                    AboutFactRow(
+                        title: text("Projektgedanke", "Project intent"),
+                        detail: text("Lokale, datensparsame Tools mit klarer nativer Benutzerführung", "Local, privacy-conscious tools with clear native user experience")
+                    )
+                }
+
+                Link(destination: personalWebsiteURL) {
+                    Label(text("Mehr über mich", "Learn more about me"), systemImage: "globe")
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.link)
+            .padding(.vertical, 4)
         }
     }
 
@@ -600,10 +663,26 @@ struct SettingsView: View {
                 ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+                Text(text(
+                    "Datenschutzhinweis: Zwischenablage ist absichtlich global. Andere Apps oder Clipboard-Tools können kopierten Text kurzfristig sehen.",
+                    "Privacy note: the clipboard is intentionally global. Other apps or clipboard tools may briefly observe copied text."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             } else if !appState.dictationCapability.allowsDirectInsertion {
                 Text(text(
                     "Ohne Bedienungshilfen startet die Aufnahme weiterhin, aber direktes Einfügen bleibt deaktiviert.",
                     "Without Accessibility, recording still starts, but direct insertion remains disabled."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            if appState.clipboardFallbackWhenNoTarget && appState.finalResultDeliveryMode != .clipboardOnly {
+                Text(text(
+                    "Wenn kein Textfeld aktiv ist, wird der finale Text über die globale Zwischenablage zugestellt. Das ist gewollt, aber weniger privat als direktes Einfügen.",
+                    "When no text field is active, the final text is delivered through the global clipboard. This is intentional, but less private than direct insertion."
                 ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -765,37 +844,42 @@ struct SettingsView: View {
     @ViewBuilder
     private var diagnosticsContent: some View {
         if matches(["diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) {
-            Text(appState.capabilitySummary)
-                .font(.footnote)
-                .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(appState.capabilitySummary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
 
-            DisclosureGroup(
-                isExpanded: $diagnosticsExpanded,
-                content: {
-                    Text(appState.diagnosticsText)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                },
-                label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("Letzte Diagnosezeilen", "Recent diagnostic lines"))
-                        Text(compressedDiagnosticsText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                DisclosureGroup(
+                    isExpanded: $diagnosticsExpanded,
+                    content: {
+                        Text(appState.diagnosticsText)
+                            .font(.system(.body, design: .monospaced))
                             .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    },
+                    label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(text("Letzte Diagnosezeilen", "Recent diagnostic lines"))
+                            Text(compressedDiagnosticsText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
                     }
-                }
-            )
+                )
 
-            HStack {
-                Button(text("Diagnose kopieren", "Copy diagnostics")) {
-                    copyToClipboard(compressedDiagnosticsText)
-                }
-                .disabled(compressedDiagnosticsText.isEmpty)
+                HStack(alignment: .center, spacing: 10) {
+                    Button(text("Diagnose kopieren", "Copy diagnostics")) {
+                        copyToClipboard(compressedDiagnosticsText)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(compressedDiagnosticsText.isEmpty)
 
-                Button(text("Diagnose exportieren", "Export diagnostics")) {
-                    appState.exportDiagnosticsReport()
+                    Button(text("Diagnose exportieren", "Export diagnostics")) {
+                        appState.exportDiagnosticsReport()
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
         }
@@ -876,6 +960,23 @@ private enum SettingsTab: Hashable, CaseIterable {
             return language.text("Snippets", "Snippets")
         case .advanced:
             return language.text("Erweitert", "Advanced")
+        }
+    }
+}
+
+private struct AboutFactRow: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 110, alignment: .leading)
+            Text(detail)
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

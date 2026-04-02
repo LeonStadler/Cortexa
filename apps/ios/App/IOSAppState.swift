@@ -23,19 +23,16 @@ final class IOSAppState: ObservableObject {
     private let storage = IOSSharedStorage()
     private let sharedDefaults: UserDefaults?
     private let licenseStore = LicenseStore(service: "com.wisprlocal.ios.license", account: "primary")
-    private let licenseCache: LicenseCache?
     private let licenseVerifier: LicenseVerifier?
 
     init() {
         self.sharedDefaults = try? storage.sharedDefaults()
         self.selectedLanguageCode = self.sharedDefaults?.string(forKey: SharedDefaultsKeys.languageCode) ?? Self.defaultLanguage
-        self.licenseCache = (try? storage.sharedContainerURL()).map {
-            LicenseCache(fileURL: $0.appendingPathComponent("ios-license-cache.json"))
-        }
         self.licenseVerifier = try? LicenseVerifier()
 
         do {
             try storage.ensureSharedContainer()
+            try storage.clearLicenseCache()
         } catch {
             self.lastDiagnostics = "Shared App Group unavailable: \(error.localizedDescription)"
         }
@@ -162,17 +159,11 @@ final class IOSAppState: ObservableObject {
             return
         }
 
-        guard let licenseCache else {
-            licenseStatusText = "Shared App Group storage is unavailable"
-            licenseValid = false
-            return
-        }
-
         switch licenseVerifier.verify(key) {
         case let .valid(payload):
             do {
                 try licenseStore.saveLicenseKey(key)
-                try licenseCache.write(licenseKey: key)
+                try storage.clearLicenseCache()
                 licenseValid = true
                 licenseStatusText = "Active: \(payload.productTier)"
                 storedLicenseSummary = Self.maskedLicense(key)
@@ -227,12 +218,8 @@ final class IOSAppState: ObservableObject {
 
         do {
             if let key = try licenseStore.loadLicenseKey() {
+                try? storage.clearLicenseCache()
                 validateLoadedLicense(key)
-                return
-            }
-
-            if let cachedKey = try licenseCache?.read() {
-                validateLoadedLicense(cachedKey)
                 return
             }
         } catch {

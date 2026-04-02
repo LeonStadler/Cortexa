@@ -1,4 +1,5 @@
 import Foundation
+import SnippetCore
 
 protocol TranscriptHistoryStoring {
     func load() throws -> [TranscriptHistoryEntry]
@@ -30,13 +31,8 @@ struct TranscriptHistoryStore: TranscriptHistoryStoring {
     }
 
     func save(_ entries: [TranscriptHistoryEntry]) throws {
-        let parent = fileURL.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: parent.path) {
-            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-        }
-
         let data = try JSONEncoder().encode(entries)
-        try data.write(to: fileURL, options: [.atomic])
+        try SecurePersistence.writeData(data, to: fileURL, fileManager: fileManager)
     }
 
     func exportText(entries: [TranscriptHistoryEntry], to destinationURL: URL) throws {
@@ -71,6 +67,7 @@ struct TranscriptHistoryStore: TranscriptHistoryStoring {
                 try fileManager.removeItem(at: quarantineURL)
             }
             try fileManager.moveItem(at: fileURL, to: quarantineURL)
+            try SecurePersistence.hardenFileIfPresent(at: quarantineURL, fileManager: fileManager)
         } catch {
             // Best-effort quarantine only.
         }

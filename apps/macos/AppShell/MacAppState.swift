@@ -465,7 +465,7 @@ final class MacAppState: ObservableObject {
         self.snippetStore = SnippetStore(fileURL: Self.snippetStorageURL())
         self.historyStore = TranscriptHistoryStore(fileURL: Self.historyStorageURL())
         self.auditLogger = AuditLogger(fileURL: Self.auditLogStorageURL())
-        self.licenseController = LicenseController(configuration: configuration, cacheFileURL: Self.licenseCacheURL())
+        self.licenseController = LicenseController(configuration: configuration, cacheFileURL: Self.legacyLicenseCacheURL())
 
         dictationRuntime.onStatus = { [weak self] status in
             self?.recordingStatus = status
@@ -1109,7 +1109,9 @@ final class MacAppState: ObservableObject {
     private static func appSupportDirectory() -> URL {
         let fileManager = FileManager.default
         let base = (try? fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
-            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            ?? fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("Application Support", isDirectory: true)
         return base.appendingPathComponent("WisprLocal", isDirectory: true)
     }
 
@@ -1125,7 +1127,7 @@ final class MacAppState: ObservableObject {
         appSupportDirectory().appendingPathComponent("audit.log", isDirectory: false)
     }
 
-    private static func licenseCacheURL() -> URL {
+    private static func legacyLicenseCacheURL() -> URL {
         appSupportDirectory().appendingPathComponent("license-cache.json", isDirectory: false)
     }
 }

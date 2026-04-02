@@ -23,9 +23,9 @@ final class DocsContractTests: XCTestCase {
         let licensing = try readRepositoryFile("docs/licensing.md")
         let readme = try readRepositoryFile("README.md")
 
-        XCTAssertTrue(licensing.contains("cleared on macOS deactivate"))
-        XCTAssertTrue(licensing.contains("remove both the keychain entry and the cache fallback"))
-        XCTAssertTrue(readme.contains("explicit cache invalidation on deactivate"))
+        XCTAssertTrue(licensing.contains("no plaintext disk fallback for raw license keys"))
+        XCTAssertTrue(licensing.contains("removes any legacy plaintext cache file left by older builds"))
+        XCTAssertTrue(readme.contains("Keychain-only secret persistence with legacy cache cleanup"))
         XCTAssertTrue(readme.contains("permanent sichtbarem manuellen Check"))
     }
 
@@ -35,7 +35,7 @@ final class DocsContractTests: XCTestCase {
 
         XCTAssertFalse(version.isEmpty)
         XCTAssertNotNil(version.range(of: versionPattern, options: .regularExpression))
-        XCTAssertEqual(version, "0.21.0")
+        XCTAssertEqual(version, "0.22.2")
     }
 
     private func readRepositoryFile(_ relativePath: String) throws -> String {
