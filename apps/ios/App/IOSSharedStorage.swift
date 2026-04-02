@@ -56,7 +56,7 @@ struct IOSSharedStorage {
     }
 
     func transcriptHistoryURL() throws -> URL {
-        try sharedContainerURL().appendingPathComponent("transcript-history.json", isDirectory: false)
+        try localApplicationSupportURL().appendingPathComponent("transcript-history.json", isDirectory: false)
     }
 
     func keyboardInsertionStateURL() throws -> URL {
@@ -75,11 +75,19 @@ struct IOSSharedStorage {
         return sharedDefaults
     }
 
+    func localApplicationSupportURL() throws -> URL {
+        guard let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        let appURL = baseURL.appendingPathComponent("WisprLocaliOS", isDirectory: true)
+        try SecurePersistence.ensureDirectory(appURL, fileManager: fileManager)
+        return appURL
+    }
+
     func ensureSharedContainer() throws {
         let container = try sharedContainerURL()
-        if !fileManager.fileExists(atPath: container.path) {
-            try fileManager.createDirectory(at: container, withIntermediateDirectories: true)
-        }
+        try SecurePersistence.ensureDirectory(container, fileManager: fileManager)
     }
 
     func loadSnippets() throws -> [SnippetRule] {
@@ -196,7 +204,7 @@ struct IOSSharedStorage {
 
     private func coordinatedWriteData(_ data: Data, to url: URL) throws {
         try coordinate(writing: url) { writingURL in
-            try data.write(to: writingURL, options: [.atomic])
+            try SecurePersistence.writeData(data, to: writingURL, fileManager: fileManager)
         }
     }
 
@@ -255,10 +263,7 @@ struct IOSSharedStorage {
     }
 
     private func ensureParentDirectory(for url: URL) throws {
-        let parent = url.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: parent.path) {
-            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-        }
+        try SecurePersistence.ensureParentDirectory(for: url, fileManager: fileManager)
     }
 
     private func quarantineCorruptItem(at url: URL, reason _: String) throws {
@@ -270,6 +275,7 @@ struct IOSSharedStorage {
         let quarantineURL = url.deletingLastPathComponent().appendingPathComponent(quarantineName)
         do {
             try fileManager.moveItem(at: url, to: quarantineURL)
+            try SecurePersistence.hardenFileIfPresent(at: quarantineURL, fileManager: fileManager)
         } catch {
             if fileManager.fileExists(atPath: url.path) {
                 try? fileManager.removeItem(at: url)
@@ -292,6 +298,7 @@ struct IOSSharedStorage {
                     try fileManager.removeItem(at: destinationURL)
                 }
                 try fileManager.moveItem(at: sourceURL, to: destinationURL)
+                try SecurePersistence.hardenFileIfPresent(at: destinationURL, fileManager: fileManager)
             }
         }
 
@@ -301,6 +308,7 @@ struct IOSSharedStorage {
             try fileManager.removeItem(at: firstBackupURL)
         }
         try fileManager.moveItem(at: url, to: firstBackupURL)
+        try SecurePersistence.hardenFileIfPresent(at: firstBackupURL, fileManager: fileManager)
     }
 
     private func rotatedAuditLogURL(baseURL: URL, backupIndex: Int) -> URL {

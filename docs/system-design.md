@@ -42,7 +42,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 
 7. `LicenseCore`
 - offline key format + verification
-- keychain storage + local integrity cache
+- keychain storage for raw keys without plaintext disk fallback
 
 8. `AppShell`
 - macOS menu bar app + settings
@@ -50,7 +50,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - current macOS shell includes runtime install bootstrap, permission deep-links,
   snippet persistence/import/export UI, language/performance selection, transcript history,
   license activation UI, and hotkey control
-- local audit log for session/diagnostic/license events with simple rotation
+- local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
 - persistent user settings (mode/language/performance) via `UserDefaults`
  - iOS shell now includes a host app backed by app-group storage and a keyboard extension
    that can insert the latest shared transcript and shared snippet replacements
@@ -117,6 +117,7 @@ Core invariants:
 - interruption handling (`audioInterrupted`, `permissionChanged`)
 - deterministic insertion semantics
 - optional fallback path isolated behind config
+- clipboard-based fallback remains explicit because it is less private than direct insertion
 
 ## Performance Strategy
 

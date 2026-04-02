@@ -23,7 +23,7 @@ struct LicenseStatusSnapshot {
 final class LicenseController {
     private let configuration: MacAppConfiguration
     private let store: LicenseStore
-    private let cache: LicenseCache
+    private let legacyCacheFileURL: URL
     private let verifier: LicenseVerifier?
 
     init(
@@ -33,7 +33,8 @@ final class LicenseController {
     ) {
         self.configuration = configuration
         self.store = store
-        self.cache = LicenseCache(fileURL: cacheFileURL)
+        self.legacyCacheFileURL = cacheFileURL
+        try? removeLegacyCacheIfPresent()
 
         if let configuredKey = configuration.licensePublicKeyBase64,
            !configuredKey.isEmpty {
@@ -61,7 +62,7 @@ final class LicenseController {
         case let .valid(payload):
             do {
                 try store.saveLicenseKey(trimmedKey)
-                try cache.write(licenseKey: trimmedKey)
+                try removeLegacyCacheIfPresent()
                 return LicenseStatusSnapshot(
                     status: .active(tier: payload.productTier),
                     maskedKey: Self.maskedKey(trimmedKey)
@@ -83,7 +84,7 @@ final class LicenseController {
 
     func deactivate() {
         store.removeLicenseKey()
-        try? cache.clear()
+        try? removeLegacyCacheIfPresent()
     }
 
     func loadExistingStatus() -> LicenseStatusSnapshot {
@@ -93,11 +94,8 @@ final class LicenseController {
 
         do {
             if let storedKey = try store.loadLicenseKey() {
+                try? removeLegacyCacheIfPresent()
                 return validateStoredKey(storedKey)
-            }
-
-            if let cachedKey = try cache.read() {
-                return validateStoredKey(cachedKey)
             }
 
             return LicenseStatusSnapshot(status: .notSet, maskedKey: nil)
@@ -134,5 +132,13 @@ final class LicenseController {
         let prefix = trimmed.prefix(4)
         let suffix = trimmed.suffix(4)
         return "\(prefix)••••\(suffix)"
+    }
+
+    private func removeLegacyCacheIfPresent() throws {
+        guard FileManager.default.fileExists(atPath: legacyCacheFileURL.path) else {
+            return
+        }
+
+        try FileManager.default.removeItem(at: legacyCacheFileURL)
     }
 }

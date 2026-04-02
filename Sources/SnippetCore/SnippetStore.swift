@@ -24,13 +24,8 @@ public final class SnippetStore {
     }
 
     public func save(_ rules: [SnippetRule]) throws {
-        let parent = fileURL.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: parent.path) {
-            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-        }
-
         let data = try JSONEncoder().encode(rules)
-        try data.write(to: fileURL, options: [.atomic])
+        try SecurePersistence.writeData(data, to: fileURL, fileManager: fileManager)
     }
 
     public func importRules(from sourceURL: URL) throws -> [SnippetRule] {
@@ -67,6 +62,7 @@ public final class SnippetStore {
                 try fileManager.removeItem(at: quarantineURL)
             }
             try fileManager.moveItem(at: fileURL, to: quarantineURL)
+            try SecurePersistence.hardenFileIfPresent(at: quarantineURL, fileManager: fileManager)
         } catch {
             // Best-effort quarantine only.
         }

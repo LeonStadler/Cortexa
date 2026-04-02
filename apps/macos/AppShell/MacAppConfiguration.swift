@@ -18,6 +18,17 @@ struct MacAppConfiguration {
         sparkleFeedURL != nil && !(sparklePublicEDKey?.isEmpty ?? true)
     }
 
+    var sparkleFeedDisplayText: String {
+        guard let sparkleFeedURL else { return "" }
+
+        let sourceLabel = sparkleFeedSourceLabel
+        if sourceLabel.isEmpty {
+            return sparkleFeedURL.absoluteString
+        }
+
+        return "\(sourceLabel): \(sparkleFeedURL.absoluteString)"
+    }
+
     static func load(bundle: Bundle = .main) -> MacAppConfiguration {
         let info = bundle.infoDictionary ?? [:]
 
@@ -50,5 +61,17 @@ struct MacAppConfiguration {
         }
 
         return url
+    }
+
+    private var sparkleFeedSourceLabel: String {
+        guard let sparkleFeedURL else { return "" }
+
+        let host = sparkleFeedURL.host?.lowercased() ?? ""
+        let path = sparkleFeedURL.path.lowercased()
+        if host.contains("github.com") || host.contains("githubusercontent.com") || path.contains("releases") {
+            return "GitHub Releases Appcast"
+        }
+
+        return "Appcast"
     }
 }
