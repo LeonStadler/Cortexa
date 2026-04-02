@@ -5,6 +5,7 @@ struct MacAppConfiguration {
     let licensePublicKeyBase64: String?
     let sparkleFeedURL: URL?
     let sparklePublicEDKey: String?
+    let isLicenseUIEnabledForDevelopment: Bool
 
     var isLicenseConfigured: Bool {
         guard let licensePublicKeyBase64 else { return false }
@@ -26,11 +27,13 @@ struct MacAppConfiguration {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let rawSparkleKey = (info["SUPublicEDKey"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawInternalLicenseUI = info["WLMEnableInternalLicenseUI"] as? Bool
 
         return MacAppConfiguration(
             licensePublicKeyBase64: rawLicenseKey?.isEmpty == true ? nil : rawLicenseKey,
             sparkleFeedURL: validatedUpdaterFeedURL(rawFeedURL),
-            sparklePublicEDKey: rawSparkleKey?.isEmpty == true ? nil : rawSparkleKey
+            sparklePublicEDKey: rawSparkleKey?.isEmpty == true ? nil : rawSparkleKey,
+            isLicenseUIEnabledForDevelopment: rawInternalLicenseUI ?? false
         )
     }
 

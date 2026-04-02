@@ -8,6 +8,10 @@
 
 ## Features
 
+- 2026-04-02: macOS-Settings um überarbeiteten `About`-Reiter und vorbereitete interne Lizenz-/Support-Gates erweitert.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppConfiguration.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Die Settings besitzen jetzt einen eigenen `About`-Bereich mit persönlicher Kurzvorstellung auf Basis von `leon-stadler.com/startseite/ueber-mich/`, einer offenen Projektbeschreibung und einem Link zur Website. Support-/Donation-Elemente sowie die Lizenzinfrastruktur bleiben intern vorbereitet, werden aber in öffentlichen Builds nicht angezeigt; Lizenz- und Support-UI erscheinen nur noch über den expliziten `WLMEnableInternalLicenseUI`-Schalter. Der Bereich `Erweitert` konzentriert sich damit öffentlich auf Sparkle-Updates und Diagnose.
+
 - 2026-04-01: Neue Live-Anpassungs-Einstellung in den macOS-Diktatsettings eingeführt.
   - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`
   - Funktionalität: In den Einstellungen gibt es jetzt einen sichtbaren Live-Rewrite-Radius von `Nur aktueller Satz` bis `Ganzer aktueller Absatz`. Die Auswahl wird persistent in `UserDefaults` gespeichert und steuert, wie stark die laufende Eingabe bei neuen Partial-Ergebnissen noch umgeschrieben werden darf.

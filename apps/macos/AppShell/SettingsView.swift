@@ -13,6 +13,8 @@ struct SettingsView: View {
     @State private var newSnippetReplacement: String = ""
     @State private var searchText: String = ""
 
+    private let personalWebsiteURL = URL(string: "https://leon-stadler.com")!
+
     private static let historyDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
@@ -108,14 +110,17 @@ struct SettingsView: View {
         matches(["history", "verlauf", "transkript", "dictation", "diktat"]) || !filteredHistory.isEmpty
     }
 
+    private var aboutHasMatches: Bool {
+        matches(["about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource", "open source", "intermedia", "design", "fotografie", "vorarlberg"])
+    }
+
     private var snippetsHasMatches: Bool {
         matches(["snippet", "textbaustein", "replacement", "trigger"]) || !filteredSnippets.isEmpty
     }
 
     private var advancedHasMatches: Bool {
-        matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) ||
+        matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit"]) ||
             appState.diagnosticsText.lowercased().contains(searchQuery) ||
-            appState.licenseStatusText.lowercased().contains(searchQuery) ||
             appState.capabilitySummary.lowercased().contains(searchQuery) ||
             appState.updaterStatusText.lowercased().contains(searchQuery)
     }
@@ -215,6 +220,8 @@ struct SettingsView: View {
             shortcutsForm
         case .history:
             historyForm
+        case .about:
+            aboutForm
         case .snippets:
             snippetsForm
         case .advanced:
@@ -264,6 +271,21 @@ struct SettingsView: View {
         .frame(maxWidth: 760, alignment: .leading)
     }
 
+    private var aboutForm: some View {
+        Form {
+            Section(text("Über mich", "About me")) {
+                aboutProfileContent
+            }
+            if appState.isLicenseUIEnabledForDevelopment {
+                Section(text("Support", "Support")) {
+                    aboutSupportContent
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+
     private var snippetsForm: some View {
         Form {
             Section(text("Snippets", "Snippets")) {
@@ -282,8 +304,10 @@ struct SettingsView: View {
             Section(text("Diagnose", "Diagnostics")) {
                 diagnosticsContent
             }
-            Section(text("Lizenz", "License")) {
-                licenseContent
+            if appState.isLicenseUIEnabledForDevelopment {
+                Section(text("Lizenz", "License")) {
+                    licenseContent
+                }
             }
         }
         .formStyle(.grouped)
@@ -321,6 +345,15 @@ struct SettingsView: View {
                 }
             }
 
+            if aboutHasMatches {
+                Section(text("About", "About")) {
+                    aboutProfileContent
+                    if appState.isLicenseUIEnabledForDevelopment {
+                        aboutSupportContent
+                    }
+                }
+            }
+
             if snippetsHasMatches {
                 Section(text("Snippets", "Snippets")) {
                     snippetsContent
@@ -331,11 +364,13 @@ struct SettingsView: View {
                 Section(text("Erweitert", "Advanced")) {
                     updatesContent
                     diagnosticsContent
-                    licenseContent
+                    if appState.isLicenseUIEnabledForDevelopment {
+                        licenseContent
+                    }
                 }
             }
 
-            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !historyHasMatches && !snippetsHasMatches && !advancedHasMatches {
+            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !historyHasMatches && !aboutHasMatches && !snippetsHasMatches && !advancedHasMatches {
                 Section {
                     Text(text("Keine passenden Einstellungen gefunden.", "No matching settings found."))
                         .foregroundStyle(.secondary)
@@ -373,6 +408,13 @@ struct SettingsView: View {
     @ViewBuilder
     private var updatesContent: some View {
         if matches(["update", "updates", "aktualisierung"]) {
+            Text(text(
+                "WisprLocal nutzt Sparkle direkt in der App und prüft Updates automatisch im Hintergrund. Hier kannst du die Suche zusätzlich manuell anstoßen.",
+                "WisprLocal uses Sparkle directly inside the app and checks for updates automatically in the background. You can also trigger a manual check here."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+
             HStack(alignment: .center, spacing: 10) {
                 Button(text("Nach Updates suchen", "Check for updates")) {
                     appState.checkForUpdates()
@@ -387,6 +429,55 @@ struct SettingsView: View {
                         .lineLimit(2)
                 }
             }
+
+            if !appState.updaterFeedURLText.isEmpty {
+                Text(appState.updaterFeedURLText)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var aboutProfileContent: some View {
+        if matches(["about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource", "open source", "intermedia", "design", "fotografie", "vorarlberg"]) {
+            Text(text(
+                "Ich bin Leon Stadler, Kommunikationsdesigner und Entwickler mit Fokus auf zeitgemäße digitale Produkte. Ich bin in München aufgewachsen, lebe am Bodensee und studiere Intermedia in Dornbirn, Vorarlberg. WisprLocal verbindet meine Arbeit an Design, Technik und kreativen digitalen Lösungen mit dem Ziel, lokale Offline-Diktierung auf dem Mac ruhig, nativ und alltagstauglich zu machen.",
+                "I'm Leon Stadler, a communication designer and developer focused on contemporary digital products. I grew up in Munich, now live near Lake Constance, and study Intermedia in Dornbirn, Vorarlberg. WisprLocal brings together my work in design, technology, and creative digital problem-solving with the goal of making local offline dictation on the Mac feel calm, native, and practical."
+            ))
+            .fixedSize(horizontal: false, vertical: true)
+
+            Text(text(
+                "Neben Webdesign und UX/UI interessiere ich mich besonders für Fotografie, Film, Prototyping und kreative technische Systeme. Mehr über meinen Hintergrund und meine Projekte findest du auf meiner Website.",
+                "Alongside web design and UX/UI, I'm especially interested in photography, film, prototyping, and creative technical systems. You can find more about my background and projects on my website."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Link(destination: personalWebsiteURL) {
+                Label(text("Mehr über mich", "Learn more about me"), systemImage: "globe")
+            }
+            .buttonStyle(.link)
+        }
+    }
+
+    @ViewBuilder
+    private var aboutSupportContent: some View {
+        if matches(["support", "spenden", "donate", "website", "webseite"]) {
+            Text(text(
+                "Die App bleibt offen und frei nutzbar. Wenn du das Projekt unterstützen möchtest, findest du über die Website künftig weitere Möglichkeiten dafür.",
+                "The app stays open and free to use. If you want to support the project, the website will later be the place for additional support options."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Link(destination: personalWebsiteURL) {
+                Label(text("Projekt unterstützen", "Support the project"), systemImage: "heart")
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -753,6 +844,7 @@ private enum SettingsTab: Hashable, CaseIterable {
     case dictation
     case shortcuts
     case history
+    case about
     case snippets
     case advanced
 
@@ -762,6 +854,7 @@ private enum SettingsTab: Hashable, CaseIterable {
         case .dictation: return "mic"
         case .shortcuts: return "command"
         case .history: return "clock.arrow.circlepath"
+        case .about: return "person.crop.circle"
         case .snippets: return "text.badge.plus"
         case .advanced: return "wrench.and.screwdriver"
         }
@@ -777,6 +870,8 @@ private enum SettingsTab: Hashable, CaseIterable {
             return language.text("Kurzbefehle", "Shortcuts")
         case .history:
             return language.text("Verlauf", "History")
+        case .about:
+            return language.text("About", "About")
         case .snippets:
             return language.text("Snippets", "Snippets")
         case .advanced:

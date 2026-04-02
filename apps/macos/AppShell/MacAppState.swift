@@ -261,6 +261,10 @@ final class MacAppState: ObservableObject {
         holdShortcut.displayName
     }
 
+    var isLicenseUIEnabledForDevelopment: Bool {
+        appConfiguration.isLicenseUIEnabledForDevelopment
+    }
+
     var latestDictationText: String {
         transcriptHistory.first?.text ?? lastTranscript
     }
