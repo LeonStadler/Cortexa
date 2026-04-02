@@ -2,7 +2,7 @@
 
 This folder now contains:
 
-- host app state + SwiftUI shell for shared snippets, transcript history and offline license handling
+- host app state + SwiftUI shell for shared snippets, local-only transcript history and offline license handling
 - keyboard extension with latest approved transcript insertion and quick snippet buttons
 - XcodeGen project definition in `apps/ios/WisprLocaliOS/project.yml`
 - app-group entitlements for host app and extension
@@ -20,3 +20,4 @@ Current practical constraints:
 - local ASR integration inside the keyboard is still not at feature parity with the macOS runtime path
 - the App Group `group.com.wisprlocal.shared` is required; host app and extension no longer fall back to local storage when it is unavailable
 - the keyboard reads shared snippets plus a dedicated latest-transcript payload, not the full transcript history file
+- transcript history remains local to the host app and is no longer exposed through the shared App Group container

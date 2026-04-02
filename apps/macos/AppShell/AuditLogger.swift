@@ -1,4 +1,5 @@
 import Foundation
+import SnippetCore
 
 protocol AuditLogging {
     var fileURL: URL { get }
@@ -21,20 +22,10 @@ final class AuditLogger: AuditLogging {
             try rotateIfNeeded()
 
             let output = "[\(Self.timestampFormatter.string(from: Date()))] \(line)\n"
-            let parent = fileURL.deletingLastPathComponent()
-            if !fileManager.fileExists(atPath: parent.path) {
-                try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-            }
-
-            if !fileManager.fileExists(atPath: fileURL.path) {
-                try Data(output.utf8).write(to: fileURL, options: [.atomic])
-                return
-            }
-
-            let handle = try FileHandle(forWritingTo: fileURL)
-            defer { try? handle.close() }
-            try handle.seekToEnd()
-            try handle.write(contentsOf: Data(output.utf8))
+            let currentData = fileManager.fileExists(atPath: fileURL.path) ? (try Data(contentsOf: fileURL)) : Data()
+            var combinedData = currentData
+            combinedData.append(Data(output.utf8))
+            try SecurePersistence.writeData(combinedData, to: fileURL, fileManager: fileManager)
         } catch {
             // Keep audit logging non-fatal.
         }
@@ -64,6 +55,7 @@ final class AuditLogger: AuditLogging {
             try fileManager.removeItem(at: backupURL)
         }
         try fileManager.moveItem(at: fileURL, to: backupURL)
+        try SecurePersistence.hardenFileIfPresent(at: backupURL, fileManager: fileManager)
     }
 
     private static let timestampFormatter: ISO8601DateFormatter = {

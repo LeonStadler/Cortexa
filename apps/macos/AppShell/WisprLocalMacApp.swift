@@ -167,13 +167,39 @@ struct MenuBarContentView: View {
     }
 
     @ViewBuilder
+    private var statusHeader: some View {
+        if showsStatusHeader {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
+
+                    Text(statusLine)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+
+                if let secondaryLine {
+                    Text(secondaryLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.bottom, 2)
+        }
+    }
+
+    @ViewBuilder
     private var startDictationButton: some View {
         if appState.showMenuBarShortcutHints,
            let keyEquivalent = appState.selectedHotkey.swiftUIKeyEquivalent {
             Button {
                 appState.toggleTranscriptionFromMenuBar()
             } label: {
-                MenuActionLabel(
+                PrimaryMenuActionLabel(
                     title: primaryActionTitle,
                     shortcutGlyph: nil,
                     shortcutText: appState.selectedHotkey.displayName
@@ -184,7 +210,7 @@ struct MenuBarContentView: View {
             Button {
                 appState.toggleTranscriptionFromMenuBar()
             } label: {
-                MenuActionLabel(
+                PrimaryMenuActionLabel(
                     title: primaryActionTitle,
                     shortcutGlyph: nil,
                     shortcutText: nil
@@ -246,10 +272,14 @@ struct MenuBarContentView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             startDictationButton
 
-            Divider()
+            statusHeader
+
+            if showsStatusHeader {
+                Divider()
+            }
 
             Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
                 .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
@@ -262,7 +292,7 @@ struct MenuBarContentView: View {
 
             if appState.hasPermissionProblems {
                 Divider()
-                Text(text("Berechtigungen erforderlich", "Permissions required"))
+                Text(text("Berechtigungen", "Permissions"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if appState.microphonePermissionStatus != .granted {
@@ -290,6 +320,7 @@ struct MenuBarContentView: View {
                 Button(text("Nach Updates suchen", "Check for updates")) {
                     appState.checkForUpdates()
                 }
+                .buttonStyle(.borderless)
             }
 
             Divider()
@@ -304,8 +335,9 @@ struct MenuBarContentView: View {
                 )
             }
         }
-        .padding(10)
-        .frame(width: 320)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .frame(width: 332)
         .controlSize(.small)
     }
 

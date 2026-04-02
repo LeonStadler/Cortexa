@@ -44,7 +44,7 @@ struct IOSHomeView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    Text("Host app stores snippets, transcript history, diagnostics and license state in the shared container.")
+                    Text("Host app stores shared snippets, transcript history and keyboard handoff data in protected App Group files. License keys stay in Keychain.")
                         .font(.footnote)
                 }
 

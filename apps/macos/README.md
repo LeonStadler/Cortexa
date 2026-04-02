@@ -35,7 +35,7 @@ Operational notes:
 - Advanced options contain updates and diagnostics; the diagnostics preview can be expanded and copied.
 - The search results view announces grouped matches and uses clearer accessibility labels for the search field, result grouping, and transcript history previews.
 - Repeated list actions (copy/delete in history and snippets) now include explicit contextual VoiceOver labels, and truncated menu previews expose full text through accessibility labels.
-- Update management lives in the `Advanced` settings tab; Sparkle checks in the background and can also be triggered manually there.
+- Update management lives in the `Advanced` settings tab; Sparkle checks in the background, GitHub Releases act as the publication source, and the manual check can be triggered there as well.
 - The menu bar menu weights its primary dictation action more strongly than utility footer actions, so `Settings…`, updates, and quit read more like classic menu utilities than like equal-priority content blocks.
 - The macOS target now includes an asset catalog under `apps/macos/AppShell/Resources/Assets.xcassets` with a first Accent Color and App Icon set, wired into XcodeGen via `ASSETCATALOG_COMPILER_APPICON_NAME` and `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`.
 - The bundled Whisper runtime is resolved robustly from either `Contents/Resources/Runtime` or a flattened `Contents/Resources` layout, so resource packaging changes do not break dictation startup.
@@ -51,5 +51,6 @@ Operational notes:
 - The macOS helper scripts look for `xcodegen` in common Homebrew locations and can reuse an already generated `WisprLocalMac.xcodeproj` if regeneration is not needed.
 - Release archives can be created with `scripts/archive_macos_release.sh`.
 - Release exports, DMG creation and Sparkle appcasts are scripted via `scripts/export_macos_release.sh`, `scripts/create_macos_dmg.sh` and `scripts/generate_sparkle_appcast.sh`.
+- Sparkle is embedded into the app rather than run as a separate helper; the appcast/feed points at your release artifacts and the app handles checking and installing updates itself.
 - Optional production configuration is read from the app bundle `Info.plist`: `WLMLicensePublicKeyBase64`, `SUFeedURL`, `SUPublicEDKey`, `WLMEnableInternalLicenseUI`.
 - The license infrastructure is kept in the codebase for future internal development, but the public settings UI hides license and support controls unless `WLMEnableInternalLicenseUI` is explicitly enabled.

@@ -80,3 +80,4 @@ The macOS app shell uses these options to:
 - apply stable streaming patching with a bounded mutable tail
 - apply snippet substitutions for streaming commits and final transcript
 - choose whether the final transcript is inserted or copied, and whether clipboard fallback is allowed when no text target is available
+- expose clipboard fallback as an explicit privacy tradeoff rather than a silent background path

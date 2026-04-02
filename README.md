@@ -83,12 +83,13 @@ Features implemented in macOS app shell:
 - Snippet replacement + snippet import/export (JSON)
 - Transkript-History mit Copy/Delete/Clear + Export (TXT), lokal persistent
 - Language switch (`de`, `en`, `auto`) and profile presets (`auto`, `fast`, `balanced`, `accurate`)
-- Offline licensing UI (key input, local verification, keychain/cache persistence with explicit cache invalidation on deactivate)
+- Offline licensing UI (key input, local verification, Keychain-only secret persistence with legacy cache cleanup)
 - Lokales Audit-Log mit Rotation (`~/Library/Application Support/WisprLocal/audit.log`)
 - Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI
 - Sparkle-kompatibler Auto-Updater mit permanent sichtbarem manuellen Check im Menü und in den Settings
 - Lifecycle-Refresh nach App-Aktivierung und System-Wake für Berechtigungen, Runtime und Hotkey-Registrierung
 - Eingeschränkter Transkriptionsmodus ohne Bedienungshilfen; direktes Einfügen bleibt dann deaktiviert, Verlauf und Zwischenablage bleiben nutzbar
+- Interner Speicher für Snippets, Verlauf und Audit-Dateien wird lokal gehärtet; Zwischenablage-Fallback bleibt absichtlich optional und ist als weniger privater Zustellpfad gekennzeichnet
 
 ## macOS Release Archive
 
@@ -196,3 +197,4 @@ Features implemented in iOS shell:
 - Host app with shared snippets, transcript history and offline license UI
 - Keyboard extension with latest approved transcript insert and shared snippet quick insert
 - Shared App Group persistence is required; there is no silent local fallback when the group is unavailable
+- Shared App Group files are written with platform file protection; raw license keys remain in Keychain instead of plaintext shared cache files, and iOS transcript history stays local to the host app
