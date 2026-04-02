@@ -10,8 +10,14 @@ public enum LatencyProfile: String, Sendable, Codable {
     case quality
 }
 
+public enum ASRTranslationMode: String, Sendable, Codable, Equatable {
+    case original
+    case toEnglish
+}
+
 public struct ASRConfig: Sendable, Codable, Equatable {
     public let languageHint: String?
+    public let translationMode: ASRTranslationMode
     public let modelID: String
     public let backend: ASRBackend
     public let latencyProfile: LatencyProfile
@@ -21,6 +27,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
 
     public init(
         languageHint: String?,
+        translationMode: ASRTranslationMode = .original,
         modelID: String,
         backend: ASRBackend,
         latencyProfile: LatencyProfile,
@@ -29,6 +36,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
         chunkMilliseconds: Int? = nil
     ) {
         self.languageHint = languageHint
+        self.translationMode = translationMode
         self.modelID = modelID
         self.backend = backend
         self.latencyProfile = latencyProfile

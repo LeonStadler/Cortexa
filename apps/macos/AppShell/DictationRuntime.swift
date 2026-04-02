@@ -1,4 +1,5 @@
 import ASRCore
+import AIProcessingCore
 import AVFoundation
 import AppKit
 import ApplicationServices
@@ -50,7 +51,7 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
         case .english:
             return "en"
         case .auto:
-            return nil
+            return "auto"
         }
     }
 
@@ -62,6 +63,35 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return Locale(identifier: "en_US")
         case .auto:
             return Locale.current
+        }
+    }
+}
+
+enum TranslationOutputMode: String, CaseIterable, Identifiable {
+    case original
+    case english
+
+    var id: String { rawValue }
+
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        switch (interfaceLanguageCode, self) {
+        case ("en", .original):
+            return "Default"
+        case ("en", .english):
+            return "English"
+        case (_, .original):
+            return "Standard"
+        case (_, .english):
+            return "Englisch"
+        }
+    }
+
+    var asrTranslationMode: ASRTranslationMode {
+        switch self {
+        case .original:
+            return .original
+        case .english:
+            return .toEnglish
         }
     }
 }
@@ -106,11 +136,13 @@ enum DictationPerformance: String, CaseIterable, Identifiable {
 struct DictationStartOptions {
     let mode: DictationMode
     let language: DictationLanguage
+    let translationOutput: TranslationOutputMode
     let performance: DictationPerformance
     let liveRewriteScope: LiveRewriteScope
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
+    let aiProcessing: AIProcessingConfiguration
 }
 
 enum FinalResultDeliveryMode: String, CaseIterable, Identifiable {
@@ -185,6 +217,7 @@ final class DictationRuntime: @unchecked Sendable {
     private let processQueue = DispatchQueue(label: "wispr.dictation.process", qos: .userInitiated)
     private let insertionQueue = DispatchQueue(label: "wispr.dictation.insert", qos: .userInitiated)
     private let capabilityProfiler = CapabilityProfiler()
+    private let aiProcessingService = AIProcessingService()
     private let sessionLock = NSLock()
 
     private let audioEngine = AVAudioEngine()
@@ -240,6 +273,7 @@ final class DictationRuntime: @unchecked Sendable {
             let bootstrapModel = runtime.modelsDirectoryURL.appendingPathComponent(runtime.defaultModelFileName)
             let bootstrapConfig = ASRConfig(
                 languageHint: "de",
+                translationMode: .original,
                 modelID: runtime.defaultModelFileName,
                 backend: .whisperCpp,
                 latencyProfile: .streaming,
@@ -379,7 +413,8 @@ final class DictationRuntime: @unchecked Sendable {
                 publishSessionActivity(true)
                 publishStatus("Recording")
                 let modeText = effectiveMode == .streaming ? "Streaming Insert" : "Finalize Insert"
-                publishDiagnostic("Recording (\(modeText), \(options.language.displayName))")
+                let translationText = options.translationOutput == .english ? ", translated to English" : ""
+                publishDiagnostic("Recording (\(modeText), \(options.language.displayName)\(translationText))")
             } catch {
                 abortSession(reason: "Start failed: \(error.localizedDescription)")
             }
@@ -396,8 +431,19 @@ final class DictationRuntime: @unchecked Sendable {
         do {
             stopAudioCapture()
             let final = try await whisperEngine.stopStreaming()
+            let detectedLanguageCode = resolvedLanguageCode(from: final)
+            let effectiveLocale = locale(for: detectedLanguageCode) ?? runningLocale
             let normalized = normalizeText(final.text)
-            let finalText = applySnippetsToFinalText(normalized, locale: runningLocale)
+            let snippetAdjustedText = applySnippetsToFinalText(normalized, locale: effectiveLocale)
+            let finalProcessingOutcome = await aiProcessingService.process(
+                AIProcessingRequest(
+                    text: snippetAdjustedText,
+                    stage: .final,
+                    locale: effectiveLocale,
+                    configuration: currentAIProcessingConfiguration()
+                )
+            )
+            let finalText = finalProcessingOutcome.text
 
             if shouldDiscardTranscript(finalText) {
                 publishTranscript("")
@@ -410,9 +456,10 @@ final class DictationRuntime: @unchecked Sendable {
             let deliveryOutcome = await deliverFinalText(finalText)
 
             publishTranscript(finalText)
+            emitProcessingDiagnosticIfNeeded(finalProcessingOutcome, stage: .final)
             let finalEventMetadata = withSessionLock {
                 (
-                    languageCode: currentOptions?.language.rawValue ?? "auto",
+                    languageCode: detectedLanguageCode,
                     mode: currentOptions?.mode ?? .finalize
                 )
             }
@@ -466,7 +513,8 @@ final class DictationRuntime: @unchecked Sendable {
             do {
                 let stable = self.stableCommitter.ingestPartial(normalized)
                 let committedWithSnippets = self.applySnippetsToFinalText(stable.committedPrefix, locale: self.runningLocale)
-                let patchText = self.normalizeText(committedWithSnippets + stable.tail)
+                let mergedPatchText = self.normalizeText(committedWithSnippets + stable.tail)
+                let patchText = self.processLiveTextIfNeeded(mergedPatchText)
                 recoverablePatchText = patchText
 
                 guard !patchText.isEmpty else { return }
@@ -1159,6 +1207,7 @@ final class DictationRuntime: @unchecked Sendable {
         let latencyProfile = selectLatencyProfile(options: options, preset: preset)
         let config = ASRConfig(
             languageHint: options.language.asrHint,
+            translationMode: options.translationOutput.asrTranslationMode,
             modelID: modelFile,
             backend: .whisperCpp,
             latencyProfile: latencyProfile,
@@ -1303,6 +1352,73 @@ final class DictationRuntime: @unchecked Sendable {
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func currentAIProcessingConfiguration() -> AIProcessingConfiguration {
+        withSessionLock {
+            currentOptions?.aiProcessing ?? AIProcessingConfiguration(enabled: false, selectedModelID: nil)
+        }
+    }
+
+    private func processLiveTextIfNeeded(_ text: String) -> String {
+        let request = AIProcessingRequest(
+            text: text,
+            stage: .live,
+            locale: runningLocale,
+            configuration: currentAIProcessingConfiguration()
+        )
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var outcome: AIProcessingOutcome = .bypassed(text: text, reason: "AI processing did not run.")
+
+        Task {
+            outcome = await aiProcessingService.process(request)
+            semaphore.signal()
+        }
+
+        semaphore.wait()
+        emitProcessingDiagnosticIfNeeded(outcome, stage: .live)
+        return outcome.text
+    }
+
+    private func emitProcessingDiagnosticIfNeeded(_ outcome: AIProcessingOutcome, stage: AIProcessingStage) {
+        switch outcome {
+        case .processed where stage == .final:
+            if let message = outcome.diagnosticMessage {
+                publishDiagnostic(message)
+            }
+        case .failedFallback:
+            if let message = outcome.diagnosticMessage {
+                publishDiagnostic(message)
+            }
+        default:
+            break
+        }
+    }
+
+    private func resolvedLanguageCode(from final: FinalTranscript) -> String {
+        let detected = final.language?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if let detected, !detected.isEmpty {
+            return detected
+        }
+
+        return withSessionLock {
+            currentOptions?.language.rawValue ?? "auto"
+        }
+    }
+
+    private func locale(for languageCode: String) -> Locale? {
+        switch languageCode {
+        case "de":
+            return Locale(identifier: "de_DE")
+        case "en":
+            return Locale(identifier: "en_US")
+        default:
+            return nil
+        }
     }
 
     private func cleanupSession() {

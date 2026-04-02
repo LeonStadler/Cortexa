@@ -10,6 +10,7 @@ let package = Package(
     ],
     products: [
         .library(name: "ASRCore", targets: ["ASRCore"]),
+        .library(name: "AIProcessingCore", targets: ["AIProcessingCore"]),
         .library(name: "AudioCore", targets: ["AudioCore"]),
         .library(name: "SessionCore", targets: ["SessionCore"]),
         .library(name: "SnippetCore", targets: ["SnippetCore"]),
@@ -18,6 +19,9 @@ let package = Package(
         .library(name: "LicenseCore", targets: ["LicenseCore"])
     ],
     targets: [
+        .target(
+            name: "AIProcessingCore"
+        ),
         .target(
             name: "ASRCore"
         ),
@@ -40,6 +44,10 @@ let package = Package(
         ),
         .target(
             name: "LicenseCore"
+        ),
+        .testTarget(
+            name: "AIProcessingCoreTests",
+            dependencies: ["AIProcessingCore"]
         ),
         .testTarget(
             name: "ASRCoreTests",

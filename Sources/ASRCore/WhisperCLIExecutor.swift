@@ -40,6 +40,7 @@ enum WhisperCLIExecutor {
         modelPath: URL,
         inputWav: URL,
         languageHint: String?,
+        translationMode: ASRTranslationMode,
         threads: Int,
         beamSize: Int,
         outputBase: URL
@@ -51,6 +52,7 @@ enum WhisperCLIExecutor {
             modelPath: modelPath,
             inputWav: inputWav,
             languageHint: languageHint,
+            translationMode: translationMode,
             threads: threads,
             beamSize: beamSize,
             outputBase: outputBase
@@ -79,6 +81,7 @@ enum WhisperCLIExecutor {
         _ = modelPath
         _ = inputWav
         _ = languageHint
+        _ = translationMode
         _ = threads
         _ = beamSize
         _ = outputBase
@@ -90,6 +93,7 @@ enum WhisperCLIExecutor {
         modelPath: URL,
         inputWav: URL,
         languageHint: String?,
+        translationMode: ASRTranslationMode,
         threads: Int,
         beamSize: Int,
         outputBase: URL
@@ -106,6 +110,10 @@ enum WhisperCLIExecutor {
 
         if let languageHint, !languageHint.isEmpty {
             arguments += ["-l", languageHint]
+        }
+
+        if translationMode == .toEnglish {
+            arguments.append("-tr")
         }
 
         return arguments

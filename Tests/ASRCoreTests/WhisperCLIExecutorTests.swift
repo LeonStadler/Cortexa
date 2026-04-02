@@ -9,6 +9,7 @@ final class WhisperCLIExecutorTests: XCTestCase {
             modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
             inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
             languageHint: "de",
+            translationMode: .original,
             threads: 4,
             beamSize: 5,
             outputBase: URL(fileURLWithPath: "/tmp/result")
@@ -17,6 +18,22 @@ final class WhisperCLIExecutorTests: XCTestCase {
         XCTAssertTrue(arguments.contains("-bs"))
         XCTAssertFalse(arguments.contains("-b"))
         XCTAssertTrue(arguments.contains("de"))
+    }
+
+    func testBuildArgumentsUseAutoLanguageAndTranslationFlagWhenRequested() {
+        let arguments = WhisperCLIExecutor.buildArguments(
+            modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
+            inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
+            languageHint: "auto",
+            translationMode: .toEnglish,
+            threads: 4,
+            beamSize: 2,
+            outputBase: URL(fileURLWithPath: "/tmp/result")
+        )
+
+        XCTAssertTrue(arguments.contains("-l"))
+        XCTAssertTrue(arguments.contains("auto"))
+        XCTAssertTrue(arguments.contains("-tr"))
     }
 
     func testResolveCLIPathPrefersExplicitExecutablePath() throws {
