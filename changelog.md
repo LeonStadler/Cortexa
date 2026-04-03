@@ -3,8 +3,8 @@
 ## Fixes
 
 - 2026-04-03: macOS-Settings-Tooltips, Diagnose-Begriffe und Build-Stabilitaet nachpoliert.
-  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
-  - Funktionalitaet: Die Settings verwenden jetzt an weiteren erklaerungsbeduerftigen Stellen konsequent `i`-Hinweise statt dauerhafter Fliesstexte, wodurch Delivery-, Hold-Shortcut-, History- und Sound-Optionen deutlich kompakter wirken. Gleichzeitig wurden Diagnose-Exporte begrifflich auf technische Protokollierung vereinheitlicht, und ein doppeltes `SettingsFieldLabel` in der macOS-Settings-Datei wurde entfernt, damit der Xcode-Build wieder sauber durchlaeuft.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalitaet: Die Settings verwenden jetzt an weiteren erklaerungsbeduerftigen Stellen konsequent `i`-Hinweise statt dauerhafter Fliesstexte, wodurch Delivery-, AI-, Hold-Shortcut-, History- und Sound-Optionen deutlich kompakter wirken. Gleichzeitig wurden Diagnose-Exporte begrifflich auf technische Protokollierung vereinheitlicht, veraltete Hinweisbloecke aus dem Provider-Bereich entfernt, und ein doppeltes `SettingsFieldLabel` in der macOS-Settings-Datei wurde beseitigt, damit der Xcode-Build wieder sauber durchlaeuft.
 
 - 2026-04-03: Letzte Experimental-Metadaten aus AI-Core und API-Doku entfernt.
   - Dateien: `Sources/AIProcessingCore/AIProcessingTypes.swift`, `docs/api-design.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
