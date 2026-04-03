@@ -2,6 +2,18 @@
 
 ## Fixes
 
+- 2026-04-03: Kompaktes Menüleisten-Design erweitert um Flyout fuer Inhaltsstreaming und AI-Einstellungen.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/README.md`, `changelog.md`, `VERSION`
+  - Funktionalitaet: In den Einstellungen gibt es jetzt einen eigenen Schalter fuer ein kompaktes Menüleisten-Design, das die Menüleiste schmaler und ruhiger macht, aber Verlauf, Letztes Diktat kopieren, Trennlinien und den Update-Check sichtbar laesst. Die bisherigen Direktregler fuer AI-Modell, Stil und Anrede verschwinden aus dem Popup; stattdessen gibt es einen gemeinsamen `Anwenden bei`-Flyout fuer `Inhaltsstreaming` und `Endergebnis einfügen` sowie einen Sprung zu den AI-Einstellungen. So bleibt die Menüleiste aufgeraumter, ohne wichtige Schnellaktionen zu verlieren.
+
+- 2026-04-03: Zugriffszeilen im Allgemeinen-Reiter erhalten ihre Aktionen direkt in der jeweiligen Zeile.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `changelog.md`, `VERSION`
+  - Funktionalitaet: Die Mikrofon- und Bedienungshilfen-Eintraege im Zugriffsbereich zeigen ihre Oeffnen-Buttons jetzt direkt in derselben Zeile wie Status und Beschreibung. Dadurch wirkt die Sektion ruhiger und kompakter, weil die Aktionen nicht mehr unter den Inhalten als eigener Block stehen.
+
+- 2026-04-03: Menüleisten-Quick-Settings auf eine gemeinsame Application-Gruppe und eine einzelne Shortcut-Hinweis-Option reduziert.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/AIProcessingDisplay.swift`, `apps/macos/README.md`, `changelog.md`, `VERSION`
+  - Funktionalitaet: Die Menüleisten-Oberflaeche fasst die AI-bezogenen Quick Settings jetzt unter einem gemeinsamen `Anwendung`-Block zusammen, waehrend die Live-/Final-Schalter weiterhin erst nach Aktivierung der AI-Verarbeitung erscheinen. Die Stil-Option fuer `kein Stil` heisst jetzt `Wie gesprochen`, und die doppelte `Kurzbefehl-Hinweise im Menü anzeigen`-Einstellung in den Settings wurde auf genau eine sichtbare Option reduziert. Das unnötige `Eingabe`-Label im Menüleisten-Block entfällt ebenfalls, damit die Quick Settings ruhiger und weniger redundant wirken.
+
 - 2026-04-03: Allgemein-Einstellungen in App- und Menüleisten-Block aufgeteilt, damit Shortcut-Hinweise keinen leeren Restbereich mehr hinterlassen.
   - Dateien: `apps/macos/AppShell/SettingsView.swift`, `changelog.md`, `VERSION`
   - Funktionalitaet: Der Allgemein-Reiter trennt jetzt die Menueleisten-Hinweise von den restlichen App-Optionen, sodass unter `Kurzbefehl-Hinweise im Menü anzeigen` kein leerer Platzhalterblock mehr stehen bleibt. Das macht die Seite kompakter und klarer, ohne die Funktion des Schalters zu veraendern.
@@ -27,6 +39,14 @@
   - Funktionalitaet: Die alten Schalter fuer Menu-Bar-Autostart, Mauskurzbefehl und experimentelle Modelle wurden komplett aus State, Defaults, UI und Startverhalten entfernt. Die Menüleisten-Ansicht startet beim Auftauchen nicht mehr automatisch ein Diktat, der AI-Katalog zeigt nur noch reguläre Modelle, und die Warmhaltezeit fuer das Sprachmodell bleibt als technische Laufzeitoption im Advanced-Bereich erhalten.
 
 ## Features
+
+- 2026-04-03: AI- und Speech-Settings in der macOS-App neu strukturiert und kontextsensitiv gemacht.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `Sources/ASRCore/VoiceModelCatalog.swift`, `docs/api-design.md`, `docs/system-design.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalitaet: Die Einstellungen trennen jetzt sauber zwischen Modell, Eingabesprache, Qualitaetsprofil und Uebersetzung. Fuer englische oder sprachgebundene Modelle werden die Sprachoptionen automatisch auf die sinnvollen Werte reduziert, und die Uebersetzungsoption verschwindet, wenn das gewaehlte Modell keine Whisper-Translation nach Englisch unterstuetzt. Gleichzeitig erklaert die neue Kopfleiste in den Speech-Settings klar, dass das Modell Groesse, Tempo und Faehigkeiten bestimmt, waehrend das Qualitaetsprofil nur Laufzeitparameter wie Beam-Search, Chunking und Threads regelt.
+
+- 2026-04-03: Lokalen Speech-Model-Katalog mit expliziter Modellwahl, Sprach-Overrides und Installationsverwaltung eingefuehrt.
+  - Dateien: `Sources/ASRCore/VoiceModelCatalog.swift`, `Sources/ASRCore/VoiceModelInstaller.swift`, `Sources/ASRCore/BundledWhisperRuntime.swift`, `Sources/ASRCore/ASRTypes.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `scripts/download_models.sh`, `Tests/ASRCoreTests/BundledWhisperRuntimeTests.swift`, `Tests/ASRCoreTests/VoiceModelCatalogTests.swift`, `docs/api-design.md`, `docs/system-design.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalitaet: Die macOS-App besitzt jetzt einen eigenen `Speech`-Bereich mit lokalem Anbieter-/Modellkatalog statt versteckter Whisper-Presetwahl. Nutzer koennen explizit zwischen `Standard`, `Pro`, `Ultra`, `Fast`, `Nano` und sprachgebundenen Varianten wechseln, Modelle on-demand installieren oder entfernen und pro Eingabesprache ein anderes Defaultmodell hinterlegen. Die Runtime uebergibt Provider- und Katalog-Modell-IDs jetzt explizit an die ASR-Konfiguration, faellt bei unpassenden Sprachvarianten kontrolliert auf allgemeine Modelle zurueck und aktiviert die lokale Whisper-Uebersetzung nur noch dann, wenn das gewaehlte Modell sie wirklich unterstuetzt. Das gebuendelte Standardsetup bleibt auf `ggml-base.bin` fokussiert, waehrend zusaetzlich installierte Modelle beim Runtime-Sync erhalten bleiben.
 
 - 2026-04-03: AI-Verarbeitung in der macOS-App um Ziel- und Formatmodi erweitert.
   - Dateien: `Sources/AIProcessingCore/AIProcessingTypes.swift`, `Sources/AIProcessingCore/AppleFoundationTextProcessor.swift`, `apps/macos/AppShell/AIProcessingDisplay.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `Tests/AIProcessingCoreTests/AppleFoundationPromptBuilderTests.swift`, `Tests/AIProcessingCoreTests/OpenAICompatibleRemoteTextProcessorTests.swift`, `docs/api-design.md`, `docs/system-design.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`

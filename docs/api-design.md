@@ -3,6 +3,44 @@
 ## ASR
 
 ```swift
+public enum VoiceProviderID: String {
+    case whisperCpp
+    case nvidiaParakeet
+}
+
+public struct VoiceProviderDescriptor {
+    let id: String
+    let displayName: String
+    let summary: String
+    let isAvailable: Bool
+}
+
+public struct VoiceModelDescriptor {
+    let id: String
+    let providerID: String
+    let displayName: String
+    let languageCode: String?
+    let supportsTranslationToEnglish: Bool
+    let speedScore: Int
+    let accuracyScore: Int
+    let sizeLabel: String
+    let installState: VoiceModelInstallState
+    let localFileName: String?
+    let downloadIdentifier: String?
+}
+
+public struct VoiceLanguageOverride {
+    let languageCode: String
+    let modelID: String
+}
+
+public enum LocalVoiceModelCatalog {
+    static let defaultProviderID: String
+    static let defaultModelID: String
+    static func availableProviders(parakeetBinaryURL: URL? = nil) -> [VoiceProviderDescriptor]
+    static func availableModels(includeParakeet: Bool = false) -> [VoiceModelDescriptor]
+}
+
 public protocol WhisperEngine: AnyObject {
     func loadModel(at path: URL, config: ASRConfig) throws
     func startStreaming() throws
@@ -26,6 +64,13 @@ public func loadBundledModel(
 ```
 
 This installs `Runtime/whisper-cli` + `Runtime/models/*.bin` from app resources into local app-support and loads the requested model.
+
+Current local speech-model surface:
+- bundled default: `Standard` -> `ggml-base.bin`
+- additional whisper.cpp-backed local models are installable on demand via a catalog layer
+- `Translate` support always means Whisper translation to English only
+- language-specific `.en` variants are modeled explicitly and do not expose translation
+- NVIDIA Parakeet descriptors can exist in the catalog contract, but only surface in the UI when a real local backend is present
 
 ## Audio
 
@@ -176,9 +221,11 @@ Current provider surface:
 ```swift
 struct DictationStartOptions {
     let mode: DictationMode            // .finalize | .streaming
-    let language: DictationLanguage    // de | en | auto
+    let language: DictationLanguage    // de | en | fr | es | it | nl | pt | pl | tr | cs | zh | auto
     let performance: DictationPerformance // auto | fast | balanced | accurate
     let translationOutput: TranslationOutputMode // .original | .english
+    let selectedVoiceProviderID: String
+    let selectedVoiceModelID: String
     let liveRewriteScope: LiveRewriteScope
     let aiProcessing: AIProcessingConfiguration
     let audioProcessing: AudioProcessingConfiguration
@@ -198,6 +245,7 @@ struct AudioProcessingConfiguration {
 ```
 
 The macOS app shell uses these options to:
+- resolve the effective local speech model before session start, including optional per-language overrides
 - select model/config dynamically before session start
 - pass explicit Whisper auto-detect (`auto`) instead of silently mapping auto language selection to English
 - keep transcription, translation, and AI processing as separate runtime stages
@@ -205,9 +253,10 @@ The macOS app shell uses these options to:
 - apply stable streaming patching with a bounded mutable tail
 - sanitize common non-speech placeholders such as `(silence)` or `[music]` before live insertion and final delivery
 - apply snippet substitutions before optional translation and optional AI processing
-- optionally translate Whisper output to English only when `translationOutput == .english`
+- optionally translate Whisper output to English only when `translationOutput == .english` and the selected voice model supports it
 - optionally run AI processing separately for live insertion updates and for the final result
 - maintain one provider-agnostic AI model picker across Apple on-device and remote API-backed providers
+- maintain a separate local speech-model picker with provider/model IDs, install state, and language-specific defaults
 - expose optional technical diagnostic logging that captures detailed runtime diagnostics plus ASR subprocess lifecycle events for support cases
 - choose whether the final transcript is inserted or copied, and whether clipboard fallback is allowed when no text target is available
 - expose clipboard fallback as an explicit privacy tradeoff rather than a silent background path

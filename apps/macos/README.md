@@ -30,6 +30,7 @@ Operational notes:
 - If menu bar hints are disabled, the menu bar shows only the state icon and no shortcut text.
 - The menu bar menu now uses a compact status header only for active/problem states, one primary dictation action, quick dictation controls, contextual permission actions, and explicit footer actions for settings, updates, and quitting.
 - The menu bar menu uses status pills and card-like groups so controls, permissions, and the latest dictation are visually separated without expanding the menu excessively.
+- The menu bar quick settings group dictation inputs under a small `Application` section and only reveal the AI model, live/final toggles, style, and salutation controls once AI processing is enabled.
 - `Settings…` from the menu bar opens an explicit preference-styled settings window, which is more reliable for the agent/menu bar app than relying on the default SwiftUI settings selector.
 - The settings let you switch the visible app UI between German and English.
 - The settings window is organized into a sidebar-driven preferences layout for general app preferences, dictation, shortcuts, history, about, snippets, and advanced options.
@@ -37,6 +38,7 @@ Operational notes:
 - The settings use a fixed source-list sidebar plus a global native search field above the detail view, so switching sections and searching across areas stays compact and predictable.
 - Settings search scans across all top-level areas and shows grouped results per section instead of restricting the search to the currently selected area.
 - Menu bar quick settings expose the AI processing toggle plus, when enabled, the eligible model choice, live/final application toggles, style, salutation, and translation output without surfacing unavailable local models or remote models whose provider is disabled or missing credentials.
+- A compact menu bar design option keeps history, copy last dictation, separators, and update checks visible while moving AI application details into an `Apply for` flyout and an `AI settings…` shortcut to the preferences window.
 - Search results reuse the same preference cards as the normal tabs, but without nesting full pane containers inside the search mode; this keeps the global search view flatter and closer to native macOS preferences behavior.
 - The settings window keeps a fixed width so long history entries do not stretch the preferences layout horizontally.
 - The settings window now leans more heavily on native macOS structures such as toolbar search, `Form`-based content flow, and restrained `GroupBox` grouping instead of a heavily custom header/search/card shell.

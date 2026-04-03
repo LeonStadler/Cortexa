@@ -1,4 +1,5 @@
 import AppKit
+import ASRCore
 import AIProcessingCore
 import Carbon
 import SnippetCore
@@ -88,19 +89,11 @@ struct SettingsView: View {
     }
 
     private var generalHasMatches: Bool {
-        matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints", "dock", "launch on login", "updates", "zugriff", "permissions", "berechtigungen", "mikrofon", "accessibility", "bedienungshilfen"])
+        matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints", "compact", "kompakt", "dock", "launch on login", "updates", "zugriff", "permissions", "berechtigungen", "mikrofon", "accessibility", "bedienungshilfen"])
     }
 
     private var dictationHasMatches: Bool {
         matches([
-            "sprache",
-            "language",
-            "translation",
-            "translate",
-            "übersetzung",
-            "uebersetzung",
-            "qualität",
-            "quality",
             "streaming",
             "clipboard",
             "zwischenablage",
@@ -123,6 +116,29 @@ struct SettingsView: View {
             "kontext",
             "retroaktiv",
             "weit zurück"
+        ])
+    }
+
+    private var speechHasMatches: Bool {
+        matches([
+            "speech",
+            "voice",
+            "sprache",
+            "language",
+            "translate",
+            "translation",
+            "übersetzung",
+            "uebersetzung",
+            "modell",
+            "model",
+            "anbieter",
+            "provider",
+            "whisper",
+            "parakeet",
+            "qualität",
+            "quality",
+            "installieren",
+            "download"
         ])
     }
 
@@ -152,6 +168,10 @@ struct SettingsView: View {
             "key",
             "api key"
         ])
+    }
+
+    private var showsExpandedAIControls: Bool {
+        !appState.compactMenuBarDesign
     }
 
     private var historyHasMatches: Bool {
@@ -269,6 +289,8 @@ struct SettingsView: View {
         switch currentSelectedTab {
         case .general:
             generalForm
+        case .speech:
+            speechForm
         case .dictation:
             dictationForm
         case .sound:
@@ -299,14 +321,36 @@ struct SettingsView: View {
         appState.selectedSettingsTab
     }
 
-    private var dictationForm: some View {
+    private var speechForm: some View {
         Form {
-            Section(text("Erkennung", "Recognition")) {
-                dictationRecognitionContent
+            Section(text("Kurz erklärt", "Quick explainer")) {
+                speechOverviewContent
+            }
+            Section(text("Anbieter", "Providers")) {
+                speechProviderContent
+            }
+            Section(text("Modell", "Model")) {
+                speechModelSelectionContent
+            }
+            Section(text("Sprache", "Language")) {
+                speechLanguageContent
+            }
+            Section(text("Qualität", "Quality")) {
+                speechQualityContent
             }
             Section(text("Übersetzung", "Translation")) {
                 translationContent
             }
+            Section(text("Installierte Modelle", "Installed models")) {
+                installedSpeechModelsContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+
+    private var dictationForm: some View {
+        Form {
             Section(text("Live-Anpassung", "Live rewriting")) {
                 liveRewriteContent
             }
@@ -355,11 +399,13 @@ struct SettingsView: View {
             Section(text("Verarbeitung", "Processing")) {
                 aiProcessingContent
             }
-            Section(text("Anbieter", "Providers")) {
-                aiProviderContent
-            }
-            Section(text("Modelle", "Models")) {
-                aiModelContent
+            if showsExpandedAIControls {
+                Section(text("Anbieter", "Providers")) {
+                    aiProviderContent
+                }
+                Section(text("Modelle", "Models")) {
+                    aiModelContent
+                }
             }
         }
         .formStyle(.grouped)
@@ -449,10 +495,17 @@ struct SettingsView: View {
 
             if dictationHasMatches {
                 Section(text("Diktat", "Dictation")) {
-                    dictationRecognitionContent
-                    translationContent
                     liveRewriteContent
                     dictationDeliveryContent
+                }
+            }
+
+            if speechHasMatches {
+                Section(text("Speech", "Speech")) {
+                    speechProviderContent
+                    speechModelSelectionContent
+                    translationContent
+                    installedSpeechModelsContent
                 }
             }
 
@@ -513,7 +566,7 @@ struct SettingsView: View {
                 }
             }
 
-            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !aiHasMatches && !historyHasMatches && !aboutHasMatches && !snippetsHasMatches && !advancedHasMatches {
+            if !generalHasMatches && !speechHasMatches && !dictationHasMatches && !soundHasMatches && !shortcutsHasMatches && !aiHasMatches && !historyHasMatches && !aboutHasMatches && !snippetsHasMatches && !advancedHasMatches {
                 Section {
                     Text(text("Keine passenden Einstellungen gefunden.", "No matching settings found."))
                         .foregroundStyle(.secondary)
@@ -537,16 +590,6 @@ struct SettingsView: View {
                 .frame(minWidth: 170)
             } label: {
                 SettingsFieldLabel(title: text("App-Sprache", "App language"))
-            }
-
-            Toggle(isOn: $appState.showMenuBarShortcutHints) {
-                SettingsFieldLabel(
-                    title: text("Kurzbefehl-Hinweise im Menü anzeigen", "Show shortcut hints in menu"),
-                    helpText: text(
-                        "Zeigt Tastenkombinationen direkt neben passenden Einträgen im Menüleisten-Menü an.",
-                        "Shows keyboard shortcuts directly next to matching menu bar items."
-                    )
-                )
             }
 
             Toggle(text("Im Dock anzeigen", "Show in Dock"), isOn: $appState.showInDock)
@@ -575,7 +618,17 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var generalMenuBarContent: some View {
-        if matches(["menüleiste", "menu bar", "shortcut hints"]) {
+        if matches(["menüleiste", "menu bar", "shortcut hints", "compact", "kompakt"]) {
+            Toggle(isOn: $appState.compactMenuBarDesign) {
+                SettingsFieldLabel(
+                    title: text("Kompaktes Menüleisten-Design", "Compact menu bar design"),
+                    helpText: text(
+                        "Macht das Menüleisten-Popup schmaler und ruhiger, lässt aber Verlauf, Kopieren und Trennlinien sichtbar.",
+                        "Makes the menu bar popup narrower and calmer while keeping history, copy actions, and separators visible."
+                    )
+                )
+            }
+
             Toggle(isOn: $appState.showMenuBarShortcutHints) {
                 SettingsFieldLabel(
                     title: text("Kurzbefehl-Hinweise im Menü anzeigen", "Show shortcut hints in menu"),
@@ -765,25 +818,24 @@ struct SettingsView: View {
             PermissionStatusRow(
                 title: text("Mikrofon", "Microphone"),
                 status: appState.microphonePermissionStatus,
-                detail: text("Erforderlich für die Audioaufnahme.", "Required for audio capture.")
+                detail: text("Erforderlich für die Audioaufnahme.", "Required for audio capture."),
+                actionTitle: text("Öffnen", "Open"),
+                actionHint: text("Mikrofon-Einstellungen öffnen", "Open microphone settings"),
+                action: {
+                    appState.openMicrophoneSettings()
+                }
             )
 
             PermissionStatusRow(
                 title: text("Bedienungshilfen", "Accessibility"),
                 status: appState.accessibilityPermissionStatus,
-                detail: text("Erforderlich zum Einfügen in das aktive Textfeld.", "Required to insert into the active text field.")
-            )
-
-            HStack(alignment: .center, spacing: 10) {
-                Button(text("Mikrofon öffnen", "Open microphone settings")) {
-                    appState.openMicrophoneSettings()
-                }
-                .buttonStyle(.bordered)
-                Button(text("Bedienungshilfen öffnen", "Open accessibility settings")) {
+                detail: text("Erforderlich zum Einfügen in das aktive Textfeld.", "Required to insert into the active text field."),
+                actionTitle: text("Öffnen", "Open"),
+                actionHint: text("Bedienungshilfen öffnen", "Open accessibility settings"),
+                action: {
                     appState.openAccessibilitySettings()
                 }
-                .buttonStyle(.bordered)
-            }
+            )
 
             Text(appState.dictationCapability.localizedSummary)
                 .font(.footnote)
@@ -879,33 +931,148 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var dictationRecognitionContent: some View {
-        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert", "translation", "übersetzung", "uebersetzung"]) {
-            LabeledContent(text("Diktatsprache", "Dictation language")) {
-                Picker(text("Diktatsprache", "Dictation language"), selection: $appState.selectedLanguage) {
-                    ForEach(DictationLanguage.allCases) { language in
+    private var speechProviderContent: some View {
+        if speechHasMatches {
+            LabeledContent {
+                Picker(text("Voice-Anbieter", "Voice provider"), selection: $appState.selectedVoiceProviderID) {
+                    ForEach(appState.voiceProviders) { provider in
+                        Text(provider.displayName).tag(provider.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 240)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Voice-Anbieter", "Voice provider"),
+                    helpText: text(
+                        "V1 bleibt komplett lokal. Zusätzliche Anbieter erscheinen nur, wenn ihr lokales Backend wirklich vorhanden ist.",
+                        "V1 stays fully local. Additional providers only appear when their local backend is actually available."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var speechOverviewContent: some View {
+        if speechHasMatches {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(text(
+                    "Modell, Sprache und Übersetzung sind getrennt. Das Modell bestimmt Größe, Tempo und Fähigkeiten. Die Sprache begrenzt nur die sinnvollen Eingaben.",
+                    "Model, language, and translation are separate. The model defines size, speed, and capabilities. Language only limits the sensible input choices."
+                ))
+                .font(.subheadline)
+
+                Text(text(
+                    "Qualität steuert Beam-Search, Chunking und Threads. Sie ändert nicht mehr das eigentliche Modell.",
+                    "Quality controls beam search, chunking, and threads. It no longer changes the actual model."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var speechModelSelectionContent: some View {
+        if speechHasMatches {
+            LabeledContent {
+                Picker(text("Voice-Modell", "Voice model"), selection: $appState.selectedVoiceModelID) {
+                    ForEach(appState.visibleVoiceModels) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 240)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Voice-Modell", "Voice model"),
+                    helpText: text(
+                        "Das Modell bestimmt die tatsächliche Transkriptions-Engine. Qualität darunter steuert nur Laufzeitparameter wie Beam und Chunking.",
+                        "The model defines the actual transcription engine. Quality below only adjusts runtime parameters like beam and chunking."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var speechLanguageContent: some View {
+        if speechHasMatches {
+            LabeledContent {
+                Picker(text("Eingabesprache", "Input language"), selection: $appState.selectedLanguage) {
+                    ForEach(appState.selectedVoiceModelLanguageOptions) { language in
                         Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 170)
+                .frame(minWidth: 180)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Eingabesprache", "Input language"),
+                    helpText: text(
+                        "Bei multilingualen Modellen kannst du die Sprache frei wählen. Bei rein englischen Modellen reduziert sich die Auswahl automatisch.",
+                        "For multilingual models you can choose freely. For English-only models the picker is reduced automatically."
+                    )
+                )
             }
 
-            LabeledContent(text("Erkennungsqualität", "Recognition quality")) {
-                Picker(text("Erkennungsqualität", "Recognition quality"), selection: $appState.performanceProfile) {
+            if let selectedModel = appState.selectedVoiceModel {
+                Text(selectedModel.languageCode == nil
+                    ? text("Multilinguales Modell: alle Sprachen verfügbar.", "Multilingual model: all languages available.")
+                    : text("Sprache ist an das Modell gebunden.", "Language is bound to the model.")
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+                if let hint = appState.selectedVoiceModelLanguageHintText {
+                    Text(hint)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var speechQualityContent: some View {
+        if speechHasMatches {
+            LabeledContent {
+                Picker(text("Qualitätsprofil", "Quality profile"), selection: $appState.performanceProfile) {
                     ForEach(DictationPerformance.allCases) { mode in
                         Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 170)
+                .frame(minWidth: 180)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Qualitätsprofil", "Quality profile"),
+                    helpText: text(
+                        "Steuert Laufzeitparameter wie Beam-Search, Chunking und Threads. Es ändert nicht mehr heimlich das Modell.",
+                        "Controls runtime parameters like beam search, chunking, and threads. It no longer changes the model behind your back."
+                    )
+                )
+            }
+
+            if let selectedModel = appState.selectedVoiceModel {
+                LabeledContent(text("Modell-Details", "Model details")) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(text("Bereich", "Scope")): \(selectedModel.languageCode?.uppercased() ?? "ALL")")
+                        Text("\(text("Übersetzung", "Translation")): \(selectedModel.supportsTranslationToEnglish ? text("Ja", "Yes") : text("Nein", "No"))")
+                        Text("\(text("Geschwindigkeit", "Speed")) \(selectedModel.speedScore)/10  \(text("Genauigkeit", "Accuracy")) \(selectedModel.accuracyScore)/10  \(selectedModel.sizeLabel)")
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }
 
     @ViewBuilder
     private var translationContent: some View {
-        if matches(["translation", "translate", "übersetzung", "uebersetzung", "sprache", "language"]) {
+        if speechHasMatches, appState.speechTranslationAvailable {
             LabeledContent {
                 Picker(text("Übersetzen nach", "Translate to"), selection: $appState.translationOutputMode) {
                     ForEach(TranslationOutputMode.allCases) { mode in
@@ -914,14 +1081,67 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .frame(minWidth: 170)
+                .disabled(!appState.speechTranslationAvailable)
             } label: {
                 SettingsFieldLabel(
                     title: text("Übersetzen nach", "Translate to"),
                     helpText: text(
-                        "Keine Übersetzung gibt die gesprochene Sprache zurück. Nach Englisch aktiviert gezielt die Whisper-Übersetzung.",
-                        "No translation returns the spoken language. English explicitly enables Whisper translation."
+                        "Keine Übersetzung gibt die gesprochene Sprache zurück. Nach Englisch aktiviert ausschließlich die lokale Whisper-Übersetzung. Sprachspezifische English-Modelle unterstützen das nicht.",
+                        "No translation returns the spoken language. English only enables local Whisper translation. Language-specific English models do not support it."
                     )
                 )
+            }
+        }
+        else if speechHasMatches {
+            Text(text(
+                "Dieses Modell unterstützt keine Übersetzung. Die Option bleibt deshalb ausgeblendet.",
+                "This model does not support translation. The option is therefore hidden."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var installedSpeechModelsContent: some View {
+        if speechHasMatches {
+            ForEach(appState.visibleVoiceModels) { model in
+                LabeledContent {
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.displayName)
+                            Text(
+                                "\(model.languageCode?.uppercased() ?? "ALL") • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)"
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 12)
+                        Text(appState.isVoiceModelInstalled(model) ? text("Installiert", "Installed") : text("Nicht installiert", "Not installed"))
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(appState.isVoiceModelInstalled(model) ? .secondary : .tertiary)
+                        if appState.isVoiceModelInstalled(model) {
+                            Button(text("Als Standard verwenden", "Use as default")) {
+                                appState.setSelectedVoiceModel(model)
+                            }
+                            .disabled(appState.selectedVoiceModelID == model.id || appState.isVoiceModelBusy(model))
+
+                            if model.installState != .bundled {
+                                Button(text("Entfernen", "Remove")) {
+                                    appState.removeVoiceModel(model)
+                                }
+                                .disabled(appState.isVoiceModelBusy(model))
+                            }
+                        } else {
+                            Button(text("Installieren", "Install")) {
+                                appState.installVoiceModel(model)
+                            }
+                            .disabled(model.installState == .unavailable || appState.isVoiceModelBusy(model))
+                        }
+                    }
+                } label: {
+                    EmptyView()
+                }
             }
         }
     }
@@ -1055,13 +1275,13 @@ struct SettingsView: View {
                 LabeledContent {
                     VStack(alignment: .leading, spacing: 8) {
                         Toggle(
-                            text("Live-Einfügen", "Live insertion"),
+                            text("Inhaltsstreaming", "Content streaming"),
                             isOn: $appState.aiProcessingApplyDuringLiveInsertion
                         )
                         .disabled(!appState.streamingEnabled)
 
                         Toggle(
-                            text("Finalem Ergebnis", "Final result"),
+                            text("Endergebnis einfügen", "Insert final result"),
                             isOn: $appState.aiProcessingApplyToFinalResult
                         )
                     }
@@ -1077,84 +1297,102 @@ struct SettingsView: View {
                 }
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
-                LabeledContent {
-                    Picker(text("AI-Ziel", "AI goal"), selection: $appState.aiRevisionGoal) {
-                        ForEach(AIRevisionGoal.allCases) { goal in
-                            Text(goal.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(goal)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(minWidth: 220)
-                } label: {
-                    SettingsFieldLabel(
-                        title: text("AI-Ziel", "AI goal"),
-                        helpText: text(
-                            "Standardmäßig bereinigt die AI den diktierten Text. Alternativ kannst du sie gezielt für Ton, Anrede oder Format einsetzen.",
-                            "By default, AI cleans up dictated text. You can also use it specifically for tone, salutation, or formatting."
-                        )
-                    )
-                }
-                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-
-                LabeledContent {
-                    Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
-                        ForEach(AIFormattingMode.allCases) { mode in
-                            Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(minWidth: 220)
-                } label: {
-                    SettingsFieldLabel(
-                        title: text("Modus", "Mode"),
-                        helpText: text(
-                            "Legt fest, für welche Art von Text die AI optimieren soll, zum Beispiel E-Mail, Nachricht, Dokumentation oder wissenschaftliche Arbeit.",
-                            "Defines which kind of text the AI should optimize for, such as email, message, documentation, or scientific writing."
-                        )
-                    )
-                }
-                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-
-                if appState.aiShowsWritingStyleControls {
+                if showsExpandedAIControls {
                     LabeledContent {
-                        Picker(text("Stil / Ton", "Style / Tone"), selection: $appState.aiWritingStyle) {
-                            ForEach(appState.availableAIWritingStyles) { style in
-                                Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
+                        Picker(text("AI-Ziel", "AI goal"), selection: $appState.aiRevisionGoal) {
+                            ForEach(AIRevisionGoal.allCases) { goal in
+                                Text(goal.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(goal)
                             }
                         }
                         .labelsHidden()
                         .frame(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
-                            title: text("Stil / Ton", "Style / Tone"),
+                            title: text("AI-Ziel", "AI goal"),
                             helpText: text(
-                                "Zeigt nur Stile an, die zum gewählten Modus passen. Für Dokumentation oder wissenschaftliche Texte bleiben zum Beispiel nur sachliche Varianten übrig.",
-                                "Shows only styles that fit the selected mode. For documentation or scientific text, only fitting formal variants remain available."
+                                "Standardmäßig bereinigt die AI den diktierten Text. Alternativ kannst du sie gezielt für Ton, Anrede oder Format einsetzen.",
+                                "By default, AI cleans up dictated text. You can also use it specifically for tone, salutation, or formatting."
                             )
                         )
+                        }
                     }
                     .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-                }
 
-                if appState.aiShowsSalutationControls {
                     LabeledContent {
-                        Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
-                            ForEach(AISalutation.allCases) { salutation in
-                                Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
+                        Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
+                            ForEach(AIFormattingMode.allCases) { mode in
+                                Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
                             }
                         }
                         .labelsHidden()
                         .frame(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
-                            title: text("Anrede", "Salutation"),
+                            title: text("Modus", "Mode"),
                             helpText: text(
-                                "Die Anrede wird nur dort angeboten, wo sie sinnvoll ist, etwa bei E-Mails, Nachrichten oder WhatsApp.",
-                                "Salutation is shown only where it makes sense, such as email, messages, or WhatsApp."
+                                "Legt fest, für welche Art von Text die AI optimieren soll, zum Beispiel E-Mail, Nachricht, Dokumentation oder wissenschaftliche Arbeit.",
+                                "Defines which kind of text the AI should optimize for, such as email, message, documentation, or scientific writing."
                             )
                         )
                     }
                     .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+                    if appState.aiShowsWritingStyleControls {
+                        LabeledContent {
+                            Picker(text("Stil / Ton", "Style / Tone"), selection: $appState.aiWritingStyle) {
+                                ForEach(appState.availableAIWritingStyles) { style in
+                                    Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(minWidth: 220)
+                        } label: {
+                            SettingsFieldLabel(
+                                title: text("Stil / Ton", "Style / Tone"),
+                                helpText: text(
+                                    "Zeigt nur Stile an, die zum gewählten Modus passen. Für Dokumentation oder wissenschaftliche Texte bleiben zum Beispiel nur sachliche Varianten übrig.",
+                                    "Shows only styles that fit the selected mode. For documentation or scientific text, only fitting formal variants remain available."
+                                )
+                            )
+                        }
+                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                    }
+
+                    if appState.aiShowsSalutationControls {
+                        LabeledContent {
+                            Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                                ForEach(AISalutation.allCases) { salutation in
+                                    Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(minWidth: 220)
+                        } label: {
+                            SettingsFieldLabel(
+                                title: text("Anrede", "Salutation"),
+                                helpText: text(
+                                    "Die Anrede wird nur dort angeboten, wo sie sinnvoll ist, etwa bei E-Mails, Nachrichten oder WhatsApp.",
+                                    "Salutation is shown only where it makes sense, such as email, messages, or WhatsApp."
+                                )
+                            )
+                        }
+                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                    }
+                }
+
+                if !showsExpandedAIControls {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(text("Kompakte Ansicht", "Compact view"))
+                            .font(.subheadline.weight(.semibold))
+
+                        Text(text(
+                            "Hier bleiben nur die wichtigsten Schalter sichtbar. Modell, Ziel, Modus, Stil und Anrede findest du in der erweiterten Ansicht.",
+                            "Only the most important switches stay visible here. Model, goal, mode, style, and salutation live in the expanded view."
+                        ))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 2)
                 }
             }
         }
@@ -1776,6 +2014,7 @@ struct SettingsView: View {
 
 enum SettingsTab: Hashable, CaseIterable {
     case general
+    case speech
     case dictation
     case sound
     case shortcuts
@@ -1788,6 +2027,7 @@ enum SettingsTab: Hashable, CaseIterable {
     var symbolName: String {
         switch self {
         case .general: return "gearshape"
+        case .speech: return "waveform.badge.mic"
         case .dictation: return "mic"
         case .sound: return "speaker.wave.2"
         case .shortcuts: return "command"
@@ -1803,6 +2043,8 @@ enum SettingsTab: Hashable, CaseIterable {
         switch self {
         case .general:
             return language.text("Allgemein", "General")
+        case .speech:
+            return language.text("Speech", "Speech")
         case .dictation:
             return language.text("Diktat", "Dictation")
         case .sound:
@@ -2125,9 +2367,28 @@ private struct PermissionStatusRow: View {
     let title: String
     let status: PermissionStatus
     let detail: String
+    let actionTitle: String?
+    let actionHint: String?
+    let action: (() -> Void)?
+
+    init(
+        title: String,
+        status: PermissionStatus,
+        detail: String,
+        actionTitle: String? = nil,
+        actionHint: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.status = status
+        self.detail = detail
+        self.actionTitle = actionTitle
+        self.actionHint = actionHint
+        self.action = action
+    }
 
     var body: some View {
-        HStack {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                 Text(detail)
@@ -2135,8 +2396,16 @@ private struct PermissionStatusRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(status.label)
-                .foregroundStyle(status.color)
+            HStack(spacing: 10) {
+                Text(status.label)
+                    .foregroundStyle(status.color)
+
+                if let actionTitle, let action {
+                    Button(actionTitle, action: action)
+                        .buttonStyle(.bordered)
+                        .help(actionHint ?? actionTitle)
+                }
+            }
         }
         .padding(.vertical, 2)
     }

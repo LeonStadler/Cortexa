@@ -15,10 +15,8 @@ mkdir -p "${MODELS_DIR}"
 (
   cd "${WHISPER_DIR}"
   ./models/download-ggml-model.sh base
-  ./models/download-ggml-model.sh small
 )
 
 cp "${WHISPER_DIR}"/models/ggml-base*.bin "${MODELS_DIR}" 2>/dev/null || true
-cp "${WHISPER_DIR}"/models/ggml-small*.bin "${MODELS_DIR}" 2>/dev/null || true
 
 echo "Downloaded models into ${MODELS_DIR}"

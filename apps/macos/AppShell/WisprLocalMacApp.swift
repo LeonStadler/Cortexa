@@ -120,6 +120,10 @@ struct MenuBarContentView: View {
         !appState.availableQuickSettingsAIModels.isEmpty
     }
 
+    private var menuBarPopupWidth: CGFloat {
+        appState.compactMenuBarDesign ? 280 : 320
+    }
+
     private var insertionModeLabel: String {
         if appState.finalResultDeliveryMode == .clipboardOnly {
             return text("Zwischenablage", "Clipboard")
@@ -277,7 +281,7 @@ struct MenuBarContentView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: appState.compactMenuBarDesign ? 6 : 8) {
             startDictationButton
 
             statusHeader
@@ -286,79 +290,60 @@ struct MenuBarContentView: View {
                 Divider()
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(text("Eingabe", "Input"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
+                .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
 
-                Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
-                    .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
-
-                Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
-                    ForEach(DictationLanguage.allCases) { language in
-                        Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
-                    }
+            Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
+                ForEach(DictationLanguage.allCases) { language in
+                    Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
                 }
+            }
 
-                Picker(text("Übersetzung", "Translation"), selection: $appState.translationOutputMode) {
-                    ForEach(TranslationOutputMode.allCases) { mode in
-                        Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
-                    }
+            Picker(text("Übersetzung", "Translation"), selection: $appState.translationOutputMode) {
+                ForEach(TranslationOutputMode.allCases) { mode in
+                    Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
                 }
             }
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(text("KI", "AI"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
+            VStack(alignment: .leading, spacing: appState.compactMenuBarDesign ? 4 : 6) {
                 Toggle(text("AI-Verarbeitung", "AI processing"), isOn: $appState.aiProcessingEnabled)
                     .disabled(!hasQuickSettingsAIModels)
 
-                if appState.aiProcessingEnabled {
-                    Picker(text("AI-Modell", "AI model"), selection: Binding(
-                        get: { appState.selectedAIModelID ?? "" },
-                        set: { appState.selectedAIModelID = $0.isEmpty ? nil : $0 }
-                    )) {
-                        if appState.availableQuickSettingsAIModels.isEmpty {
-                            Text(text("Keine Modelle", "No models")).tag("")
-                        } else {
-                            ForEach(appState.availableQuickSettingsAIModels) { model in
-                                Text(model.displayName).tag(model.id)
-                            }
-                        }
-                    }
-                    .disabled(appState.availableQuickSettingsAIModels.isEmpty)
+                Menu {
+                    Toggle(text("Inhaltsstreaming", "Content streaming"), isOn: $appState.aiProcessingApplyDuringLiveInsertion)
+                        .disabled(!appState.aiProcessingEnabled || !appState.streamingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
 
-                    Toggle(text("Bei Live-Einfügen", "For live insertion"), isOn: $appState.aiProcessingApplyDuringLiveInsertion)
-                        .disabled(!appState.streamingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
+                    Toggle(text("Endergebnis einfügen", "Insert final result"), isOn: $appState.aiProcessingApplyToFinalResult)
+                        .disabled(!appState.aiProcessingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
+                } label: {
+                    MenuActionLabel(
+                        title: text("Anwenden bei", "Apply for"),
+                        shortcutGlyph: nil,
+                        shortcutText: nil
+                    )
+                }
+                .disabled(appState.availableQuickSettingsAIModels.isEmpty)
 
-                    Toggle(text("Beim finalen Ergebnis", "For final result"), isOn: $appState.aiProcessingApplyToFinalResult)
-                        .disabled(appState.availableQuickSettingsAIModels.isEmpty)
-
-                    Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
-                        ForEach(AIWritingStyle.allCases) { style in
-                            Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
-                        }
-                    }
-                    .disabled(appState.availableQuickSettingsAIModels.isEmpty)
-
-                    Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
-                        ForEach(AISalutation.allCases) { salutation in
-                            Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
-                        }
-                    }
-                    .disabled(appState.availableQuickSettingsAIModels.isEmpty)
+                Button {
+                    appState.openAISettingsWindow()
+                } label: {
+                    MenuActionLabel(
+                        title: text("AI-Einstellungen…", "AI settings…"),
+                        shortcutGlyph: nil,
+                        shortcutText: nil
+                    )
                 }
             }
 
             if appState.hasPermissionProblems {
                 Divider()
-                Text(text("Berechtigungen", "Permissions"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if !appState.compactMenuBarDesign {
+                    Text(text("Berechtigungen", "Permissions"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if appState.microphonePermissionStatus != .granted {
                     Button(text("Mikrofonzugriff öffnen", "Open microphone access")) {
                         appState.openMicrophoneSettings()
@@ -404,7 +389,7 @@ struct MenuBarContentView: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .frame(width: 300)
+        .frame(width: menuBarPopupWidth)
         .controlSize(.small)
     }
 

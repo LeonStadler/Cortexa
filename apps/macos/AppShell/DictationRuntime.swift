@@ -18,6 +18,15 @@ enum DictationMode {
 enum DictationLanguage: String, CaseIterable, Identifiable {
     case german = "de"
     case english = "en"
+    case french = "fr"
+    case spanish = "es"
+    case italian = "it"
+    case dutch = "nl"
+    case portuguese = "pt"
+    case polish = "pl"
+    case turkish = "tr"
+    case czech = "cs"
+    case chinese = "zh"
     case auto = "auto"
 
     var id: String { rawValue }
@@ -28,6 +37,24 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return "Deutsch"
         case .english:
             return "Englisch"
+        case .french:
+            return "Französisch"
+        case .spanish:
+            return "Spanisch"
+        case .italian:
+            return "Italienisch"
+        case .dutch:
+            return "Niederländisch"
+        case .portuguese:
+            return "Portugiesisch"
+        case .polish:
+            return "Polnisch"
+        case .turkish:
+            return "Türkisch"
+        case .czech:
+            return "Tschechisch"
+        case .chinese:
+            return "Chinesisch"
         case .auto:
             return "Auto"
         }
@@ -39,6 +66,24 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return "German"
         case ("en", .english):
             return "English"
+        case ("en", .french):
+            return "French"
+        case ("en", .spanish):
+            return "Spanish"
+        case ("en", .italian):
+            return "Italian"
+        case ("en", .dutch):
+            return "Dutch"
+        case ("en", .portuguese):
+            return "Portuguese"
+        case ("en", .polish):
+            return "Polish"
+        case ("en", .turkish):
+            return "Turkish"
+        case ("en", .czech):
+            return "Czech"
+        case ("en", .chinese):
+            return "Chinese"
         case ("en", .auto):
             return "Auto"
         default:
@@ -52,6 +97,24 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return "de"
         case .english:
             return "en"
+        case .french:
+            return "fr"
+        case .spanish:
+            return "es"
+        case .italian:
+            return "it"
+        case .dutch:
+            return "nl"
+        case .portuguese:
+            return "pt"
+        case .polish:
+            return "pl"
+        case .turkish:
+            return "tr"
+        case .czech:
+            return "cs"
+        case .chinese:
+            return "zh"
         case .auto:
             return "auto"
         }
@@ -63,6 +126,24 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return Locale(identifier: "de_DE")
         case .english:
             return Locale(identifier: "en_US")
+        case .french:
+            return Locale(identifier: "fr_FR")
+        case .spanish:
+            return Locale(identifier: "es_ES")
+        case .italian:
+            return Locale(identifier: "it_IT")
+        case .dutch:
+            return Locale(identifier: "nl_NL")
+        case .portuguese:
+            return Locale(identifier: "pt_PT")
+        case .polish:
+            return Locale(identifier: "pl_PL")
+        case .turkish:
+            return Locale(identifier: "tr_TR")
+        case .czech:
+            return Locale(identifier: "cs_CZ")
+        case .chinese:
+            return Locale(identifier: "zh_CN")
         case .auto:
             return Locale.current
         }
@@ -140,6 +221,8 @@ struct DictationStartOptions {
     let language: DictationLanguage
     let translationOutput: TranslationOutputMode
     let performance: DictationPerformance
+    let selectedVoiceProviderID: String
+    let selectedVoiceModelID: String
     let liveRewriteScope: LiveRewriteScope
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
@@ -288,6 +371,8 @@ final class DictationRuntime: @unchecked Sendable {
             let bootstrapConfig = ASRConfig(
                 languageHint: "de",
                 translationMode: .original,
+                providerID: VoiceProviderID.whisperCpp.rawValue,
+                catalogModelID: LocalVoiceModelCatalog.defaultModelID,
                 modelID: runtime.defaultModelFileName,
                 backend: .whisperCpp,
                 latencyProfile: .streaming,
@@ -1438,13 +1523,19 @@ final class DictationRuntime: @unchecked Sendable {
     private func configureEngine(for options: DictationStartOptions) throws {
         let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(bundle: .main, appName: "WisprLocal")
         let preset = selectEnginePreset(options: options)
-        let modelFile = selectModelFileName(runtime: runtime, preset: preset, options: options)
+        let modelDescriptor = selectedVoiceModelDescriptor(for: options, runtime: runtime)
+        let modelFile = modelDescriptor.localFileName ?? runtime.defaultModelFileName
         let modelURL = runtime.modelsDirectoryURL.appendingPathComponent(modelFile)
 
         let latencyProfile = selectLatencyProfile(options: options, preset: preset)
+        let translationMode: ASRTranslationMode = modelDescriptor.supportsTranslationToEnglish
+            ? options.translationOutput.asrTranslationMode
+            : .original
         let config = ASRConfig(
             languageHint: options.language.asrHint,
-            translationMode: options.translationOutput.asrTranslationMode,
+            translationMode: translationMode,
+            providerID: modelDescriptor.providerID,
+            catalogModelID: modelDescriptor.id,
             modelID: modelFile,
             backend: .whisperCpp,
             latencyProfile: latencyProfile,
@@ -1550,37 +1641,73 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
-    private func selectModelFileName(runtime: InstalledWhisperRuntime, preset: EnginePreset, options: DictationStartOptions) -> String {
-        let names = Set(runtime.availableModelFileNames)
+    private func selectedVoiceModelDescriptor(
+        for options: DictationStartOptions,
+        runtime: InstalledWhisperRuntime
+    ) -> VoiceModelDescriptor {
+        let includeParakeet = false
+        let availableModelFiles = Set(runtime.availableModelFileNames)
+        let catalogModels = LocalVoiceModelCatalog.availableModels(includeParakeet: includeParakeet)
+        let fallbackDescriptor = LocalVoiceModelCatalog.model(id: LocalVoiceModelCatalog.defaultModelID, includeParakeet: includeParakeet)
+            ?? catalogModels.first
+            ?? VoiceModelDescriptor(
+                id: LocalVoiceModelCatalog.defaultModelID,
+                providerID: VoiceProviderID.whisperCpp.rawValue,
+                displayName: "Standard",
+                languageCode: nil,
+                languageScope: .all,
+                supportsTranslationToEnglish: true,
+                speedScore: 8,
+                accuracyScore: 5,
+                sizeLabel: "500 MB",
+                installState: .bundled,
+                localFileName: runtime.defaultModelFileName,
+                downloadIdentifier: "base"
+            )
 
-        let preferred: [String]
-        if options.mode == .streaming && options.performance == .accurate {
-            preferred = ["ggml-small.bin", "ggml-base.bin"]
-        } else if options.mode == .finalize && options.performance == .balanced {
-            preferred = ["ggml-small.bin", "ggml-base.bin"]
-        } else if options.mode == .finalize && options.performance == .accurate {
-            preferred = ["ggml-small.bin", "ggml-base.bin"]
-        } else if preset.modelID.lowercased().contains("medium") {
-            preferred = ["ggml-medium.bin", "ggml-small.bin", "ggml-base.bin"]
-        } else if preset.modelID.lowercased().contains("small") || options.performance == .accurate {
-            preferred = ["ggml-small.bin", "ggml-base.bin"]
-        } else {
-            preferred = ["ggml-base.bin", "ggml-small.bin"]
+        let requestedDescriptor = LocalVoiceModelCatalog.model(id: options.selectedVoiceModelID, includeParakeet: includeParakeet)
+        guard var resolvedDescriptor = requestedDescriptor else {
+            return fallbackDescriptor
         }
 
-        for candidate in preferred where names.contains(candidate) {
-            return candidate
+        if resolvedDescriptor.providerID != VoiceProviderID.whisperCpp.rawValue {
+            return fallbackDescriptor
         }
 
-        if names.contains(runtime.defaultModelFileName) {
-            return runtime.defaultModelFileName
+        if let requiredLanguageCode = resolvedDescriptor.languageCode,
+           options.language != .auto,
+           requiredLanguageCode != options.language.rawValue {
+            let compatibleOverride = catalogModels.first {
+                $0.providerID == resolvedDescriptor.providerID
+                    && $0.id != resolvedDescriptor.id
+                    && $0.languageCode == nil
+                    && modelFileExists($0, availableModelFiles: availableModelFiles)
+            }
+            resolvedDescriptor = compatibleOverride ?? fallbackDescriptor
         }
 
-        if let first = names.sorted().first {
-            return first
+        if modelFileExists(resolvedDescriptor, availableModelFiles: availableModelFiles) {
+            return resolvedDescriptor
         }
 
-        return runtime.defaultModelFileName
+        if modelFileExists(fallbackDescriptor, availableModelFiles: availableModelFiles) {
+            return fallbackDescriptor
+        }
+
+        if let installedCatalogDescriptor = catalogModels.first(where: {
+            modelFileExists($0, availableModelFiles: availableModelFiles)
+        }) {
+            return installedCatalogDescriptor
+        }
+
+        return fallbackDescriptor
+    }
+
+    private func modelFileExists(_ descriptor: VoiceModelDescriptor, availableModelFiles: Set<String>) -> Bool {
+        guard let localFileName = descriptor.localFileName else {
+            return false
+        }
+        return availableModelFiles.contains(localFileName)
     }
 
     private func applySnippetsToFinalText(_ text: String, locale: Locale) -> String {

@@ -5,7 +5,7 @@ extension AIWritingStyle {
     func localizedDisplayName(interfaceLanguageCode: String) -> String {
         switch (interfaceLanguageCode, self) {
         case ("en", .none):
-            return "None"
+            return "As spoken"
         case ("en", .simple):
             return "Simple"
         case ("en", .business):
@@ -21,7 +21,7 @@ extension AIWritingStyle {
         case ("en", .diplomatic):
             return "Diplomatic"
         case (_, .none):
-            return "Kein Stil"
+            return "Wie gesprochen"
         case (_, .simple):
             return "Einfach"
         case (_, .business):

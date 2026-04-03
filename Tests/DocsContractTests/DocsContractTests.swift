@@ -16,6 +16,9 @@ final class DocsContractTests: XCTestCase {
         XCTAssertTrue(apiDesign.contains("liveRewriteScope"))
         XCTAssertTrue(apiDesign.contains("finalResultDeliveryMode"))
         XCTAssertTrue(apiDesign.contains("clipboardFallbackWhenNoTarget"))
+        XCTAssertTrue(apiDesign.contains("selectedVoiceProviderID"))
+        XCTAssertTrue(apiDesign.contains("selectedVoiceModelID"))
+        XCTAssertTrue(apiDesign.contains("LocalVoiceModelCatalog"))
         XCTAssertTrue(apiDesign.contains("bounded mutable tail"))
         XCTAssertTrue(apiDesign.contains("raw Whisper transcript"))
     }
@@ -27,6 +30,7 @@ final class DocsContractTests: XCTestCase {
         XCTAssertTrue(systemDesign.contains("live rewrite scope"))
         XCTAssertTrue(systemDesign.contains("Transcription -> optional Translation -> optional AI Processing"))
         XCTAssertTrue(systemDesign.contains("Auto language detection controls recognition only and never implies translation"))
+        XCTAssertTrue(systemDesign.contains("Speech-model selection is explicit"))
         XCTAssertTrue(systemDesign.contains("dynamic remote API catalogs"))
         XCTAssertTrue(systemDesign.contains("OpenAI, Groq, Mistral, DeepSeek"))
     }
@@ -47,7 +51,7 @@ final class DocsContractTests: XCTestCase {
 
         XCTAssertFalse(version.isEmpty)
         XCTAssertNotNil(version.range(of: versionPattern, options: .regularExpression))
-        XCTAssertEqual(version, "0.33.0")
+        XCTAssertEqual(version, "0.34.3")
     }
 
     private func readRepositoryFile(_ relativePath: String) throws -> String {

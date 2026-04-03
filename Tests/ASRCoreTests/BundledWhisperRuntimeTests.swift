@@ -258,6 +258,34 @@ final class BundledWhisperRuntimeTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: destinationRuntime.appendingPathComponent("runtime-manifest.json").path))
     }
 
+    func testInstallBundledRuntimePreservesAdditionalInstalledModelsWhenRequested() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_preserve_models_test_\(UUID().uuidString)")
+        let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
+        let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
+        let destinationRuntime = root.appendingPathComponent("destination/Runtime", isDirectory: true)
+        let destinationModels = destinationRuntime.appendingPathComponent("models", isDirectory: true)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: sourceModels, withIntermediateDirectories: true)
+        try fm.createDirectory(at: destinationModels, withIntermediateDirectories: true)
+
+        try Data("#!/bin/sh\necho test\n".utf8).write(to: sourceRuntime.appendingPathComponent("whisper-cli"))
+        try Data([0x01]).write(to: sourceModels.appendingPathComponent("ggml-base.bin"))
+        try Data([0x09]).write(to: destinationModels.appendingPathComponent("ggml-large-v3.bin"))
+
+        let runtime = try BundledWhisperRuntimeInstaller.installRuntime(
+            from: sourceRuntime,
+            destinationRuntimeDirectory: destinationRuntime,
+            appName: "WisprLocalTest",
+            preserveAdditionalModels: true
+        )
+
+        XCTAssertEqual(runtime.availableModelFileNames, ["ggml-base.bin", "ggml-large-v3.bin"])
+        XCTAssertTrue(fm.fileExists(atPath: destinationModels.appendingPathComponent("ggml-large-v3.bin").path))
+    }
+
     private func sha256Hex(of data: Data) -> String {
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()

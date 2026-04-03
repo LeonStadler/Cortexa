@@ -15,6 +15,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - runtime backend strategy
 - model registry/checksum verification
 - bundled runtime installer (app resources -> local app-support runtime)
+- local speech-model catalog with explicit provider/model descriptors, install state, and per-language selection
 
 2. `AudioCore`
 - AVAudioEngine capture
@@ -55,7 +56,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - macOS menu bar app + settings
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
-  snippet persistence/import/export UI, language/performance selection, translation selection,
+  snippet persistence/import/export UI, explicit speech-provider/model selection, language/performance selection, translation selection,
   transcript history, AI processing model/goal/format controls, license activation UI, hotkey control,
   dedicated app-behavior, sound, text-input, history-retention, and model-visibility settings
 - sound feedback controls are app-local cues for start/stop/failure states and do not control the system microphone volume or any global playback-pausing behavior
@@ -73,24 +74,26 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 2. AX target snapshot captured once (`bindingID` immutable).
 3. Audio captured and sent to ASR.
    Optional preprocessing may adjust input level, suppress silence, attenuate weak background noise, or normalize dynamic gain before samples reach ASR.
-4. Final transcript returned in the spoken language unless explicit translation is enabled.
-5. Snippet replacement applied.
-6. Optional translation applied.
-7. Optional AI processing applied.
-8. Single deterministic insert into original target.
-9. Session transitions to completed.
+4. The selected local speech model is resolved from the visible catalog, with optional language-specific overrides and fallback to bundled `Standard`.
+5. Final transcript returned in the spoken language unless explicit translation is enabled and the selected model supports Whisper translation to English.
+6. Snippet replacement applied.
+7. Optional translation applied.
+8. Optional AI processing applied.
+9. Single deterministic insert into original target.
+10. Session transitions to completed.
 
 ### 2) Streaming Insert (macOS)
 
 1. Start session and capture immutable target.
-2. Partial segments arrive continuously.
-3. Stabilizer computes `committedPrefix` and `tail`.
-4. Snippet replacement applies to the current streaming text.
-5. A transcript sanitizer removes common non-speech placeholders such as `silence`, `music`, `cough`, or `applause`.
-6. Optional live AI processing can reshape only the current mutable tail, never previously committed text.
-7. Inserter patches only the mutable tail while preserving committed text already shown to the user.
-8. Focus changes are ignored (target remains locked).
-9. Stop finalizes the tail, runs a final AI pass when enabled, and closes the session.
+2. The effective speech model is selected once for the session before streaming starts.
+3. Partial segments arrive continuously.
+4. Stabilizer computes `committedPrefix` and `tail`.
+5. Snippet replacement applies to the current streaming text.
+6. A transcript sanitizer removes common non-speech placeholders such as `silence`, `music`, `cough`, or `applause`.
+7. Optional live AI processing can reshape only the current mutable tail, never previously committed text.
+8. Inserter patches only the mutable tail while preserving committed text already shown to the user.
+9. Focus changes are ignored (target remains locked).
+10. Stop finalizes the tail, runs a final AI pass when enabled, and closes the session.
 
 ### 3) iOS/iPadOS Keyboard Flow
 
@@ -121,6 +124,10 @@ Core invariants:
 - The live rewrite scope determines how much recent text may still be reshaped before it is considered committed.
 - Auto language detection controls recognition only and never implies translation.
 - Translation is explicit and currently limited to Whisper's English translation path.
+- Auto language detection controls recognition only and never implies translation.
+- Speech-model selection is explicit and independent from the runtime quality preset.
+- Quality presets tune chunking/beam/thread behavior but no longer silently switch between bundled Whisper models.
+- Language-specific model variants may only be used when the input language matches or when the session runs in `Auto`.
 - AI processing is optional post-processing and must fail closed to the raw transcript path.
 
 ## Permission / Security Matrix
@@ -138,9 +145,11 @@ Core invariants:
 - deterministic insertion semantics
 - explicit `Transcription -> optional Translation -> optional AI Processing` staging
 - optional fallback path isolated behind config
+- bundled `Standard` keeps first-run dictation available without extra downloads, while larger local Whisper variants are installed on demand
+- the runtime installer preserves already downloaded local speech models when it syncs bundled runtime assets into app support
 - provider-agnostic AI processing layer supports Apple on-device and dynamic remote API catalogs without baking remote model IDs into the app
 - remote provider presets share one OpenAI-compatible transport layer, so brokers like OpenRouter and direct providers such as OpenAI, Groq, Mistral, DeepSeek or local runtimes like Ollama/LM Studio can be added without a separate model registry per vendor
-- the menu bar shell persists semantically named settings groups for app lifecycle, audio preprocessing, sound feedback, text delivery, model visibility, and transcript retention, and some of them are applied immediately through the app state
+- the menu bar shell persists semantically named settings groups for app lifecycle, audio preprocessing, sound feedback, text delivery, transcript retention, and explicit local speech-model selection, and some of them are applied immediately through the app state
 - the voice-model active duration gives the runtime a warm/unload boundary, so loaded model state can be released after inactivity and rebuilt on demand without changing provider behavior
 - AI provider errors degrade to untranslated/unprocessed text instead of blocking dictation
 - clipboard-based fallback remains explicit because it is less private than direct insertion

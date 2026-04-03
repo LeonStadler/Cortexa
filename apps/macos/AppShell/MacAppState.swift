@@ -1,4 +1,5 @@
 import AppKit
+import ASRCore
 import AVFoundation
 import AIProcessingCore
 import AudioCore
@@ -257,18 +258,40 @@ final class MacAppState: ObservableObject {
     @Published var selectedLanguage: DictationLanguage {
         didSet {
             userDefaults.set(selectedLanguage.rawValue, forKey: UserDefaultsKeys.selectedLanguage)
+            sanitizeSpeechModelSelections()
         }
     }
 
     @Published var translationOutputMode: TranslationOutputMode {
         didSet {
             userDefaults.set(translationOutputMode.rawValue, forKey: UserDefaultsKeys.translationOutputMode)
+            sanitizeSpeechModelSelections()
         }
     }
 
     @Published var performanceProfile: DictationPerformance {
         didSet {
             userDefaults.set(performanceProfile.rawValue, forKey: UserDefaultsKeys.performanceProfile)
+        }
+    }
+
+    @Published var selectedVoiceProviderID: String {
+        didSet {
+            userDefaults.set(selectedVoiceProviderID, forKey: UserDefaultsKeys.selectedVoiceProviderID)
+            sanitizeSpeechModelSelections()
+        }
+    }
+
+    @Published var selectedVoiceModelID: String {
+        didSet {
+            userDefaults.set(selectedVoiceModelID, forKey: UserDefaultsKeys.selectedVoiceModelID)
+            sanitizeSpeechModelSelections()
+        }
+    }
+
+    @Published var voiceLanguageOverrides: [VoiceLanguageOverride] {
+        didSet {
+            persistVoiceLanguageOverrides()
         }
     }
 
@@ -352,10 +375,17 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var compactMenuBarDesign: Bool {
+        didSet {
+            userDefaults.set(compactMenuBarDesign, forKey: UserDefaultsKeys.compactMenuBarDesign)
+        }
+    }
+
     @Published var showInDock: Bool {
         didSet {
             userDefaults.set(showInDock, forKey: UserDefaultsKeys.showInDock)
             applyActivationPolicy()
+            reopenSettingsWindowAfterDockPolicyChange()
         }
     }
 
@@ -530,6 +560,10 @@ final class MacAppState: ObservableObject {
     @Published var snippetRules: [SnippetRule] = []
     @Published var transcriptHistory: [TranscriptHistoryEntry] = []
     @Published private(set) var aiModels: [AIModelDescriptor] = []
+    @Published private(set) var voiceProviders: [VoiceProviderDescriptor] = []
+    @Published private(set) var voiceModels: [VoiceModelDescriptor] = []
+    @Published private(set) var installedVoiceModelFileNames: Set<String> = []
+    @Published private(set) var voiceModelOperationInFlightIDs: Set<String> = []
 
     @Published var recordingStatus: String = "Idle"
     @Published var diagnosticsText: String = "Initializing ASR runtime..."
@@ -741,6 +775,44 @@ final class MacAppState: ObservableObject {
         return remoteProviders.first(where: { $0.id == selectedRemoteProviderID })
     }
 
+    var selectedVoiceProvider: VoiceProviderDescriptor? {
+        voiceProviders.first(where: { $0.id == selectedVoiceProviderID })
+    }
+
+    var visibleVoiceModels: [VoiceModelDescriptor] {
+        voiceModels.filter { $0.providerID == selectedVoiceProviderID }
+    }
+
+    var selectedVoiceModel: VoiceModelDescriptor? {
+        voiceModels.first(where: { $0.id == selectedVoiceModelID })
+    }
+
+    var selectedVoiceModelSupportsTranslation: Bool {
+        selectedVoiceModel?.supportsTranslationToEnglish ?? false
+    }
+
+    var speechTranslationAvailable: Bool {
+        selectedVoiceModelSupportsTranslation
+    }
+
+    var selectedVoiceModelLanguageOptions: [DictationLanguage] {
+        voiceLanguageOptions(for: selectedVoiceModel)
+    }
+
+    var selectedVoiceModelLanguageHintText: String? {
+        guard let selectedVoiceModel else { return nil }
+        if let languageCode = selectedVoiceModel.languageCode {
+            let languageName = DictationLanguage(rawValue: languageCode)?.displayName ?? languageCode.uppercased()
+            return "Dieses Modell ist auf \(languageName) festgelegt. Die Sprachauswahl reduziert sich deshalb auf \(languageName) und Auto."
+        }
+        return nil
+    }
+
+    var selectedLanguageVoiceOverride: VoiceLanguageOverride? {
+        guard selectedLanguage != .auto else { return nil }
+        return voiceLanguageOverrides.first(where: { $0.languageCode == selectedLanguage.rawValue })
+    }
+
     var effectiveAIProcessingEnabled: Bool {
         aiProcessingEnabled && (selectedAIModel?.availability.isAvailable ?? false)
     }
@@ -806,6 +878,9 @@ final class MacAppState: ObservableObject {
         static let selectedLanguage = "wispr.settings.selectedLanguage"
         static let translationOutputMode = "wispr.settings.translationOutputMode"
         static let performanceProfile = "wispr.settings.performanceProfile"
+        static let selectedVoiceProviderID = "wispr.settings.selectedVoiceProviderID"
+        static let selectedVoiceModelID = "wispr.settings.selectedVoiceModelID"
+        static let voiceLanguageOverrides = "wispr.settings.voiceLanguageOverrides"
         static let selectedHotkey = "wispr.settings.selectedHotkey"
         static let toggleShortcutEnabled = "wispr.settings.toggleShortcutEnabled"
         static let holdToDictateEnabled = "wispr.settings.holdToDictateEnabled"
@@ -818,6 +893,7 @@ final class MacAppState: ObservableObject {
         static let clipboardFallbackWhenNoTarget = "wispr.settings.clipboardFallbackWhenNoTarget"
         static let liveRewriteScope = "wispr.settings.liveRewriteScope"
         static let showMenuBarShortcutHints = "wispr.settings.showMenuBarShortcutHints"
+        static let compactMenuBarDesign = "wispr.settings.compactMenuBarDesign"
         static let showInDock = "wispr.settings.showInDock"
         static let launchOnLoginEnabled = "wispr.settings.launchOnLoginEnabled"
         static let automaticallyCheckForUpdates = "wispr.settings.automaticallyCheckForUpdates"
@@ -856,6 +932,7 @@ final class MacAppState: ObservableObject {
     private let permissionController: PermissionControlling
     private let capabilityProfiler = CapabilityProfiler()
     private let aiRemoteProviderSecretStore = AIRemoteProviderSecretStore()
+    private let voiceModelInstaller = VoiceModelInstaller()
     private var aiProcessingService = AIProcessingService()
     private let appConfiguration: MacAppConfiguration
 
@@ -903,6 +980,17 @@ final class MacAppState: ObservableObject {
             self.performanceProfile = .auto
         }
 
+        self.selectedVoiceProviderID = userDefaults.string(forKey: UserDefaultsKeys.selectedVoiceProviderID)
+            ?? LocalVoiceModelCatalog.defaultProviderID
+        self.selectedVoiceModelID = userDefaults.string(forKey: UserDefaultsKeys.selectedVoiceModelID)
+            ?? LocalVoiceModelCatalog.defaultModelID
+        if let data = userDefaults.data(forKey: UserDefaultsKeys.voiceLanguageOverrides),
+           let decoded = try? JSONDecoder().decode([VoiceLanguageOverride].self, from: data) {
+            self.voiceLanguageOverrides = decoded
+        } else {
+            self.voiceLanguageOverrides = []
+        }
+
         if let rawHotkey = userDefaults.string(forKey: UserDefaultsKeys.selectedHotkey),
            let parsedHotkey = HotkeyBinding.from(rawValue: rawHotkey) {
             self.selectedHotkey = parsedHotkey
@@ -937,6 +1025,7 @@ final class MacAppState: ObservableObject {
         }
 
         self.showMenuBarShortcutHints = userDefaults.object(forKey: UserDefaultsKeys.showMenuBarShortcutHints) as? Bool ?? false
+        self.compactMenuBarDesign = userDefaults.object(forKey: UserDefaultsKeys.compactMenuBarDesign) as? Bool ?? false
         self.showInDock = userDefaults.object(forKey: UserDefaultsKeys.showInDock) as? Bool ?? false
         if userDefaults.object(forKey: UserDefaultsKeys.launchOnLoginEnabled) != nil {
             self.launchOnLoginEnabled = userDefaults.bool(forKey: UserDefaultsKeys.launchOnLoginEnabled)
@@ -1051,7 +1140,9 @@ final class MacAppState: ObservableObject {
         self.remoteProviderAPIKeyDraft = initialSelectedRemoteProviderID.flatMap {
             aiRemoteProviderSecretStore.loadAPIKey(providerID: $0)
         } ?? ""
+        refreshVoiceModelCatalog()
         sanitizeAIProcessingSelections()
+        sanitizeSpeechModelSelections()
 
         dictationRuntime.onStatus = { [weak self] status in
             self?.recordingStatus = status
@@ -1147,6 +1238,11 @@ final class MacAppState: ObservableObject {
 
     func openHistorySettingsWindow() {
         selectedSettingsTab = .history
+        openSettingsWindow()
+    }
+
+    func openAISettingsWindow() {
+        selectedSettingsTab = .ai
         openSettingsWindow()
     }
 
@@ -1348,6 +1444,8 @@ final class MacAppState: ObservableObject {
             language: selectedLanguage,
             translationOutput: translationOutputMode,
             performance: performanceProfile,
+            selectedVoiceProviderID: effectiveVoiceProviderID(for: selectedLanguage),
+            selectedVoiceModelID: effectiveVoiceModelDescriptor(for: selectedLanguage)?.id ?? selectedVoiceModelID,
             liveRewriteScope: liveRewriteScope,
             snippetRules: snippetRules,
             finalResultDeliveryMode: finalResultDeliveryMode,
@@ -1361,6 +1459,157 @@ final class MacAppState: ObservableObject {
         )
     }
 
+    func refreshVoiceModelCatalog() {
+        let providers = LocalVoiceModelCatalog.availableProviders()
+        voiceProviders = providers
+        voiceModels = LocalVoiceModelCatalog.availableModels(includeParakeet: providers.contains(where: { $0.id == VoiceProviderID.nvidiaParakeet.rawValue }))
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let installedFiles = try await self.voiceModelInstaller.installedWhisperModelFileNames()
+                self.installedVoiceModelFileNames = installedFiles
+            } catch {
+                self.installedVoiceModelFileNames = []
+                self.appendDiagnostic("Speech-Model-Katalog konnte nicht vollständig geladen werden: \(error.localizedDescription)")
+            }
+
+            self.sanitizeSpeechModelSelections()
+        }
+    }
+
+    func installVoiceModel(_ descriptor: VoiceModelDescriptor) {
+        guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
+            appendDiagnostic("Dieser Speech-Anbieter ist lokal aktuell nicht installierbar.")
+            return
+        }
+
+        voiceModelOperationInFlightIDs.insert(descriptor.id)
+        appendDiagnostic("Installiere Speech-Modell \(descriptor.displayName)...")
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.voiceModelOperationInFlightIDs.remove(descriptor.id) }
+
+            do {
+                let runtime = try await self.voiceModelInstaller.install(descriptor)
+                self.installedVoiceModelFileNames = Set(runtime.availableModelFileNames)
+                self.sanitizeSpeechModelSelections()
+                self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde installiert.")
+            } catch {
+                self.appendDiagnostic("Speech-Modell \(descriptor.displayName) konnte nicht installiert werden: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func removeVoiceModel(_ descriptor: VoiceModelDescriptor) {
+        guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
+            appendDiagnostic("Dieser Speech-Anbieter ist lokal aktuell nicht entfernbar.")
+            return
+        }
+
+        voiceModelOperationInFlightIDs.insert(descriptor.id)
+        appendDiagnostic("Entferne Speech-Modell \(descriptor.displayName)...")
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.voiceModelOperationInFlightIDs.remove(descriptor.id) }
+
+            do {
+                let runtime = try await self.voiceModelInstaller.remove(descriptor)
+                self.installedVoiceModelFileNames = Set(runtime.availableModelFileNames)
+                self.voiceLanguageOverrides.removeAll { $0.modelID == descriptor.id }
+                self.sanitizeSpeechModelSelections()
+                self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde entfernt.")
+            } catch {
+                self.appendDiagnostic("Speech-Modell \(descriptor.displayName) konnte nicht entfernt werden: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func setSelectedVoiceModel(_ descriptor: VoiceModelDescriptor) {
+        selectedVoiceProviderID = descriptor.providerID
+        selectedVoiceModelID = descriptor.id
+    }
+
+    func assignSelectedVoiceModelToCurrentLanguage() {
+        guard selectedLanguage != .auto, let descriptor = selectedVoiceModel else { return }
+        voiceLanguageOverrides.removeAll { $0.languageCode == selectedLanguage.rawValue }
+        voiceLanguageOverrides.append(
+            VoiceLanguageOverride(languageCode: selectedLanguage.rawValue, modelID: descriptor.id)
+        )
+        sanitizeSpeechModelSelections()
+        appendDiagnostic("Für \(selectedLanguage.displayName) wird jetzt standardmäßig \(descriptor.displayName) verwendet.")
+    }
+
+    func clearSelectedLanguageVoiceOverride() {
+        guard selectedLanguage != .auto else { return }
+        voiceLanguageOverrides.removeAll { $0.languageCode == selectedLanguage.rawValue }
+        sanitizeSpeechModelSelections()
+        appendDiagnostic("Sprachspezifisches Speech-Modell für \(selectedLanguage.displayName) entfernt.")
+    }
+
+    func isVoiceModelInstalled(_ descriptor: VoiceModelDescriptor) -> Bool {
+        guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
+            return descriptor.installState == .bundled
+        }
+        guard let localFileName = descriptor.localFileName else { return false }
+        return installedVoiceModelFileNames.contains(localFileName)
+    }
+
+    func isVoiceModelBusy(_ descriptor: VoiceModelDescriptor) -> Bool {
+        voiceModelOperationInFlightIDs.contains(descriptor.id)
+    }
+
+    func canUseVoiceModel(_ descriptor: VoiceModelDescriptor, for language: DictationLanguage) -> Bool {
+        if descriptor.providerID != VoiceProviderID.whisperCpp.rawValue {
+            return false
+        }
+        if !isVoiceModelInstalled(descriptor) {
+            return false
+        }
+        guard let languageCode = descriptor.languageCode else { return true }
+        return language == .auto || language.rawValue == languageCode
+    }
+
+    func voiceLanguageOptions(for descriptor: VoiceModelDescriptor?) -> [DictationLanguage] {
+        guard let descriptor, let languageCode = descriptor.languageCode else {
+            return DictationLanguage.allCases
+        }
+
+        let fixedLanguage = DictationLanguage(rawValue: languageCode) ?? .english
+        return [.auto, fixedLanguage]
+    }
+
+    private func effectiveVoiceProviderID(for language: DictationLanguage) -> String {
+        effectiveVoiceModelDescriptor(for: language)?.providerID ?? selectedVoiceProviderID
+    }
+
+    private func effectiveVoiceModelDescriptor(for language: DictationLanguage) -> VoiceModelDescriptor? {
+        let overrideDescriptor: VoiceModelDescriptor?
+        if language != .auto,
+           let overrideID = voiceLanguageOverrides.first(where: { $0.languageCode == language.rawValue })?.modelID {
+            overrideDescriptor = voiceModels.first(where: { $0.id == overrideID })
+        } else {
+            overrideDescriptor = nil
+        }
+
+        if let overrideDescriptor, canUseVoiceModel(overrideDescriptor, for: language) {
+            return overrideDescriptor
+        }
+
+        if let selectedVoiceModel, canUseVoiceModel(selectedVoiceModel, for: language) {
+            return selectedVoiceModel
+        }
+
+        if let standard = voiceModels.first(where: { $0.id == LocalVoiceModelCatalog.defaultModelID }),
+           canUseVoiceModel(standard, for: language) {
+            return standard
+        }
+
+        return voiceModels.first(where: { canUseVoiceModel($0, for: language) })
+    }
+
     private func sanitizeAIProcessingSelections() {
         if !aiFormattingMode.allowedWritingStyles.contains(aiWritingStyle) {
             aiWritingStyle = .none
@@ -1368,6 +1617,54 @@ final class MacAppState: ObservableObject {
 
         if !aiFormattingMode.supportsSalutation && aiSalutation != .none {
             aiSalutation = .none
+        }
+    }
+
+    private func sanitizeSpeechModelSelections() {
+        if voiceProviders.isEmpty {
+            voiceProviders = LocalVoiceModelCatalog.availableProviders()
+        }
+        if voiceModels.isEmpty {
+            voiceModels = LocalVoiceModelCatalog.availableModels(includeParakeet: false)
+        }
+
+        if !voiceProviders.contains(where: { $0.id == selectedVoiceProviderID }) {
+            selectedVoiceProviderID = LocalVoiceModelCatalog.defaultProviderID
+        }
+
+        if let selectedVoiceModel,
+           selectedVoiceModel.providerID != selectedVoiceProviderID {
+            selectedVoiceModelID = voiceModels.first(where: { $0.providerID == selectedVoiceProviderID })?.id
+                ?? LocalVoiceModelCatalog.defaultModelID
+        }
+
+        if selectedVoiceModel == nil {
+            selectedVoiceModelID = voiceModels.first(where: { $0.id == LocalVoiceModelCatalog.defaultModelID })?.id
+                ?? voiceModels.first(where: { $0.providerID == selectedVoiceProviderID })?.id
+                ?? LocalVoiceModelCatalog.defaultModelID
+        }
+
+        if let selectedVoiceModel {
+            let availableLanguages = Set(voiceLanguageOptions(for: selectedVoiceModel).map(\.rawValue))
+            if !availableLanguages.contains(selectedLanguage.rawValue) {
+                selectedLanguage = .auto
+            }
+            if let languageCode = selectedVoiceModel.languageCode,
+               selectedLanguage == .auto {
+                selectedLanguage = DictationLanguage(rawValue: languageCode) ?? .english
+            }
+        }
+
+        voiceLanguageOverrides.removeAll { overrideEntry in
+            guard let descriptor = voiceModels.first(where: { $0.id == overrideEntry.modelID }) else {
+                return true
+            }
+            let language = DictationLanguage(rawValue: overrideEntry.languageCode) ?? .auto
+            return !canUseVoiceModel(descriptor, for: language)
+        }
+
+        if !speechTranslationAvailable, translationOutputMode != .original {
+            translationOutputMode = .original
         }
     }
 
@@ -1836,6 +2133,11 @@ final class MacAppState: ObservableObject {
         userDefaults.set(data, forKey: UserDefaultsKeys.remoteProviders)
     }
 
+    private func persistVoiceLanguageOverrides() {
+        guard let data = try? JSONEncoder().encode(voiceLanguageOverrides) else { return }
+        userDefaults.set(data, forKey: UserDefaultsKeys.voiceLanguageOverrides)
+    }
+
     private func rebuildAIProcessingStack(reason: String) {
         aiProcessingService = AIProcessingService(providers: makeAIProviders())
         dictationRuntime.setAIProcessingService(aiProcessingService)
@@ -1949,6 +2251,14 @@ final class MacAppState: ObservableObject {
         let targetPolicy: NSApplication.ActivationPolicy = showInDock ? .regular : .accessory
         if NSApplication.shared.activationPolicy() != targetPolicy {
             NSApplication.shared.setActivationPolicy(targetPolicy)
+        }
+    }
+
+    private func reopenSettingsWindowAfterDockPolicyChange() {
+        guard openSettingsHandler != nil else { return }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.openSettingsHandler?()
         }
     }
 
