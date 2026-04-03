@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -46,8 +47,7 @@ enum AppChangelogCatalog {
     static let latestEntries = load(limit: 5)
 
     static func load(limit: Int? = nil) -> [AppChangelogEntry] {
-        guard let url = Bundle.main.url(forResource: "changelog", withExtension: "md"),
-              let raw = try? String(contentsOf: url, encoding: .utf8) else {
+        guard let raw = loadMarkdown() else {
             return []
         }
 
@@ -122,6 +122,40 @@ enum AppChangelogCatalog {
         return Array(ordered.prefix(limit))
     }
 
+    private static func loadMarkdown() -> String? {
+        let bundleURL = Bundle.main.url(forResource: "changelog", withExtension: "md")
+        if let bundleURL,
+           let raw = try? String(contentsOf: bundleURL, encoding: .utf8) {
+            return raw
+        }
+
+        if let sourceURL = sourceChangelogURL,
+           let raw = try? String(contentsOf: sourceURL, encoding: .utf8) {
+            return raw
+        }
+
+        return nil
+    }
+
+    private static var sourceChangelogURL: URL? {
+        var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+
+        for _ in 0..<8 {
+            let candidate = directory.appendingPathComponent("changelog.md")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+
+            let parent = directory.deletingLastPathComponent()
+            if parent.path == directory.path {
+                break
+            }
+            directory = parent
+        }
+
+        return nil
+    }
+
     private static func parseEntryLine(_ rawLine: String) -> (date: Date, title: String)? {
         let pattern = #"^\-\s*(\d{4}-\d{2}-\d{2}):\s*(.+)$"#
         guard let regex = try? NSRegularExpression(pattern: pattern),
@@ -156,39 +190,146 @@ struct ChangelogSectionView: View {
         language.text(german, english)
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(text(
-                "Die neuesten Änderungen aus `changelog.md`.",
-                "The latest changes from `changelog.md`."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+    private var latestEntry: AppChangelogEntry? {
+        entries.first
+    }
 
-            if entries.isEmpty {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(text("Changelog", "Changelog"))
+                        .font(.headline.weight(.semibold))
+
+                    Spacer(minLength: 0)
+
+                    if let latestEntry {
+                        Label(text("Aktualisiert", "Updated"), systemImage: "clock")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(latestEntry.dateText)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Text(text(
-                    "Noch keine Changelog-Einträge verfügbar.",
-                    "No changelog entries available yet."
+                    "Die neuesten Änderungen aus `changelog.md`.",
+                    "The latest changes from `changelog.md`."
                 ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    StatPill(
+                        icon: "doc.text.magnifyingglass",
+                        label: text("Einträge", "Entries"),
+                        value: "\(entries.count)"
+                    )
+                    if let latestEntry {
+                        StatPill(
+                            icon: "sparkles",
+                            label: text("Neueste Kategorie", "Latest category"),
+                            value: latestEntry.categoryDisplayName(language: language)
+                        )
+                    }
+                }
+            }
+
+            if entries.isEmpty {
+                EmptyChangelogState(language: language)
             } else {
                 FeaturedChangelogCard(entry: entries[0], language: language)
 
                 if entries.count > 1 {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text(text("Ältere Einträge", "Earlier entries"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
 
-                        ForEach(Array(entries.dropFirst())) { entry in
-                            ChangelogEntryCard(entry: entry, language: language)
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(entries.dropFirst())) { entry in
+                                ChangelogEntryCard(entry: entry, language: language)
+                            }
                         }
                     }
                 }
             }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.accentColor.opacity(0.10),
+                            Color.secondary.opacity(0.04),
+                            Color(nsColor: .windowBackgroundColor).opacity(0.72)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.separator.opacity(0.22), lineWidth: 1)
+        )
+    }
+}
+
+private struct StatPill: View {
+    let icon: String
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2.weight(.semibold))
+            Text(label)
+                .font(.caption2.weight(.semibold))
+            Text(value)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.quaternary.opacity(0.24), in: Capsule())
+    }
+}
+
+private struct EmptyChangelogState: View {
+    let language: AppLanguage
+
+    private func text(_ german: String, _ english: String) -> String {
+        language.text(german, english)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(text("Keine Einträge gefunden", "No entries found"), systemImage: "newspaper")
+                .font(.subheadline.weight(.semibold))
+
+            Text(text(
+                "Die App konnte `changelog.md` noch nicht laden. Sobald die Datei im App-Bundle oder im Quelltext gefunden wird, erscheinen die Release-Notizen hier automatisch.",
+                "The app could not load `changelog.md` yet. As soon as the file is found in the app bundle or the source tree, the release notes will appear here automatically."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.quaternary.opacity(0.28))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.separator.opacity(0.22), lineWidth: 1)
+        )
     }
 }
 
@@ -235,25 +376,25 @@ private struct FeaturedChangelogCard: View {
                 Text(entry.categoryDisplayName(language: language))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(categoryColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(categoryColor.opacity(0.14), in: Capsule())
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(categoryColor.opacity(0.16), in: Capsule())
 
                 Text(entry.title)
-                    .font(.headline.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 0)
             }
 
             if !entry.highlights.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(entry.highlights.prefix(4), id: \.self) { highlight in
                         HStack(alignment: .firstTextBaseline, spacing: 7) {
-                            Circle()
-                                .fill(categoryColor.opacity(0.8))
-                                .frame(width: 5, height: 5)
-                                .padding(.top, 5)
+                            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                                .fill(categoryColor.opacity(0.85))
+                                .frame(width: 7, height: 7)
+                                .padding(.top, 6)
                             Text(highlight)
                                 .font(.subheadline)
                                 .foregroundStyle(.primary)
@@ -271,15 +412,15 @@ private struct FeaturedChangelogCard: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(16)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.accentColor.opacity(0.16),
-                            Color.accentColor.opacity(0.06),
-                            Color.secondary.opacity(0.04)
+                            Color.accentColor.opacity(0.18),
+                            Color.accentColor.opacity(0.08),
+                            Color.secondary.opacity(0.05)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -287,8 +428,8 @@ private struct FeaturedChangelogCard: View {
                 )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.separator.opacity(0.28), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.separator.opacity(0.22), lineWidth: 1)
         )
     }
 }
@@ -320,7 +461,7 @@ private struct ChangelogEntryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(entry.dateText)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -330,21 +471,21 @@ private struct ChangelogEntryCard: View {
                     .foregroundStyle(categoryColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(categoryColor.opacity(0.12), in: Capsule())
-
-                Text(entry.title)
-                    .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 0)
+                    .background(categoryColor.opacity(0.14), in: Capsule())
             }
 
+            Text(entry.title)
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+
             if !entry.highlights.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 5) {
                     ForEach(entry.highlights, id: \.self) { highlight in
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text("•")
-                                .foregroundStyle(.secondary)
+                            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                                .fill(categoryColor.opacity(0.72))
+                                .frame(width: 4, height: 4)
+                                .padding(.top, 6)
                             Text(highlight)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -362,14 +503,14 @@ private struct ChangelogEntryCard: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .padding(12)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.quaternary.opacity(0.32))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.quaternary.opacity(0.26))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.separator.opacity(0.35), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.separator.opacity(0.25), lineWidth: 1)
         )
     }
 }

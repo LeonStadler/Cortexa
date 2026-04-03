@@ -193,7 +193,7 @@ public struct AIRemoteProviderConfiguration: Codable, Equatable, Identifiable, S
             modelsPath: preset.defaultModelsPath,
             chatCompletionsPath: preset.defaultChatCompletionsPath,
             requiresAPIKey: preset.requiresAPIKey,
-            isEnabled: true,
+            isEnabled: false,
             appReferer: preset.supportsOpenRouterHeaders ? appReferer : nil,
             appTitle: appTitle
         )
@@ -253,11 +253,59 @@ public enum AISalutation: String, Codable, CaseIterable, Identifiable, Sendable 
     public var id: String { rawValue }
 }
 
+public enum AIRevisionGoal: String, Codable, CaseIterable, Identifiable, Sendable {
+    case cleanup
+    case adjustTone
+    case adjustSalutation
+    case adaptFormat
+
+    public var id: String { rawValue }
+}
+
+public enum AIFormattingMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case plainText
+    case email
+    case message
+    case whatsapp
+    case documentation
+    case scientificPaper
+
+    public var id: String { rawValue }
+
+    public var supportsSalutation: Bool {
+        switch self {
+        case .plainText, .email, .message, .whatsapp:
+            return true
+        case .documentation, .scientificPaper:
+            return false
+        }
+    }
+
+    public var allowedWritingStyles: [AIWritingStyle] {
+        switch self {
+        case .plainText:
+            return AIWritingStyle.allCases
+        case .email:
+            return [.none, .simple, .business, .friendlyConfident, .diplomatic]
+        case .message:
+            return [.none, .simple, .casual, .friendlyConfident, .enthusiastic, .diplomatic]
+        case .whatsapp:
+            return [.none, .simple, .casual, .friendlyConfident, .enthusiastic]
+        case .documentation:
+            return [.none, .simple, .academic]
+        case .scientificPaper:
+            return [.none, .simple, .academic]
+        }
+    }
+}
+
 public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
     public let enabled: Bool
     public let selectedModelID: String?
     public let applyDuringLiveInsertion: Bool
     public let applyToFinalResult: Bool
+    public let revisionGoal: AIRevisionGoal
+    public let formattingMode: AIFormattingMode
     public let style: AIWritingStyle
     public let salutation: AISalutation
 
@@ -266,6 +314,8 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
         selectedModelID: String?,
         applyDuringLiveInsertion: Bool = false,
         applyToFinalResult: Bool = true,
+        revisionGoal: AIRevisionGoal = .cleanup,
+        formattingMode: AIFormattingMode = .plainText,
         style: AIWritingStyle = .none,
         salutation: AISalutation = .none
     ) {
@@ -273,6 +323,8 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
         self.selectedModelID = selectedModelID
         self.applyDuringLiveInsertion = applyDuringLiveInsertion
         self.applyToFinalResult = applyToFinalResult
+        self.revisionGoal = revisionGoal
+        self.formattingMode = formattingMode
         self.style = style
         self.salutation = salutation
     }

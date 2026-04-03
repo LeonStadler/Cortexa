@@ -301,6 +301,7 @@ final class DictationRuntime: @unchecked Sendable {
             runtimePrepared = true
             publishDiagnostic("ASR runtime ready (bundled model loaded).")
             publishDebug("runtime.prepare.ready model=\(bootstrapModel.lastPathComponent)")
+            scheduleRuntimeUnloadIfNeeded()
 
             whisperEngine.onPartial = { [weak self] partial in
                 self?.handlePartialText(partial.text)
@@ -491,7 +492,7 @@ final class DictationRuntime: @unchecked Sendable {
             let final = try await whisperEngine.stopStreaming()
             let detectedLanguageCode = resolvedLanguageCode(from: final)
             let effectiveLocale = locale(for: detectedLanguageCode) ?? runningLocale
-            let normalized = normalizeText(final.text)
+            let normalized = sanitizeTranscriptArtifacts(in: normalizeText(final.text), stage: .final)
             let snippetAdjustedText = applySnippetsToFinalText(normalized, locale: effectiveLocale)
             let processingService = withSessionLock { aiProcessingService }
             let finalProcessingOutcome: AIProcessingOutcome
@@ -510,7 +511,7 @@ final class DictationRuntime: @unchecked Sendable {
                     reason: "Final AI processing is skipped while live insertion is active."
                 )
             }
-            let finalText = finalProcessingOutcome.text
+            let finalText = sanitizeTranscriptArtifacts(in: finalProcessingOutcome.text, stage: .final)
 
             if shouldDiscardTranscript(finalText) {
                 publishTranscript("")
@@ -578,7 +579,7 @@ final class DictationRuntime: @unchecked Sendable {
         guard snapshot.isRunning, snapshot.runningMode == .streaming else { return }
         guard snapshot.speechActivityDetected else { return }
 
-        let normalized = normalizeText(text)
+        let normalized = sanitizeTranscriptArtifacts(in: normalizeText(text), stage: .live)
         guard !normalized.isEmpty else { return }
 
         insertionQueue.async { [weak self] in
@@ -589,7 +590,10 @@ final class DictationRuntime: @unchecked Sendable {
             do {
                 let stable = self.stableCommitter.ingestPartial(normalized)
                 let committedWithSnippets = self.applySnippetsToFinalText(stable.committedPrefix, locale: self.runningLocale)
-                let mergedPatchText = self.normalizeText(committedWithSnippets + stable.tail)
+                let mergedPatchText = self.sanitizeTranscriptArtifacts(
+                    in: self.normalizeText(committedWithSnippets + stable.tail),
+                    stage: .live
+                )
                 let patchText = self.processLiveTextIfNeeded(mergedPatchText)
                 recoverablePatchText = patchText
 
@@ -1185,6 +1189,47 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         return false
+    }
+
+    private func sanitizeTranscriptArtifacts(in text: String, stage: AIProcessingStage) -> String {
+        guard !text.isEmpty else { return "" }
+
+        var cleaned = text
+        let artifactPatterns = [
+            #"\((?:music|musik|silence|stille|noise|rauschen|background noise|husten|cough|laughing|laughter|applause|beep)\)"#,
+            #"\[(?:music|musik|silence|stille|noise|rauschen|background noise|husten|cough|laughing|laughter|applause|beep)\]"#,
+            #"\*(?:music|musik|noise|rauschen|cough|husten|laughing|laughter)\*"#
+        ]
+
+        for pattern in artifactPatterns {
+            cleaned = cleaned.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+
+        cleaned = cleaned.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+        cleaned = cleaned.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let lowered = cleaned.lowercased()
+        let standaloneArtifacts: Set<String> = [
+            "music", "musik", "silence", "stille", "background noise", "noise", "rauschen",
+            "cough", "husten", "laughing", "laughter", "applause"
+        ]
+
+        if standaloneArtifacts.contains(lowered) {
+            return ""
+        }
+
+        if stage == .live,
+           cleaned.count <= 24,
+           standaloneArtifacts.contains(lowered.replacingOccurrences(of: "[^a-zA-ZäöüÄÖÜß ]", with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return ""
+        }
+
+        return cleaned
     }
 
     private func replaceInsertedText(

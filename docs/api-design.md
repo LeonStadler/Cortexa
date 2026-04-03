@@ -131,11 +131,29 @@ public enum AISalutation {
     case informal
 }
 
+public enum AIRevisionGoal {
+    case cleanup
+    case adjustTone
+    case adjustSalutation
+    case adaptFormat
+}
+
+public enum AIFormattingMode {
+    case plainText
+    case email
+    case message
+    case whatsapp
+    case documentation
+    case scientificPaper
+}
+
 public struct AIProcessingConfiguration {
     let enabled: Bool
     let selectedModelID: String?
     let applyDuringLiveInsertion: Bool
     let applyToFinalResult: Bool
+    let revisionGoal: AIRevisionGoal
+    let formattingMode: AIFormattingMode
     let style: AIWritingStyle
     let salutation: AISalutation
 }
@@ -149,6 +167,8 @@ Current provider surface:
 - Models that are unavailable locally, unsupported on the current device, or missing required credentials are excluded from quick settings.
 - The macOS shell shows AI models directly without a separate model-visibility toggle; the catalog keeps only the provider metadata required for selection and quick settings.
 - The macOS shell keeps a configurable voice-model active duration so the runtime can unload idle model state after a short warm window instead of keeping it resident forever.
+- AI configuration now separates the default cleanup goal from optional tone, salutation, and output-format adaptation. Formatting modes such as email, message, WhatsApp, documentation, and scientific writing are propagated into the shared prompt builder for both Apple and remote providers.
+- Writing-style options are constrained by the selected formatting mode so the shell does not offer obviously incompatible combinations such as casual scientific writing or businesslike documentation.
 - If AI processing is disabled, unavailable, or fails at runtime, the raw transcript path remains the fallback and dictation continues.
 
 ## AppShell Runtime Options (macOS)
@@ -161,9 +181,19 @@ struct DictationStartOptions {
     let translationOutput: TranslationOutputMode // .original | .english
     let liveRewriteScope: LiveRewriteScope
     let aiProcessing: AIProcessingConfiguration
+    let audioProcessing: AudioProcessingConfiguration
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
+}
+```
+
+```swift
+struct AudioProcessingConfiguration {
+    let inputLevelCompensationEnabled: Bool
+    let silenceRemovalEnabled: Bool
+    let dynamicNormalizationEnabled: Bool
+    let noiseSuppressionLevel: Float
 }
 ```
 
@@ -171,7 +201,9 @@ The macOS app shell uses these options to:
 - select model/config dynamically before session start
 - pass explicit Whisper auto-detect (`auto`) instead of silently mapping auto language selection to English
 - keep transcription, translation, and AI processing as separate runtime stages
+- apply app-level audio preprocessing before ASR, including adjustable noise suppression
 - apply stable streaming patching with a bounded mutable tail
+- sanitize common non-speech placeholders such as `(silence)` or `[music]` before live insertion and final delivery
 - apply snippet substitutions before optional translation and optional AI processing
 - optionally translate Whisper output to English only when `translationOutput == .english`
 - optionally run AI processing separately for live insertion updates and for the final result

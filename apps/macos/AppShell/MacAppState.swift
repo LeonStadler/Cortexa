@@ -409,14 +409,35 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var aiRevisionGoal: AIRevisionGoal {
+        didSet {
+            userDefaults.set(aiRevisionGoal.rawValue, forKey: UserDefaultsKeys.aiRevisionGoal)
+        }
+    }
+
+    @Published var aiFormattingMode: AIFormattingMode {
+        didSet {
+            userDefaults.set(aiFormattingMode.rawValue, forKey: UserDefaultsKeys.aiFormattingMode)
+            sanitizeAIProcessingSelections()
+        }
+    }
+
     @Published var aiWritingStyle: AIWritingStyle {
         didSet {
+            if !aiFormattingMode.allowedWritingStyles.contains(aiWritingStyle) {
+                aiWritingStyle = .none
+                return
+            }
             userDefaults.set(aiWritingStyle.rawValue, forKey: UserDefaultsKeys.aiWritingStyle)
         }
     }
 
     @Published var aiSalutation: AISalutation {
         didSet {
+            if !aiFormattingMode.supportsSalutation && aiSalutation != .none {
+                aiSalutation = .none
+                return
+            }
             userDefaults.set(aiSalutation.rawValue, forKey: UserDefaultsKeys.aiSalutation)
         }
     }
@@ -443,6 +464,12 @@ final class MacAppState: ObservableObject {
     @Published var dynamicNormalizationEnabled: Bool {
         didSet {
             userDefaults.set(dynamicNormalizationEnabled, forKey: UserDefaultsKeys.dynamicNormalizationEnabled)
+        }
+    }
+
+    @Published var noiseSuppressionLevel: Double {
+        didSet {
+            userDefaults.set(noiseSuppressionLevel, forKey: UserDefaultsKeys.noiseSuppressionLevel)
         }
     }
 
@@ -718,14 +745,43 @@ final class MacAppState: ObservableObject {
         aiProcessingEnabled && (selectedAIModel?.availability.isAvailable ?? false)
     }
 
+    var availableAIWritingStyles: [AIWritingStyle] {
+        aiFormattingMode.allowedWritingStyles
+    }
+
+    var aiFormattingModeSupportsSalutation: Bool {
+        aiFormattingMode.supportsSalutation
+    }
+
+    var aiShowsWritingStyleControls: Bool {
+        switch aiRevisionGoal {
+        case .cleanup, .adjustSalutation:
+            return false
+        case .adjustTone, .adaptFormat:
+            return true
+        }
+    }
+
+    var aiShowsSalutationControls: Bool {
+        guard aiFormattingModeSupportsSalutation else { return false }
+        switch aiRevisionGoal {
+        case .cleanup, .adjustTone:
+            return false
+        case .adjustSalutation, .adaptFormat:
+            return true
+        }
+    }
+
     var aiProcessingConfiguration: AIProcessingConfiguration {
         AIProcessingConfiguration(
             enabled: effectiveAIProcessingEnabled,
             selectedModelID: selectedAIModelID,
             applyDuringLiveInsertion: aiProcessingApplyDuringLiveInsertion,
             applyToFinalResult: aiProcessingApplyToFinalResult,
-            style: aiWritingStyle,
-            salutation: aiSalutation
+            revisionGoal: aiRevisionGoal,
+            formattingMode: aiFormattingMode,
+            style: availableAIWritingStyles.contains(aiWritingStyle) ? aiWritingStyle : .none,
+            salutation: aiFormattingModeSupportsSalutation ? aiSalutation : .none
         )
     }
 
@@ -733,7 +789,8 @@ final class MacAppState: ObservableObject {
         AudioProcessingConfiguration(
             inputLevelCompensationEnabled: automaticMicrophoneGainBoost,
             silenceRemovalEnabled: silenceRemovalEnabled,
-            dynamicNormalizationEnabled: dynamicNormalizationEnabled
+            dynamicNormalizationEnabled: dynamicNormalizationEnabled,
+            noiseSuppressionLevel: Float(noiseSuppressionLevel)
         )
     }
 
@@ -770,12 +827,15 @@ final class MacAppState: ObservableObject {
         static let aiProcessingApplyDuringLiveInsertion = "wispr.settings.aiProcessing.applyDuringLiveInsertion"
         static let aiProcessingApplyToFinalResult = "wispr.settings.aiProcessing.applyToFinalResult"
         static let legacyAIProcessingScope = "wispr.settings.aiProcessingScope"
+        static let aiRevisionGoal = "wispr.settings.aiProcessing.revisionGoal"
+        static let aiFormattingMode = "wispr.settings.aiProcessing.formattingMode"
         static let aiWritingStyle = "wispr.settings.aiWritingStyle"
         static let aiSalutation = "wispr.settings.aiSalutation"
         static let voiceModelActiveDuration = "wispr.settings.ai.voiceModelActiveDuration"
         static let automaticMicrophoneGainBoost = "wispr.settings.automaticMicrophoneGainBoost"
         static let silenceRemovalEnabled = "wispr.settings.silenceRemovalEnabled"
         static let dynamicNormalizationEnabled = "wispr.settings.dynamicNormalizationEnabled"
+        static let noiseSuppressionLevel = "wispr.settings.noiseSuppressionLevel"
         static let soundEffectsEnabled = "wispr.settings.soundEffectsEnabled"
         static let soundEffectsVolume = "wispr.settings.soundEffectsVolume"
         static let historyRetentionPolicy = "wispr.settings.historyRetentionPolicy"
@@ -917,6 +977,20 @@ final class MacAppState: ObservableObject {
             self.aiProcessingApplyToFinalResult = true
         }
 
+        if let rawAIRevisionGoal = userDefaults.string(forKey: UserDefaultsKeys.aiRevisionGoal),
+           let parsedAIRevisionGoal = AIRevisionGoal(rawValue: rawAIRevisionGoal) {
+            self.aiRevisionGoal = parsedAIRevisionGoal
+        } else {
+            self.aiRevisionGoal = .cleanup
+        }
+
+        if let rawAIFormattingMode = userDefaults.string(forKey: UserDefaultsKeys.aiFormattingMode),
+           let parsedAIFormattingMode = AIFormattingMode(rawValue: rawAIFormattingMode) {
+            self.aiFormattingMode = parsedAIFormattingMode
+        } else {
+            self.aiFormattingMode = .plainText
+        }
+
         if let rawAIWritingStyle = userDefaults.string(forKey: UserDefaultsKeys.aiWritingStyle),
            let parsedAIWritingStyle = AIWritingStyle(rawValue: rawAIWritingStyle) {
             self.aiWritingStyle = parsedAIWritingStyle
@@ -941,6 +1015,7 @@ final class MacAppState: ObservableObject {
         self.automaticMicrophoneGainBoost = userDefaults.object(forKey: UserDefaultsKeys.automaticMicrophoneGainBoost) as? Bool ?? false
         self.silenceRemovalEnabled = userDefaults.object(forKey: UserDefaultsKeys.silenceRemovalEnabled) as? Bool ?? false
         self.dynamicNormalizationEnabled = userDefaults.object(forKey: UserDefaultsKeys.dynamicNormalizationEnabled) as? Bool ?? false
+        self.noiseSuppressionLevel = userDefaults.object(forKey: UserDefaultsKeys.noiseSuppressionLevel) as? Double ?? 0.35
         self.soundEffectsEnabled = userDefaults.object(forKey: UserDefaultsKeys.soundEffectsEnabled) as? Bool ?? false
         self.soundEffectsVolume = userDefaults.object(forKey: UserDefaultsKeys.soundEffectsVolume) as? Double ?? 50
 
@@ -976,6 +1051,7 @@ final class MacAppState: ObservableObject {
         self.remoteProviderAPIKeyDraft = initialSelectedRemoteProviderID.flatMap {
             aiRemoteProviderSecretStore.loadAPIKey(providerID: $0)
         } ?? ""
+        sanitizeAIProcessingSelections()
 
         dictationRuntime.onStatus = { [weak self] status in
             self?.recordingStatus = status
@@ -1104,9 +1180,9 @@ final class MacAppState: ObservableObject {
         remoteProviders.append(provider)
         selectedRemoteProviderID = provider.id
         if provider.requiresAPIKey {
-            appendDiagnostic("\(provider.displayName) wurde als API-Anbieter hinzugefügt. Hinterlege jetzt den API-Key und lade die Modelle.")
+            appendDiagnostic("\(provider.displayName) wurde als API-Anbieter hinzugefügt und startet deaktiviert. Hinterlege jetzt den API-Key, speichere die Konfiguration und aktiviere den Anbieter danach bewusst.")
         } else {
-            appendDiagnostic("\(provider.displayName) wurde als API-Anbieter hinzugefügt. Du kannst den Modellkatalog jetzt direkt laden.")
+            appendDiagnostic("\(provider.displayName) wurde als API-Anbieter hinzugefügt und startet deaktiviert. Speichere die Konfiguration und aktiviere den Anbieter danach bewusst.")
         }
     }
 
@@ -1119,8 +1195,15 @@ final class MacAppState: ObservableObject {
     }
 
     func updateSelectedRemoteProvider(_ update: (inout AIRemoteProviderConfiguration) -> Void) {
-        guard let selectedRemoteProviderID,
-              let index = remoteProviders.firstIndex(where: { $0.id == selectedRemoteProviderID }) else {
+        guard let selectedRemoteProviderID else { return }
+        updateRemoteProvider(id: selectedRemoteProviderID, update)
+    }
+
+    private func updateRemoteProvider(
+        id providerID: String,
+        _ update: (inout AIRemoteProviderConfiguration) -> Void
+    ) {
+        guard let index = remoteProviders.firstIndex(where: { $0.id == providerID }) else {
             return
         }
 
@@ -1148,8 +1231,24 @@ final class MacAppState: ObservableObject {
         rebuildAIProcessingStack(reason: "remote-provider-api-key")
     }
 
+    func saveSelectedRemoteProvider() {
+        guard let selectedRemoteProvider else { return }
+
+        saveSelectedRemoteProviderAPIKey()
+
+        let trimmedAPIKey = remoteProviderAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if selectedRemoteProvider.requiresAPIKey && trimmedAPIKey.isEmpty {
+            appendDiagnostic("Anbieter gespeichert. Hinterlege einen API-Key, um den Modellkatalog zu laden.")
+            return
+        }
+
+        refreshSelectedRemoteProviderModels()
+    }
+
     func refreshSelectedRemoteProviderModels() {
         guard let selectedRemoteProvider else { return }
+        let providerID = selectedRemoteProvider.id
+        let providerName = selectedRemoteProvider.displayName
         let apiKey = aiRemoteProviderSecretStore.loadAPIKey(providerID: selectedRemoteProvider.id) ?? ""
         if selectedRemoteProvider.requiresAPIKey,
            apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1157,7 +1256,7 @@ final class MacAppState: ObservableObject {
             return
         }
 
-        appendDiagnostic("Lade Modellkatalog für \(selectedRemoteProvider.displayName)...")
+        appendDiagnostic("Lade Modellkatalog für \(providerName)...")
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -1165,13 +1264,13 @@ final class MacAppState: ObservableObject {
                     configuration: selectedRemoteProvider,
                     apiKey: apiKey
                 )
-                self.updateSelectedRemoteProvider { provider in
+                self.updateRemoteProvider(id: providerID) { provider in
                     provider.discoveredModels = models
                 }
                 self.rebuildAIProcessingStack(reason: "remote-models-refreshed")
-                self.appendDiagnostic("Modellkatalog für \(selectedRemoteProvider.displayName) aktualisiert: \(models.count) Modelle.")
+                self.appendDiagnostic("Modellkatalog für \(providerName) aktualisiert: \(models.count) Modelle.")
             } catch {
-                self.appendDiagnostic("Modellkatalog konnte nicht geladen werden: \(error.localizedDescription)")
+                self.appendDiagnostic("Modellkatalog für \(providerName) konnte nicht geladen werden: \(error.localizedDescription)")
             }
         }
     }
@@ -1260,6 +1359,16 @@ final class MacAppState: ObservableObject {
             audioProcessing: audioProcessingConfiguration,
             soundFeedback: soundFeedbackConfiguration
         )
+    }
+
+    private func sanitizeAIProcessingSelections() {
+        if !aiFormattingMode.allowedWritingStyles.contains(aiWritingStyle) {
+            aiWritingStyle = .none
+        }
+
+        if !aiFormattingMode.supportsSalutation && aiSalutation != .none {
+            aiSalutation = .none
+        }
     }
 
     private func shouldRestorePreviousApplicationBeforeStarting() -> Bool {
@@ -1732,10 +1841,16 @@ final class MacAppState: ObservableObject {
         dictationRuntime.setAIProcessingService(aiProcessingService)
         let catalog = aiProcessingService.catalog()
         aiModels = catalog.allModels
+        let fallbackModelID = catalog.availableModels.first?.id
+            ?? catalog.allModels.first?.id
 
-        if selectedAIModelID == nil {
-            selectedAIModelID = catalog.availableModels.first?.id
-                ?? catalog.allModels.first?.id
+        if catalog.model(id: selectedAIModelID) == nil,
+           selectedAIModelID != fallbackModelID {
+            let previousSelection = selectedAIModelID
+            selectedAIModelID = fallbackModelID
+            if previousSelection != nil, fallbackModelID != nil {
+                appendDiagnostic("Das zuvor gewählte AI-Modell ist nicht mehr verfügbar. Ein anderes verfügbares Modell wurde ausgewählt.")
+            }
         }
 
         if aiProcessingEnabled,
@@ -1765,15 +1880,23 @@ final class MacAppState: ObservableObject {
     }
 
     private func registerSelectedHotkey(force: Bool) {
+        let effectiveCancelShortcutEnabled = cancelShortcutEnabled
+            && !(toggleShortcutEnabled && cancelShortcut == selectedHotkey)
+            && !(holdToDictateEnabled && cancelShortcut == holdShortcut)
+        let effectiveModeSwitchShortcutEnabled = modeSwitchShortcutEnabled
+            && !(toggleShortcutEnabled && modeSwitchShortcut == selectedHotkey)
+            && !(holdToDictateEnabled && modeSwitchShortcut == holdShortcut)
+            && !(effectiveCancelShortcutEnabled && modeSwitchShortcut == cancelShortcut)
+
         let didRegister = hotkeyManager.register(
             shortcut: selectedHotkey,
             shortcutEnabled: toggleShortcutEnabled,
             holdShortcut: holdShortcut,
             holdEnabled: holdToDictateEnabled,
             cancelShortcut: cancelShortcut,
-            cancelEnabled: cancelShortcutEnabled,
+            cancelEnabled: effectiveCancelShortcutEnabled,
             modeShortcut: modeSwitchShortcut,
-            modeEnabled: modeSwitchShortcutEnabled,
+            modeEnabled: effectiveModeSwitchShortcutEnabled,
             force: force
         )
         if didRegister {
@@ -1788,14 +1911,18 @@ final class MacAppState: ObservableObject {
                     : "Hold-to-dictate deaktiviert."
             )
             appendDiagnostic(
-                cancelShortcutEnabled
+                effectiveCancelShortcutEnabled
                     ? "Abbrechen-Shortcut aktiv: \(cancelShortcut.displayName)"
-                    : "Abbrechen-Shortcut deaktiviert."
+                    : cancelShortcutEnabled
+                        ? "Abbrechen-Shortcut wegen Konflikt nicht registriert."
+                        : "Abbrechen-Shortcut deaktiviert."
             )
             appendDiagnostic(
-                modeSwitchShortcutEnabled
+                effectiveModeSwitchShortcutEnabled
                     ? "Moduswechsel-Shortcut aktiv: \(modeSwitchShortcut.displayName)"
-                    : "Moduswechsel-Shortcut deaktiviert."
+                    : modeSwitchShortcutEnabled
+                        ? "Moduswechsel-Shortcut wegen Konflikt nicht registriert."
+                        : "Moduswechsel-Shortcut deaktiviert."
             )
             if let hotkeyAdvisory {
                 appendDiagnostic("Shortcut-Hinweis: \(hotkeyAdvisory.title) – \(hotkeyAdvisory.message)")
@@ -1810,7 +1937,7 @@ final class MacAppState: ObservableObject {
                 appendDiagnostic("Modus-Hinweis: \(modeSwitchShortcutAdvisory.title) – \(modeSwitchShortcutAdvisory.message)")
             }
             appendAudit(
-                "hotkey.register value=\(selectedHotkey.rawValue) enabled=\(toggleShortcutEnabled) hold=\(holdShortcut.rawValue) holdEnabled=\(holdToDictateEnabled) cancel=\(cancelShortcut.rawValue) cancelEnabled=\(cancelShortcutEnabled) mode=\(modeSwitchShortcut.rawValue) modeEnabled=\(modeSwitchShortcutEnabled)"
+                "hotkey.register value=\(selectedHotkey.rawValue) enabled=\(toggleShortcutEnabled) hold=\(holdShortcut.rawValue) holdEnabled=\(holdToDictateEnabled) cancel=\(cancelShortcut.rawValue) cancelEnabled=\(cancelShortcutEnabled) cancelEffective=\(effectiveCancelShortcutEnabled) mode=\(modeSwitchShortcut.rawValue) modeEnabled=\(modeSwitchShortcutEnabled) modeEffective=\(effectiveModeSwitchShortcutEnabled)"
             )
         } else {
             appendDiagnostic("Globaler Shortcut konnte nicht registriert werden: \(selectedHotkey.displayName)")

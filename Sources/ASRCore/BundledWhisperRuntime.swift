@@ -116,6 +116,7 @@ public enum BundledWhisperRuntimeInstaller {
         bundle: Bundle = .main,
         resourceSubdirectory: String = "Runtime",
         appName: String = "WisprLocal",
+        preserveAdditionalModels: Bool = true,
         fileManager: FileManager = .default
     ) throws -> InstalledWhisperRuntime {
         guard let sourceRuntime = bundledRuntimeDirectory(in: bundle, resourceSubdirectory: resourceSubdirectory) else {
@@ -125,13 +126,20 @@ public enum BundledWhisperRuntimeInstaller {
             throw BundledWhisperRuntimeError.bundledRuntimeDirectoryMissing(expected)
         }
 
-        return try installRuntime(from: sourceRuntime, destinationRuntimeDirectory: nil, appName: appName, fileManager: fileManager)
+        return try installRuntime(
+            from: sourceRuntime,
+            destinationRuntimeDirectory: nil,
+            appName: appName,
+            preserveAdditionalModels: preserveAdditionalModels,
+            fileManager: fileManager
+        )
     }
 
     public static func installRuntime(
         from sourceRuntimeDirectory: URL,
         destinationRuntimeDirectory: URL? = nil,
         appName: String = "WisprLocal",
+        preserveAdditionalModels: Bool = false,
         fileManager: FileManager = .default
     ) throws -> InstalledWhisperRuntime {
         let sourceCLI = sourceRuntimeDirectory.appendingPathComponent(cliName)
@@ -179,6 +187,7 @@ public enum BundledWhisperRuntimeInstaller {
             destinationRoot: destinationRoot,
             destinationModels: destinationModels,
             expectedModelFileNames: Set(availableModelFileNames),
+            preserveAdditionalModels: preserveAdditionalModels,
             fileManager: fileManager
         )
 
@@ -197,11 +206,16 @@ public enum BundledWhisperRuntimeInstaller {
             fileManager: fileManager
         )
 
+        let installedModelFiles = try fileManager.contentsOfDirectory(at: destinationModels, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension.lowercased() == "bin" }
+            .map(\.lastPathComponent)
+            .sorted()
+
         return InstalledWhisperRuntime(
             rootDirectoryURL: destinationRoot,
             cliURL: destinationCLI,
             modelsDirectoryURL: destinationModels,
-            availableModelFileNames: availableModelFileNames,
+            availableModelFileNames: installedModelFiles,
             defaultModelFileName: defaultModelFileName,
             manifest: manifest
         )
@@ -336,9 +350,10 @@ public enum BundledWhisperRuntimeInstaller {
         destinationRoot: URL,
         destinationModels: URL,
         expectedModelFileNames: Set<String>,
+        preserveAdditionalModels: Bool,
         fileManager: FileManager
     ) throws {
-        if fileManager.fileExists(atPath: destinationModels.path) {
+        if fileManager.fileExists(atPath: destinationModels.path), !preserveAdditionalModels {
             let existingModelFiles = try fileManager.contentsOfDirectory(at: destinationModels, includingPropertiesForKeys: nil)
                 .filter { $0.pathExtension.lowercased() == "bin" }
 
@@ -348,7 +363,7 @@ public enum BundledWhisperRuntimeInstaller {
         }
 
         let destinationManifest = destinationRoot.appendingPathComponent(manifestFileName)
-        if fileManager.fileExists(atPath: destinationManifest.path) {
+        if fileManager.fileExists(atPath: destinationManifest.path), !preserveAdditionalModels {
             try fileManager.removeItem(at: destinationManifest)
         }
     }

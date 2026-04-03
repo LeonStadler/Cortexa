@@ -2,6 +2,18 @@
 
 ## Fixes
 
+- 2026-04-03: Allgemein-Einstellungen in App- und Menüleisten-Block aufgeteilt, damit Shortcut-Hinweise keinen leeren Restbereich mehr hinterlassen.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `changelog.md`, `VERSION`
+  - Funktionalitaet: Der Allgemein-Reiter trennt jetzt die Menueleisten-Hinweise von den restlichen App-Optionen, sodass unter `Kurzbefehl-Hinweise im Menü anzeigen` kein leerer Platzhalterblock mehr stehen bleibt. Das macht die Seite kompakter und klarer, ohne die Funktion des Schalters zu veraendern.
+
+- 2026-04-03: macOS-Changelog-Ansicht laedt Release Notes robuster und zeigt sie in einer ruhigeren Kartenstruktur an.
+  - Dateien: `apps/macos/AppShell/ChangelogSupport.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalitaet: Die About-Changelog-Ansicht liest das gebuendelte `changelog.md` jetzt robuster ein und faellt fuer lokale Builds notfalls auf die Quelltext-Datei zurueck, damit keine leere "Noch keine Changelog-Eintraege verfuegbar"-Ansicht mehr erscheint. Gleichzeitig wurde die Darstellung visuell verdichtet: Die Seite zeigt jetzt eine kompaktere Ueberschrift mit Status-Statistiken, eine hervorgehobene Release-Karte, sauber getrennte Legacy-Eintraege und einen ruhigeren Empty-State, damit Release Notes besser lesbar und weniger generisch wirken.
+
+- 2026-04-03: macOS-Tooltips, Sound-Filter und Streaming-Artefakt-Cleanup verfeinert.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `Sources/AudioCore/AudioPreprocessor.swift`, `docs/api-design.md`, `docs/system-design.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalitaet: Die `i`-Hinweise in den macOS-Settings reagieren jetzt weniger empfindlich auf Mausbewegungen, zeigen ihre Inhalte in einem stabileren Hover-Popover und koennen laengere Erklaerungen vollstaendig darstellen. Zusaetzlich besitzt der Sound-Bereich einen einstellbaren Stoergeraeuschfilter, der gemeinsam mit der bestehenden Stille-Erkennung schwache Hintergrundanteile vor der Whisper-Verarbeitung absenkt. Fuer Streaming- und Final-Ergebnisse bereinigt die Runtime jetzt typische Artefakte wie `(silence)`, `(cough)`, `[music]` oder aehnliche Platzhalter systematisch, damit Live-Einfuegen und fertige Transkripte sichtbar sauberer bleiben.
+
 - 2026-04-03: macOS-Settings-Tooltips, Diagnose-Begriffe und Build-Stabilitaet nachpoliert.
   - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/README.md`, `VERSION`
   - Funktionalitaet: Die Settings verwenden jetzt an weiteren erklaerungsbeduerftigen Stellen konsequent `i`-Hinweise statt dauerhafter Fliesstexte, wodurch Delivery-, AI-, Hold-Shortcut-, History- und Sound-Optionen deutlich kompakter wirken. Gleichzeitig wurden Diagnose-Exporte begrifflich auf technische Protokollierung vereinheitlicht, veraltete Hinweisbloecke aus dem Provider-Bereich entfernt, und ein doppeltes `SettingsFieldLabel` in der macOS-Settings-Datei wurde beseitigt, damit der Xcode-Build wieder sauber durchlaeuft.
@@ -15,6 +27,10 @@
   - Funktionalitaet: Die alten Schalter fuer Menu-Bar-Autostart, Mauskurzbefehl und experimentelle Modelle wurden komplett aus State, Defaults, UI und Startverhalten entfernt. Die Menüleisten-Ansicht startet beim Auftauchen nicht mehr automatisch ein Diktat, der AI-Katalog zeigt nur noch reguläre Modelle, und die Warmhaltezeit fuer das Sprachmodell bleibt als technische Laufzeitoption im Advanced-Bereich erhalten.
 
 ## Features
+
+- 2026-04-03: AI-Verarbeitung in der macOS-App um Ziel- und Formatmodi erweitert.
+  - Dateien: `Sources/AIProcessingCore/AIProcessingTypes.swift`, `Sources/AIProcessingCore/AppleFoundationTextProcessor.swift`, `apps/macos/AppShell/AIProcessingDisplay.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `Tests/AIProcessingCoreTests/AppleFoundationPromptBuilderTests.swift`, `Tests/AIProcessingCoreTests/OpenAICompatibleRemoteTextProcessorTests.swift`, `docs/api-design.md`, `docs/system-design.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalitaet: Die AI besitzt jetzt ein explizites Ziel mit `Bereinigen` als Default sowie getrennte Modi fuer Tonanpassung, Anrede und Formatadaption. Zusaetzlich kann die Ausgabe auf Formate wie E-Mail, Nachricht, WhatsApp, Dokumentation oder wissenschaftliche Arbeit ausgerichtet werden. Der gemeinsame Prompt-Builder gibt diese Settings sowohl an Apple-On-Device-Modelle als auch an OpenAI-kompatible Remote-Modelle weiter, und die UI filtert unpassende Stiloptionen fuer sachliche Formate automatisch heraus.
 
 - 2026-04-03: AI-Provider-UI in der macOS-App vereinfacht und semantisch aufgeraeumt.
   - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `README.md`, `docs/api-design.md`, `VERSION`

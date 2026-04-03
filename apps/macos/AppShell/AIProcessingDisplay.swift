@@ -59,6 +59,60 @@ extension AISalutation {
     }
 }
 
+extension AIRevisionGoal {
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        switch (interfaceLanguageCode, self) {
+        case ("en", .cleanup):
+            return "Clean up"
+        case ("en", .adjustTone):
+            return "Adjust tone"
+        case ("en", .adjustSalutation):
+            return "Adjust salutation"
+        case ("en", .adaptFormat):
+            return "Adapt format"
+        case (_, .cleanup):
+            return "Bereinigen"
+        case (_, .adjustTone):
+            return "Stil / Ton ändern"
+        case (_, .adjustSalutation):
+            return "Anrede ändern"
+        case (_, .adaptFormat):
+            return "Format anpassen"
+        }
+    }
+}
+
+extension AIFormattingMode {
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        switch (interfaceLanguageCode, self) {
+        case ("en", .plainText):
+            return "Plain text"
+        case ("en", .email):
+            return "Email"
+        case ("en", .message):
+            return "Message"
+        case ("en", .whatsapp):
+            return "WhatsApp"
+        case ("en", .documentation):
+            return "Documentation"
+        case ("en", .scientificPaper):
+            return "Scientific paper"
+        case (_, .plainText):
+            return "Fließtext"
+        case (_, .email):
+            return "E-Mail"
+        case (_, .message):
+            return "Nachricht"
+        case (_, .whatsapp):
+            return "WhatsApp"
+        case (_, .documentation):
+            return "Dokumentation"
+        case (_, .scientificPaper):
+            return "Wissenschaftliche Arbeit"
+        }
+    }
+}
+
 extension AIModelAvailability {
     func localizedDisplayName(interfaceLanguageCode: String) -> String {
         switch self {

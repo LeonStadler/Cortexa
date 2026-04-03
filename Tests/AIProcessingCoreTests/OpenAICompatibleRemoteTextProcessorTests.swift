@@ -50,6 +50,9 @@ final class OpenAICompatibleRemoteTextProcessorTests: XCTestCase {
             XCTAssertEqual(body.model, "openai/gpt-4o-mini")
             XCTAssertEqual(body.messages.first?.role, "system")
             XCTAssertEqual(body.messages.last?.role, "user")
+            XCTAssertTrue(body.messages.first?.content.contains("Format the output as an email") == true)
+            XCTAssertTrue(body.messages.first?.content.contains("Use a businesslike, professional style.") == true)
+            XCTAssertTrue(body.messages.first?.content.contains("Use a formal form of address.") == true)
 
             let response = HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
@@ -76,7 +79,16 @@ final class OpenAICompatibleRemoteTextProcessorTests: XCTestCase {
                 text: "Ich geh morgen klettern.",
                 stage: .final,
                 locale: Locale(identifier: "de_DE"),
-                configuration: AIProcessingConfiguration(enabled: true, selectedModelID: model.id, applyDuringLiveInsertion: true, applyToFinalResult: true, style: .business, salutation: .formal)
+                configuration: AIProcessingConfiguration(
+                    enabled: true,
+                    selectedModelID: model.id,
+                    applyDuringLiveInsertion: true,
+                    applyToFinalResult: true,
+                    revisionGoal: .adaptFormat,
+                    formattingMode: .email,
+                    style: .business,
+                    salutation: .formal
+                )
             ),
             model: model
         )

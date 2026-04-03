@@ -253,6 +253,9 @@ struct SettingsView: View {
             Section(text("App", "App")) {
                 generalAppearanceContent
             }
+            Section(text("Menüleiste", "Menu bar")) {
+                generalMenuBarContent
+            }
             Section(text("Zugriff", "Access")) {
                 generalPermissionsContent
             }
@@ -381,11 +384,11 @@ struct SettingsView: View {
 
     private var aboutForm: some View {
         Form {
-            Section(text("Changelog", "Changelog")) {
-                aboutChangelogContent
-            }
             Section(text("Über mich", "About me")) {
                 aboutProfileContent
+            }
+            Section(text("Changelog", "Changelog")) {
+                aboutChangelogContent
             }
             if appState.isLicenseUIEnabledForDevelopment {
                 Section(text("Support", "Support")) {
@@ -439,6 +442,7 @@ struct SettingsView: View {
             if generalHasMatches {
                 Section(text("Allgemein", "General")) {
                     generalAppearanceContent
+                    generalMenuBarContent
                     generalPermissionsContent
                 }
             }
@@ -483,8 +487,8 @@ struct SettingsView: View {
 
             if aboutHasMatches {
                 Section(text("About", "About")) {
-                    aboutChangelogContent
                     aboutProfileContent
+                    aboutChangelogContent
                     if appState.isLicenseUIEnabledForDevelopment {
                         aboutSupportContent
                     }
@@ -522,7 +526,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var generalAppearanceContent: some View {
-        if matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints", "dock", "launch on login", "updates"]) {
+        if matches(["language", "sprache", "dock", "launch on login", "updates"]) {
             LabeledContent {
                 Picker(text("App-Sprache", "App Language"), selection: $uiLanguageRaw) {
                     ForEach(AppLanguage.allCases) { language in
@@ -545,8 +549,6 @@ struct SettingsView: View {
                 )
             }
 
-            Divider()
-
             Toggle(text("Im Dock anzeigen", "Show in Dock"), isOn: $appState.showInDock)
 
             Toggle(isOn: $appState.launchOnLoginEnabled) {
@@ -565,6 +567,21 @@ struct SettingsView: View {
                     helpText: text(
                         "Prüft im Hintergrund regelmäßig über Sparkle, ob eine neuere Version verfügbar ist.",
                         "Checks in the background via Sparkle to see whether a newer version is available."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var generalMenuBarContent: some View {
+        if matches(["menüleiste", "menu bar", "shortcut hints"]) {
+            Toggle(isOn: $appState.showMenuBarShortcutHints) {
+                SettingsFieldLabel(
+                    title: text("Kurzbefehl-Hinweise im Menü anzeigen", "Show shortcut hints in menu"),
+                    helpText: text(
+                        "Zeigt Tastenkombinationen direkt neben passenden Einträgen im Menüleisten-Menü an.",
+                        "Shows keyboard shortcuts directly next to matching menu bar items."
                     )
                 )
             }
@@ -790,11 +807,31 @@ struct SettingsView: View {
                 SettingsFieldLabel(
                     title: text("Stille entfernen", "Silence removal"),
                     helpText: text(
-                        "Schneidet längere ruhige Abschnitte vor der Erkennung weg. Das hilft vor allem bei Pausen am Anfang oder Ende eines Diktats.",
-                        "Trims longer quiet sections before recognition. This mainly helps with pauses at the beginning or end of a dictation."
+                        "Filtert ruhige Abschnitte und schwache Störgeräusche vor der Erkennung. Das hilft besonders bei Live-Einfügen gegen Atem-, Raum- oder Tastaturreste.",
+                        "Filters quiet passages and weak background noise before recognition. This is especially useful during live insertion against breathing, room, or keyboard residue."
                     )
                 )
             }
+
+            LabeledContent {
+                VStack(alignment: .leading, spacing: 6) {
+                    Slider(value: $appState.noiseSuppressionLevel, in: 0...1, step: 0.05)
+                    Text(text("Filterstärke", "Filter strength") + ": \(Int((appState.noiseSuppressionLevel * 100).rounded()))%")
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .frame(minWidth: 240)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Störgeräusche filtern", "Filter background noise"),
+                    helpText: text(
+                        "Steuert, wie aggressiv leise Nebengeräusche und kurze Nicht-Sprachsignale unterdrückt werden. Höher hilft bei Husten, Atemgeräuschen oder Raumrauschen, kann aber sehr leise Sprache früher abschneiden.",
+                        "Controls how aggressively quiet background noise and short non-speech signals are suppressed. Higher values help with coughing, breathing, or room noise, but may cut very quiet speech earlier."
+                    )
+                )
+            }
+            .disabled(!appState.silenceRemovalEnabled)
+
             Toggle(isOn: $appState.dynamicNormalizationEnabled) {
                 SettingsFieldLabel(
                     title: text("Dynamische Normalisierung", "Dynamic normalization"),
@@ -1041,42 +1078,84 @@ struct SettingsView: View {
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
                 LabeledContent {
-                    Picker(text("Stil / Ton", "Style / Tone"), selection: $appState.aiWritingStyle) {
-                        ForEach(AIWritingStyle.allCases) { style in
-                            Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
+                    Picker(text("AI-Ziel", "AI goal"), selection: $appState.aiRevisionGoal) {
+                        ForEach(AIRevisionGoal.allCases) { goal in
+                            Text(goal.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(goal)
                         }
                     }
                     .labelsHidden()
                     .frame(minWidth: 220)
                 } label: {
                     SettingsFieldLabel(
-                        title: text("Stil / Ton", "Style / Tone"),
+                        title: text("AI-Ziel", "AI goal"),
                         helpText: text(
-                            "Gibt dem Modell eine sprachliche Richtung vor, etwa neutral, freundlich oder formeller.",
-                            "Gives the model a writing direction, such as neutral, friendly, or more formal."
+                            "Standardmäßig bereinigt die AI den diktierten Text. Alternativ kannst du sie gezielt für Ton, Anrede oder Format einsetzen.",
+                            "By default, AI cleans up dictated text. You can also use it specifically for tone, salutation, or formatting."
                         )
                     )
                 }
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
                 LabeledContent {
-                    Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
-                        ForEach(AISalutation.allCases) { salutation in
-                            Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
+                    Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
+                        ForEach(AIFormattingMode.allCases) { mode in
+                            Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
                         }
                     }
                     .labelsHidden()
                     .frame(minWidth: 220)
                 } label: {
                     SettingsFieldLabel(
-                        title: text("Anrede", "Salutation"),
+                        title: text("Modus", "Mode"),
                         helpText: text(
-                            "Legt fest, ob das Modell eher duzt, siezt oder die vorhandene Anrede beibehält.",
-                            "Defines whether the model should prefer informal, formal, or unchanged forms of address."
+                            "Legt fest, für welche Art von Text die AI optimieren soll, zum Beispiel E-Mail, Nachricht, Dokumentation oder wissenschaftliche Arbeit.",
+                            "Defines which kind of text the AI should optimize for, such as email, message, documentation, or scientific writing."
                         )
                     )
                 }
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+                if appState.aiShowsWritingStyleControls {
+                    LabeledContent {
+                        Picker(text("Stil / Ton", "Style / Tone"), selection: $appState.aiWritingStyle) {
+                            ForEach(appState.availableAIWritingStyles) { style in
+                                Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(minWidth: 220)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Stil / Ton", "Style / Tone"),
+                            helpText: text(
+                                "Zeigt nur Stile an, die zum gewählten Modus passen. Für Dokumentation oder wissenschaftliche Texte bleiben zum Beispiel nur sachliche Varianten übrig.",
+                                "Shows only styles that fit the selected mode. For documentation or scientific text, only fitting formal variants remain available."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
+
+                if appState.aiShowsSalutationControls {
+                    LabeledContent {
+                        Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                            ForEach(AISalutation.allCases) { salutation in
+                                Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(minWidth: 220)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Anrede", "Salutation"),
+                            helpText: text(
+                                "Die Anrede wird nur dort angeboten, wo sie sinnvoll ist, etwa bei E-Mails, Nachrichten oder WhatsApp.",
+                                "Salutation is shown only where it makes sense, such as email, messages, or WhatsApp."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
             }
         }
     }
@@ -1232,10 +1311,7 @@ struct SettingsView: View {
                         Text(text("Base URL", "Base URL"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        TextField(
-                            "https://api.example.com/v1",
-                            text: selectedRemoteProviderBinding(\.baseURLString, default: "")
-                        )
+                        TextField("", text: selectedRemoteProviderBinding(\.baseURLString, default: ""))
                         .textFieldStyle(.roundedBorder)
                     }
 
@@ -1243,10 +1319,7 @@ struct SettingsView: View {
                         Text(text("Modelle", "Models"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        TextField(
-                            "/models",
-                            text: selectedRemoteProviderBinding(\.modelsPath, default: "/models")
-                        )
+                        TextField("", text: selectedRemoteProviderBinding(\.modelsPath, default: "/models"))
                         .textFieldStyle(.roundedBorder)
                     }
 
@@ -1254,10 +1327,7 @@ struct SettingsView: View {
                         Text(text("Text-API", "Text API"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        TextField(
-                            "/chat/completions",
-                            text: selectedRemoteProviderBinding(\.chatCompletionsPath, default: "/chat/completions")
-                        )
+                        TextField("", text: selectedRemoteProviderBinding(\.chatCompletionsPath, default: "/chat/completions"))
                         .textFieldStyle(.roundedBorder)
                     }
 
@@ -1276,19 +1346,14 @@ struct SettingsView: View {
                         Text(text("API-Key", "API key"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        SecureField("sk-...", text: $appState.remoteProviderAPIKeyDraft)
+                        SecureField("", text: $appState.remoteProviderAPIKeyDraft)
                             .textFieldStyle(.roundedBorder)
                     }
                 }
 
                 HStack(spacing: 8) {
-                    Button(text("API-Key speichern", "Save API key")) {
-                        appState.saveSelectedRemoteProviderAPIKey()
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button(text("Modelle aktualisieren", "Refresh models")) {
-                        appState.refreshSelectedRemoteProviderModels()
+                    Button(text("Speichern", "Save")) {
+                        appState.saveSelectedRemoteProvider()
                     }
                     .buttonStyle(.bordered)
 
@@ -1792,16 +1857,46 @@ private struct SettingsFieldLabel: View {
 private struct SettingsHelpIcon: View {
     let text: String
     @State private var isHovering = false
+    @State private var showPopover = false
+    @State private var hoverTask: Task<Void, Never>?
 
     var body: some View {
         Image(systemName: "info.circle")
             .font(.caption)
-            .foregroundStyle(isHovering ? .primary : .secondary)
-            .help(text)
+            .foregroundStyle(showPopover ? .primary : .secondary)
             .onHover { hovering in
                 isHovering = hovering
+                hoverTask?.cancel()
+                hoverTask = Task { @MainActor in
+                    if hovering {
+                        try? await Task.sleep(nanoseconds: 350_000_000)
+                        if isHovering {
+                            showPopover = true
+                        }
+                    } else {
+                        try? await Task.sleep(nanoseconds: 120_000_000)
+                        if !isHovering {
+                            showPopover = false
+                        }
+                    }
+                }
+            }
+            .popover(isPresented: $showPopover, attachmentAnchor: .point(.bottom), arrowEdge: .top) {
+                ScrollView {
+                    Text(text)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(12)
+                }
+                .frame(width: 320)
+                .frame(maxHeight: 220)
             }
             .accessibilityLabel(text)
+            .onDisappear {
+                hoverTask?.cancel()
+            }
     }
 }
 

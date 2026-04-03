@@ -96,30 +96,65 @@ public struct AppleFoundationTextProcessor: AITextProcessingProviding {
 
 enum AppleFoundationPromptBuilder {
     static func instructions(for configuration: AIProcessingConfiguration) -> String {
+        let relevantStyle = configuration.formattingMode.allowedWritingStyles.contains(configuration.style)
+            ? configuration.style
+            : .none
+        let relevantSalutation = configuration.formattingMode.supportsSalutation
+            ? configuration.salutation
+            : .none
+
+        let goalInstruction: String
+        switch configuration.revisionGoal {
+        case .cleanup:
+            goalInstruction = "Your default task is to clean up dictated text by fixing recognition artifacts, punctuation, casing, and obvious grammar while keeping the wording as close to the original as possible."
+        case .adjustTone:
+            goalInstruction = "Your main task is to keep the meaning while adapting the text to the requested tone."
+        case .adjustSalutation:
+            goalInstruction = "Your main task is to adjust the form of address while changing the surrounding wording as little as possible."
+        case .adaptFormat:
+            goalInstruction = "Your main task is to adapt the dictated text to the requested output format while preserving the meaning."
+        }
+
+        let formatInstruction: String
+        switch configuration.formattingMode {
+        case .plainText:
+            formatInstruction = "Keep the output as plain running text unless the input already provides a stronger structure."
+        case .email:
+            formatInstruction = "Format the output as an email with a suitable greeting, body, and closing when helpful."
+        case .message:
+            formatInstruction = "Format the output as a concise personal or professional message."
+        case .whatsapp:
+            formatInstruction = "Format the output as a concise WhatsApp-style message with natural short phrasing."
+        case .documentation:
+            formatInstruction = "Format the output as concise documentation with clear structure, neutral wording, and no conversational phrasing."
+        case .scientificPaper:
+            formatInstruction = "Format the output as scientific prose with precise terminology, formal structure, and no casual wording."
+        }
+
         let styleInstruction: String
-        switch configuration.style {
+        switch relevantStyle {
         case .none:
-            styleInstruction = "Keep the original tone unless the prompt asks for a specific adjustment."
+            styleInstruction = "Keep the natural tone that best fits the requested task and format."
         case .simple:
-            styleInstruction = "Rewrite in a simple, clear style."
+            styleInstruction = "Use a simple, clear style."
         case .business:
-            styleInstruction = "Rewrite in a businesslike, professional style."
+            styleInstruction = "Use a businesslike, professional style."
         case .academic:
-            styleInstruction = "Rewrite in an academic, precise style."
+            styleInstruction = "Use an academic, precise style."
         case .casual:
-            styleInstruction = "Rewrite in a casual, natural style."
+            styleInstruction = "Use a casual, natural style."
         case .enthusiastic:
-            styleInstruction = "Rewrite in an enthusiastic, energetic style."
+            styleInstruction = "Use an enthusiastic, energetic style."
         case .friendlyConfident:
-            styleInstruction = "Rewrite in a friendly and confident style."
+            styleInstruction = "Use a friendly and confident style."
         case .diplomatic:
-            styleInstruction = "Rewrite in a diplomatic, tactful style."
+            styleInstruction = "Use a diplomatic, tactful style."
         }
 
         let salutationInstruction: String
-        switch configuration.salutation {
+        switch relevantSalutation {
         case .none:
-            salutationInstruction = "Keep the existing form of address unless it is obviously inconsistent."
+            salutationInstruction = "Keep the existing form of address unless it is obviously inconsistent with the requested format."
         case .formal:
             salutationInstruction = "Use a formal form of address."
         case .informal:
@@ -128,11 +163,12 @@ enum AppleFoundationPromptBuilder {
 
         return [
             "You revise dictated text without changing its meaning.",
-            "Keep the wording as close to the original as possible.",
+            goalInstruction,
             "Preserve the input language exactly as given.",
             "Do not translate unless the text is already translated before it reaches you.",
             "If the safest way to preserve the language or meaning is unclear, return the input unchanged.",
             "Preserve names, numbers, dates, and factual content.",
+            formatInstruction,
             styleInstruction,
             salutationInstruction,
             "Return only the revised text without commentary."

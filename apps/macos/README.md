@@ -42,6 +42,7 @@ Operational notes:
 - The settings window now leans more heavily on native macOS structures such as toolbar search, `Form`-based content flow, and restrained `GroupBox` grouping instead of a heavily custom header/search/card shell.
 - The history tab shows compact transcript cards with short previews first; longer dictations can be expanded inline for the full text without destabilizing the window layout.
 - The `About` tab introduces the open-source project, includes a short profile of Leon Stadler based on his website, and links out to his personal site for more background.
+- The `About` tab also renders the bundled release notes from `changelog.md` in a styled changelog section, with a development fallback to the source tree when the bundle resource is temporarily unavailable.
 - Advanced options contain updates and diagnostics; the diagnostics preview can be expanded and copied.
 - The search results view announces grouped matches and uses clearer accessibility labels for the search field, result grouping, and transcript history previews.
 - Repeated list actions (copy/delete in history and snippets) now include explicit contextual VoiceOver labels, and truncated menu previews expose full text through accessibility labels.

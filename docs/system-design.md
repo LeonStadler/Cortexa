@@ -20,7 +20,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - AVAudioEngine capture
 - 16k mono normalized chunk output
 - interruption and route change signals
-- optional app-level preprocessing for input level compensation, silence removal, and dynamic normalization
+- optional app-level preprocessing for input level compensation, silence removal, dynamic normalization, and adjustable noise suppression
 
 3. `SessionCore`
 - transcription state machine
@@ -56,7 +56,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
   snippet persistence/import/export UI, language/performance selection, translation selection,
-  transcript history, AI processing model/style controls, license activation UI, hotkey control,
+  transcript history, AI processing model/goal/format controls, license activation UI, hotkey control,
   dedicated app-behavior, sound, text-input, history-retention, and model-visibility settings
 - sound feedback controls are app-local cues for start/stop/failure states and do not control the system microphone volume or any global playback-pausing behavior
 - local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
@@ -72,7 +72,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 1. Hotkey starts session.
 2. AX target snapshot captured once (`bindingID` immutable).
 3. Audio captured and sent to ASR.
-   Optional preprocessing may adjust input level, suppress silence, or normalize dynamic gain before samples reach ASR.
+   Optional preprocessing may adjust input level, suppress silence, attenuate weak background noise, or normalize dynamic gain before samples reach ASR.
 4. Final transcript returned in the spoken language unless explicit translation is enabled.
 5. Snippet replacement applied.
 6. Optional translation applied.
@@ -86,10 +86,11 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 2. Partial segments arrive continuously.
 3. Stabilizer computes `committedPrefix` and `tail`.
 4. Snippet replacement applies to the current streaming text.
-5. Optional live AI processing can reshape only the current mutable tail, never previously committed text.
-6. Inserter patches only the mutable tail while preserving committed text already shown to the user.
-7. Focus changes are ignored (target remains locked).
-8. Stop finalizes the tail, runs a final AI pass when enabled, and closes the session.
+5. A transcript sanitizer removes common non-speech placeholders such as `silence`, `music`, `cough`, or `applause`.
+6. Optional live AI processing can reshape only the current mutable tail, never previously committed text.
+7. Inserter patches only the mutable tail while preserving committed text already shown to the user.
+8. Focus changes are ignored (target remains locked).
+9. Stop finalizes the tail, runs a final AI pass when enabled, and closes the session.
 
 ### 3) iOS/iPadOS Keyboard Flow
 
