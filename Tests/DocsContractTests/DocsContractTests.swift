@@ -47,7 +47,7 @@ final class DocsContractTests: XCTestCase {
 
         XCTAssertFalse(version.isEmpty)
         XCTAssertNotNil(version.range(of: versionPattern, options: .regularExpression))
-        XCTAssertEqual(version, "0.27.0")
+        XCTAssertEqual(version, "0.31.2")
     }
 
     private func readRepositoryFile(_ relativePath: String) throws -> String {

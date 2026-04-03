@@ -87,9 +87,12 @@ Features implemented in macOS app shell:
 - Explizite Translation-Ausgabe (`Keine Übersetzung` oder `Nach Englisch`), getrennt von der Sprachwahl
 - Optionales AI Processing mit Apple-On-Device- und API-Modellkatalog, Stil/Ton, Anrede sowie getrennten Aktivierungen für Live-Einfügen und finales Ergebnis
 - Dynamische API-Anbieter fuer Text-Postprocessing ohne fest verdrahtete Modellliste; OpenRouter und weitere Presets wie OpenAI, Groq, Mistral, DeepSeek, Together AI, Fireworks AI, xAI, Ollama und LM Studio lassen sich ueber dieselbe OpenAI-kompatible Surface anbinden, Modelle werden per `/models` geladen und API-Keys landen im Keychain
+- App-internes Audio-Preprocessing mit Eingangsverstärkung, Stille-Entfernung und dynamischer Normalisierung sowie optionalem Soundfeedback fuer Start/Stop/Fehler mit einstellbarer Lautstärke
+- Die macOS-Einstellungen sind jetzt semantisch in `Sound`, App-Verhalten, Texteingabe, Shortcuts, AI-Modelle und Verlauf gegliedert; neue Schalter fuer Dock-Sichtbarkeit, Login-Start, Update-Pruefung, Audio-Preprocessing, Soundeffekte, Auto-Send, Clipboard-Restore, History-Aufbewahrung und die Sprachmodell-Laufzeit unter `Erweitert` sind direkt in der UI sichtbar
 - Offline licensing UI (key input, local verification, Keychain-only secret persistence with legacy cache cleanup)
 - Lokales Audit-Log mit Rotation (`~/Library/Application Support/WisprLocal/audit.log`)
-- Optionaler Debug-Modus mit detaillierten Runtime-/Subprozess-Logs (`~/Library/Application Support/WisprLocal/debug.log`) inklusive `whisper-cli`-Starts, Exit-Codes und Timeouts
+- Optionale technische Diagnoseprotokollierung mit detaillierten Runtime-/Subprozess-Logs (`~/Library/Application Support/WisprLocal/debug.log`) inklusive `whisper-cli`-Starts, Exit-Codes und Timeouts
+- macOS-Lifecycle-Settings fuer Dock-Sichtbarkeit, Login-Start und automatische Update-Pruefung sowie lokale History-Aufbewahrung und den aktuellen App-Datenordner
 - Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI
 - Sparkle-kompatibler Auto-Updater mit permanent sichtbarem manuellen Check im Menü und in den Settings
 - Lifecycle-Refresh nach App-Aktivierung und System-Wake für Berechtigungen, Runtime und Hotkey-Registrierung

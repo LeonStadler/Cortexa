@@ -28,6 +28,7 @@ targets:
         type: folder
     resources:
       - path: ../AppShell/Resources/Assets.xcassets
+      - path: ../../../changelog.md
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wisprlocal.mac
@@ -45,6 +46,8 @@ targets:
         product: AIProcessingCore
       - package: WisprLocalPackage
         product: ASRCore
+      - package: WisprLocalPackage
+        product: AudioCore
       - package: WisprLocalPackage
         product: SnippetCore
       - package: WisprLocalPackage

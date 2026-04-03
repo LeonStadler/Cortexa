@@ -64,7 +64,7 @@ extension AIModelAvailability {
         switch self {
         case .available:
             return interfaceLanguageCode == "en" ? "Available" : "Verfügbar"
-        case let .unavailable(reason):
+        case .unavailable(let reason):
             let prefix = interfaceLanguageCode == "en" ? "Unavailable" : "Nicht verfügbar"
             return "\(prefix): \(reason)"
         }

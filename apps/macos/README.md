@@ -18,7 +18,11 @@ The dictation settings also include a live rewrite scope that limits how far bac
 Translation remains part of the dictation settings and is separate from language recognition: `Default` keeps the spoken language, `English` enables Whisper translation.
 The settings now also include a dedicated `AI` area for post-processing with provider/model selection, style/tone, salutation, and separate toggles for live insertion and the final result.
 The AI settings can host both Apple on-device processing and remote API providers without hardcoding a fixed model list; OpenRouter, OpenAI, Groq, Mistral, DeepSeek, Together AI, Fireworks AI, xAI, Ollama and LM Studio are available as presets, and custom OpenAI-compatible endpoints can be configured manually.
-The diagnostics area also includes a dedicated debug mode that records detailed runtime and `whisper-cli` lifecycle events, including subprocess starts, exits, timeouts, and exportable debug logs.
+The `Sound` tab covers app-internal input level compensation, silence removal, dynamic normalization, and sound effects with volume control; it intentionally avoids global system microphone volume control or ambiguous playback-pausing behavior.
+The settings now also split out a dedicated `Sound` tab plus separate app-behavior, text-input, model-warm-retention, and history-retention controls, so the sidebar reflects the app's own semantics instead of a copied foreign layout.
+Text input keeps delivery, auto-send, clipboard restore, and simulated keystroke behavior separate so insertion semantics stay explicit.
+App behavior now exposes Dock visibility, launch on login, and automatic update checks directly in the preferences UI.
+The diagnostics area also includes optional technical logging that records detailed runtime and `whisper-cli` lifecycle events, including subprocess starts, exits, timeouts, and exportable diagnostic logs.
 
 Operational notes:
 
@@ -43,6 +47,7 @@ Operational notes:
 - Repeated list actions (copy/delete in history and snippets) now include explicit contextual VoiceOver labels, and truncated menu previews expose full text through accessibility labels.
 - Update management lives in the `Advanced` settings tab; Sparkle checks in the background, GitHub Releases act as the publication source, and the manual check can be triggered there as well.
 - The menu bar menu weights its primary dictation action more strongly than utility footer actions, so `Settings…`, updates, and quit read more like classic menu utilities than like equal-priority content blocks.
+- The general, sound, history, and advanced settings tabs now cover Dock visibility, launch on login, automatic update checks, audio preprocessing, sound effects, transcript-history retention, and the current app data folder reveal path. Relocating the data folder itself remains a later migration step because the snippets/history/logs layout must be migrated together.
 - The macOS target now includes an asset catalog under `apps/macos/AppShell/Resources/Assets.xcassets` with a first Accent Color and App Icon set, wired into XcodeGen via `ASSETCATALOG_COMPILER_APPICON_NAME` and `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`.
 - The bundled Whisper runtime is resolved robustly from either `Contents/Resources/Runtime` or a flattened `Contents/Resources` layout, so resource packaging changes do not break dictation startup.
 - Diagnostics are shown in a compressed preview first and can be expanded for the full log text, which can also be copied to the clipboard.

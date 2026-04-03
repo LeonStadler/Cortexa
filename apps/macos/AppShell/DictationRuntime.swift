@@ -1,9 +1,11 @@
 import ASRCore
 import AIProcessingCore
+import AudioCore
 import AVFoundation
 import AppKit
 import ApplicationServices
 import CapabilityCore
+import Carbon
 import Foundation
 import SessionCore
 import SnippetCore
@@ -142,7 +144,12 @@ struct DictationStartOptions {
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
+    let simulateKeypresses: Bool
+    let restoreClipboardAfterPaste: Bool
+    let autoSendAfterPaste: Bool
     let aiProcessing: AIProcessingConfiguration
+    let audioProcessing: AudioProcessingConfiguration
+    let soundFeedback: SoundFeedbackConfiguration
 }
 
 enum FinalResultDeliveryMode: String, CaseIterable, Identifiable {
@@ -219,10 +226,12 @@ final class DictationRuntime: @unchecked Sendable {
     private let insertionQueue = DispatchQueue(label: "wispr.dictation.insert", qos: .userInitiated)
     private let capabilityProfiler = CapabilityProfiler()
     private var aiProcessingService = AIProcessingService()
+    private let soundFeedbackPlayer = SoundFeedbackPlayer()
     private let sessionLock = NSLock()
 
     private let audioEngine = AVAudioEngine()
     private var converter: AVAudioConverter?
+    private var audioPreprocessor = AudioPreprocessor()
     private var runningMode: DictationMode?
     private var runningLocale: Locale = Locale(identifier: "de_DE")
     private var target: LockedTextTarget?
@@ -236,9 +245,11 @@ final class DictationRuntime: @unchecked Sendable {
     private var loadedModelPath: URL?
     private var loadedConfig: ASRConfig?
     private var currentOptions: DictationStartOptions?
+    private var voiceModelActiveDuration: VoiceModelActiveDuration = .oneMinute
     private var lastKnownTarget: LockedTextTarget?
     private var waitingForInsertionTarget = false
     private var pendingStreamingInsertionTask: Task<Void, Never>?
+    private var runtimeUnloadTask: Task<Void, Never>?
     private var speechActivityDetected = false
     private var speechChunkStreak = 0
     private var maxObservedRMS: Float = 0
@@ -267,6 +278,7 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     func prepareRuntime() {
+        cancelRuntimeUnloadTask()
         guard !runtimePrepared else { return }
         publishDebug("runtime.prepare.begin")
 
@@ -303,6 +315,17 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
+    func setVoiceModelActiveDuration(_ duration: VoiceModelActiveDuration) {
+        withSessionLock {
+            voiceModelActiveDuration = duration
+        }
+
+        publishDebug("runtime.voiceModel.duration=\(duration.rawValue)")
+        if !withSessionLock({ isRunning }) {
+            scheduleRuntimeUnloadIfNeeded()
+        }
+    }
+
     func toggle(options: DictationStartOptions) {
         let snapshot = withSessionLock {
             (isStarting: isStarting, isRunning: isRunning)
@@ -324,6 +347,23 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         start(options: options)
+    }
+
+    func cancel() {
+        let snapshot = withSessionLock {
+            (isStarting: isStarting, isRunning: isRunning)
+        }
+
+        guard snapshot.isStarting || snapshot.isRunning else {
+            publishDiagnostic(DictationRuntimeError.notRunning.localizedDescription)
+            return
+        }
+
+        publishDebug("dictation.cancel.begin")
+        cleanupSession()
+        publishStatus("Idle")
+        publishDiagnostic("Diktat wurde abgebrochen.")
+        publishDebug("dictation.cancel.completed")
     }
 
     func start(options: DictationStartOptions) {
@@ -372,7 +412,9 @@ final class DictationRuntime: @unchecked Sendable {
             }
 
             do {
-                let requiresDirectInsertion = options.mode == .streaming || options.finalResultDeliveryMode == .insert
+                let requiresDirectInsertion = options.mode == .streaming
+                    || options.finalResultDeliveryMode == .insert
+                    || options.simulateKeypresses
                 let accessibilityGranted = requestAccessibilityPermission(promptIfNeeded: requiresDirectInsertion)
                 publishDebug("permissions.accessibility granted=\(accessibilityGranted) requiresDirectInsertion=\(requiresDirectInsertion)")
                 accessibilityPermissionGranted = accessibilityGranted
@@ -412,6 +454,7 @@ final class DictationRuntime: @unchecked Sendable {
                     self.speechActivityDetected = false
                     self.speechChunkStreak = 0
                     self.maxObservedRMS = 0
+                    self.audioPreprocessor.reset()
                     self.stableCommitter = self.makeStreamingCommitStabilizer(for: options)
                     self.snippetMatcher = DefaultSnippetMatcher(rules: options.snippetRules)
                 }
@@ -425,6 +468,7 @@ final class DictationRuntime: @unchecked Sendable {
                 }
                 publishSessionActivity(true)
                 publishStatus("Recording")
+                playSoundFeedback(.started, settings: options.soundFeedback)
                 let modeText = effectiveMode == .streaming ? "Streaming Insert" : "Finalize Insert"
                 let translationText = options.translationOutput == .english ? ", translated to English" : ""
                 publishDiagnostic("Recording (\(modeText), \(options.language.displayName)\(translationText))")
@@ -472,6 +516,7 @@ final class DictationRuntime: @unchecked Sendable {
                 publishTranscript("")
                 publishStatus("Idle")
                 publishDiagnostic("Kein verwertbares Sprachsignal erkannt. Das Transkript wurde verworfen.")
+                playSoundFeedback(.stopped, settings: withSessionLock { currentOptions?.soundFeedback })
                 cleanupSession()
                 return
             }
@@ -496,6 +541,7 @@ final class DictationRuntime: @unchecked Sendable {
             )
             publishStatus("Idle")
             publishDiagnostic("Letztes Transkript verarbeitet.")
+            playSoundFeedback(.stopped, settings: withSessionLock { currentOptions?.soundFeedback })
             publishDebug("dictation.stop.completed textLength=\(finalText.count) delivery=\(String(describing: deliveryOutcome))")
         } catch {
             abortSession(reason: "Stop failed: \(error.localizedDescription)")
@@ -832,7 +878,12 @@ final class DictationRuntime: @unchecked Sendable {
 
         if let activeStreamingTarget = target {
             do {
-                try replaceInsertedText(finalText, in: activeStreamingTarget, allowFallbackPaste: true)
+                try insertFinalText(
+                    finalText,
+                    into: activeStreamingTarget,
+                    options: currentOptions,
+                    allowFallbackPaste: true
+                )
                 withSessionLock {
                     waitingForInsertionTarget = false
                 }
@@ -844,7 +895,12 @@ final class DictationRuntime: @unchecked Sendable {
 
         if let resolvedTarget = resolveAvailableTextTarget() {
             do {
-                try replaceInsertedText(finalText, in: resolvedTarget, allowFallbackPaste: true)
+                try insertFinalText(
+                    finalText,
+                    into: resolvedTarget,
+                    options: currentOptions,
+                    allowFallbackPaste: true
+                )
                 withSessionLock {
                     waitingForInsertionTarget = false
                 }
@@ -861,7 +917,12 @@ final class DictationRuntime: @unchecked Sendable {
 
         if let delayedTarget = await waitForAvailableTextTarget(timeoutNanoseconds: pendingInsertionTimeoutNanoseconds) {
             do {
-                try replaceInsertedText(finalText, in: delayedTarget, allowFallbackPaste: true)
+                try insertFinalText(
+                    finalText,
+                    into: delayedTarget,
+                    options: currentOptions,
+                    allowFallbackPaste: true
+                )
                 withSessionLock {
                     waitingForInsertionTarget = false
                 }
@@ -1011,8 +1072,16 @@ final class DictationRuntime: @unchecked Sendable {
 
         let frameCount = Int(converted.frameLength)
         updateSpeechActivityState(channelData: channelData, frameCount: frameCount)
+        let audioSamples = Array(UnsafeBufferPointer(start: channelData, count: frameCount))
+        let audioConfiguration = withSessionLock { currentOptions?.audioProcessing ?? AudioProcessingConfiguration() }
+        guard let processed = audioPreprocessor.process(audioSamples, configuration: audioConfiguration) else {
+            return
+        }
+        guard !processed.wasSilenceSuppressed else {
+            return
+        }
         do {
-            try whisperEngine.pushAudioPCM16kMono(channelData, frameCount: frameCount)
+            try whisperEngine.pushAudioPCM16kMono(processed.samples, frameCount: processed.samples.count)
         } catch {
             abortSession(reason: "Audio push failed: \(error.localizedDescription)")
         }
@@ -1189,6 +1258,14 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func pasteIntoFallbackTarget(_ target: LockedTextTarget, text: String) throws {
+        try pasteIntoFallbackTarget(
+            target,
+            text: text,
+            restoreClipboard: withSessionLock { currentOptions?.restoreClipboardAfterPaste ?? true }
+        )
+    }
+
+    private func pasteIntoFallbackTarget(_ target: LockedTextTarget, text: String, restoreClipboard: Bool) throws {
         if let expectedBundleIdentifier = target.fallbackBundleIdentifier {
             let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             guard frontmostBundleIdentifier == expectedBundleIdentifier else {
@@ -1200,10 +1277,12 @@ final class DictationRuntime: @unchecked Sendable {
         let previousString = pasteboard.string(forType: .string)
 
         defer {
-            usleep(50_000)
-            pasteboard.clearContents()
-            if let previousString {
-                pasteboard.setString(previousString, forType: .string)
+            if restoreClipboard {
+                usleep(50_000)
+                pasteboard.clearContents()
+                if let previousString {
+                    pasteboard.setString(previousString, forType: .string)
+                }
             }
         }
 
@@ -1222,6 +1301,87 @@ final class DictationRuntime: @unchecked Sendable {
 
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
+    }
+
+    private func insertFinalText(
+        _ text: String,
+        into lockedTarget: LockedTextTarget,
+        options: DictationStartOptions,
+        allowFallbackPaste: Bool
+    ) throws {
+        if options.simulateKeypresses {
+            do {
+                try simulateKeyboardInsertion(text, into: lockedTarget)
+            } catch {
+                if allowFallbackPaste {
+                    try pasteIntoFallbackTarget(
+                        lockedTarget,
+                        text: text,
+                        restoreClipboard: options.restoreClipboardAfterPaste
+                    )
+                } else {
+                    throw error
+                }
+            }
+        } else {
+            try replaceInsertedText(text, in: lockedTarget, allowFallbackPaste: allowFallbackPaste)
+        }
+
+        if options.autoSendAfterPaste {
+            try sendReturnKey()
+        }
+    }
+
+    private func simulateKeyboardInsertion(_ text: String, into target: LockedTextTarget) throws {
+        if let expectedBundleIdentifier = target.fallbackBundleIdentifier {
+            let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            guard frontmostBundleIdentifier == expectedBundleIdentifier else {
+                throw DictationRuntimeError.unsafePasteFallback
+            }
+        }
+
+        guard let source = CGEventSource(stateID: .hidSystemState) ?? CGEventSource(stateID: .combinedSessionState) else {
+            throw DictationRuntimeError.focusedElementUnavailable
+        }
+
+        let unicodeValues = Array(text.utf16)
+        guard !unicodeValues.isEmpty else { return }
+
+        let chunkSize = 48
+        for chunkStart in stride(from: 0, to: unicodeValues.count, by: chunkSize) {
+            let chunkEnd = min(chunkStart + chunkSize, unicodeValues.count)
+            let chunk = Array(unicodeValues[chunkStart..<chunkEnd])
+
+            guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) else {
+                throw DictationRuntimeError.focusedElementUnavailable
+            }
+            chunk.withUnsafeBufferPointer { buffer in
+                if let baseAddress = buffer.baseAddress {
+                    down.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: baseAddress)
+                }
+            }
+            down.post(tap: .cghidEventTap)
+
+            guard let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+                throw DictationRuntimeError.focusedElementUnavailable
+            }
+            up.post(tap: .cghidEventTap)
+        }
+    }
+
+    private func sendReturnKey() throws {
+        guard let source = CGEventSource(stateID: .hidSystemState) ?? CGEventSource(stateID: .combinedSessionState) else {
+            throw DictationRuntimeError.focusedElementUnavailable
+        }
+
+        let returnKey: CGKeyCode = CGKeyCode(kVK_Return)
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: false) else {
+            throw DictationRuntimeError.focusedElementUnavailable
+        }
+
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
     }
 
     private func copyTranscriptToClipboard(_ text: String) {
@@ -1396,6 +1556,11 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
+    private func playSoundFeedback(_ event: SoundFeedbackEvent, settings: SoundFeedbackConfiguration?) {
+        guard let settings, settings.enabled else { return }
+        soundFeedbackPlayer.play(event: event, volume: settings.volume)
+    }
+
     private func shouldRunFinalAIProcessing() -> Bool {
         withSessionLock {
             guard let currentOptions else { return false }
@@ -1492,16 +1657,71 @@ final class DictationRuntime: @unchecked Sendable {
         stopAudioCapture()
         audioEngine.reset()
         converter = nil
+        audioPreprocessor.reset()
         whisperEngine.resetStreaming()
         stableCommitter.reset()
         publishSessionActivity(false)
+        scheduleRuntimeUnloadIfNeeded()
         publishDebug("dictation.cleanup.end")
     }
 
+    private func scheduleRuntimeUnloadIfNeeded() {
+        guard withSessionLock({ runtimePrepared }) else {
+            cancelRuntimeUnloadTask()
+            return
+        }
+
+        let timeout = withSessionLock { voiceModelActiveDuration.seconds }
+        guard let timeout else {
+            cancelRuntimeUnloadTask()
+            return
+        }
+
+        cancelRuntimeUnloadTask()
+        let task = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            self.unloadPreparedRuntimeIfNeeded()
+        }
+
+        withSessionLock {
+            runtimeUnloadTask = task
+        }
+        publishDebug("runtime.unload.scheduled after=\(Int(timeout))s")
+    }
+
+    private func cancelRuntimeUnloadTask() {
+        let task = withSessionLock {
+            let task = runtimeUnloadTask
+            runtimeUnloadTask = nil
+            return task
+        }
+        task?.cancel()
+    }
+
+    private func unloadPreparedRuntimeIfNeeded() {
+        let shouldUnload = withSessionLock {
+            guard runtimePrepared else { return false }
+            runtimePrepared = false
+            loadedModelPath = nil
+            loadedConfig = nil
+            return true
+        }
+
+        guard shouldUnload else { return }
+
+        whisperEngine.resetStreaming()
+        publishDiagnostic("ASR runtime war im Leerlauf zu lange inaktiv und wird beim nächsten Start neu geladen.")
+        publishDebug("runtime.unload.completed")
+    }
+
     private func abortSession(reason: String) {
+        let feedback = withSessionLock { currentOptions?.soundFeedback }
         cleanupSession()
         publishStatus("Error")
         publishDiagnostic(reason)
+        playSoundFeedback(.failed, settings: feedback)
     }
 
     private func publishStatus(_ value: String) {

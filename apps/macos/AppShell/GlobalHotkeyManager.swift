@@ -286,15 +286,23 @@ final class GlobalHotkeyManager {
     var onToggle: (() -> Void)?
     var onHoldPress: (() -> Void)?
     var onHoldRelease: (() -> Void)?
+    var onCancel: (() -> Void)?
+    var onModeSwitch: (() -> Void)?
 
     private var toggleHotKeyRef: EventHotKeyRef?
     private var holdHotKeyRef: EventHotKeyRef?
+    private var cancelHotKeyRef: EventHotKeyRef?
+    private var modeHotKeyRef: EventHotKeyRef?
     private var isRegistered = false
     private var isHandlerInstalled = false
     private(set) var currentShortcut: HotkeyBinding = .optionSpace
     private(set) var currentHoldShortcut: HotkeyBinding? = .optionShiftSpace
+    private(set) var currentCancelShortcut: HotkeyBinding? = nil
+    private(set) var currentModeShortcut: HotkeyBinding? = nil
     private let toggleHotKeyIdentifier: UInt32 = 1
     private let holdHotKeyIdentifier: UInt32 = 2
+    private let cancelHotKeyIdentifier: UInt32 = 3
+    private let modeHotKeyIdentifier: UInt32 = 4
 
     @discardableResult
     func registerDefaultShortcut(force: Bool = false) -> Bool {
@@ -303,6 +311,10 @@ final class GlobalHotkeyManager {
             shortcutEnabled: true,
             holdShortcut: .optionShiftSpace,
             holdEnabled: false,
+            cancelShortcut: nil,
+            cancelEnabled: false,
+            modeShortcut: nil,
+            modeEnabled: false,
             force: force
         )
     }
@@ -313,6 +325,10 @@ final class GlobalHotkeyManager {
         shortcutEnabled: Bool,
         holdShortcut: HotkeyBinding?,
         holdEnabled: Bool,
+        cancelShortcut: HotkeyBinding? = nil,
+        cancelEnabled: Bool = false,
+        modeShortcut: HotkeyBinding? = nil,
+        modeEnabled: Bool = false,
         force: Bool = false
     ) -> Bool {
         if force {
@@ -324,6 +340,8 @@ final class GlobalHotkeyManager {
         let signature = OSType(0x57535052) // WSPR
         let toggleHotKeyID = EventHotKeyID(signature: signature, id: toggleHotKeyIdentifier)
         let holdHotKeyID = EventHotKeyID(signature: signature, id: holdHotKeyIdentifier)
+        let cancelHotKeyID = EventHotKeyID(signature: signature, id: cancelHotKeyIdentifier)
+        let modeHotKeyID = EventHotKeyID(signature: signature, id: modeHotKeyIdentifier)
 
         if shortcutEnabled {
             let toggleRegisterStatus = RegisterEventHotKey(
@@ -361,6 +379,44 @@ final class GlobalHotkeyManager {
             currentHoldShortcut = holdShortcut
         }
 
+        if cancelEnabled, let cancelShortcut {
+            let cancelRegisterStatus = RegisterEventHotKey(
+                cancelShortcut.keyCode,
+                cancelShortcut.carbonModifiers,
+                cancelHotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &cancelHotKeyRef
+            )
+            guard cancelRegisterStatus == noErr else {
+                unregisterDefaultShortcut()
+                isRegistered = false
+                return false
+            }
+            currentCancelShortcut = cancelShortcut
+        } else {
+            currentCancelShortcut = cancelShortcut
+        }
+
+        if modeEnabled, let modeShortcut {
+            let modeRegisterStatus = RegisterEventHotKey(
+                modeShortcut.keyCode,
+                modeShortcut.carbonModifiers,
+                modeHotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &modeHotKeyRef
+            )
+            guard modeRegisterStatus == noErr else {
+                unregisterDefaultShortcut()
+                isRegistered = false
+                return false
+            }
+            currentModeShortcut = modeShortcut
+        } else {
+            currentModeShortcut = modeShortcut
+        }
+
         if !isHandlerInstalled {
             var eventSpecs = [
                 EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
@@ -391,6 +447,10 @@ final class GlobalHotkeyManager {
                     manager.onHoldPress?()
                 case manager.holdHotKeyIdentifier where eventKind == UInt32(kEventHotKeyReleased):
                     manager.onHoldRelease?()
+                case manager.cancelHotKeyIdentifier where eventKind == UInt32(kEventHotKeyPressed):
+                    manager.onCancel?()
+                case manager.modeHotKeyIdentifier where eventKind == UInt32(kEventHotKeyPressed):
+                    manager.onModeSwitch?()
                 default:
                     break
                 }
@@ -412,6 +472,16 @@ final class GlobalHotkeyManager {
             UnregisterEventHotKey(holdHotKeyRef)
             self.holdHotKeyRef = nil
         }
+        if let cancelHotKeyRef {
+            UnregisterEventHotKey(cancelHotKeyRef)
+            self.cancelHotKeyRef = nil
+        }
+        if let modeHotKeyRef {
+            UnregisterEventHotKey(modeHotKeyRef)
+            self.modeHotKeyRef = nil
+        }
+        currentCancelShortcut = nil
+        currentModeShortcut = nil
         isRegistered = false
     }
 

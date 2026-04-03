@@ -1,7 +1,10 @@
 import AppKit
 import AVFoundation
 import AIProcessingCore
+import AudioCore
+import Carbon
 import Foundation
+import ServiceManagement
 import SwiftUI
 import SnippetCore
 import CapabilityCore
@@ -147,6 +150,102 @@ enum LiveRewriteScope: String, CaseIterable, Identifiable {
     }
 }
 
+enum VoiceModelActiveDuration: String, CaseIterable, Identifiable {
+    case oneMinute
+    case fiveMinutes
+    case fifteenMinutes
+    case forever
+
+    var id: String { rawValue }
+
+    var seconds: TimeInterval? {
+        switch self {
+        case .oneMinute:
+            return 60
+        case .fiveMinutes:
+            return 5 * 60
+        case .fifteenMinutes:
+            return 15 * 60
+        case .forever:
+            return nil
+        }
+    }
+
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        if interfaceLanguageCode == "en" {
+            switch self {
+            case .oneMinute:
+                return "1 minute"
+            case .fiveMinutes:
+                return "5 minutes"
+            case .fifteenMinutes:
+                return "15 minutes"
+            case .forever:
+                return "Forever"
+            }
+        } else {
+            switch self {
+            case .oneMinute:
+                return "1 Minute"
+            case .fiveMinutes:
+                return "5 Minuten"
+            case .fifteenMinutes:
+                return "15 Minuten"
+            case .forever:
+                return "Für immer"
+            }
+        }
+    }
+}
+
+enum HistoryRetentionPolicy: String, CaseIterable, Identifiable {
+    case sevenDays
+    case thirtyDays
+    case ninetyDays
+    case forever
+
+    var id: String { rawValue }
+
+    var retainedDays: Int? {
+        switch self {
+        case .sevenDays:
+            return 7
+        case .thirtyDays:
+            return 30
+        case .ninetyDays:
+            return 90
+        case .forever:
+            return nil
+        }
+    }
+
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        if interfaceLanguageCode == "en" {
+            switch self {
+            case .sevenDays:
+                return "7 days"
+            case .thirtyDays:
+                return "30 days"
+            case .ninetyDays:
+                return "90 days"
+            case .forever:
+                return "Forever"
+            }
+        } else {
+            switch self {
+            case .sevenDays:
+                return "7 Tage"
+            case .thirtyDays:
+                return "30 Tage"
+            case .ninetyDays:
+                return "90 Tage"
+            case .forever:
+                return "Für immer"
+            }
+        }
+    }
+}
+
 @MainActor
 final class MacAppState: ObservableObject {
     @Published var streamingEnabled: Bool {
@@ -201,6 +300,34 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var cancelShortcutEnabled: Bool {
+        didSet {
+            userDefaults.set(cancelShortcutEnabled, forKey: UserDefaultsKeys.cancelShortcutEnabled)
+            registerSelectedHotkey(force: true)
+        }
+    }
+
+    @Published var cancelShortcut: HotkeyBinding {
+        didSet {
+            userDefaults.set(cancelShortcut.rawValue, forKey: UserDefaultsKeys.cancelShortcut)
+            registerSelectedHotkey(force: true)
+        }
+    }
+
+    @Published var modeSwitchShortcutEnabled: Bool {
+        didSet {
+            userDefaults.set(modeSwitchShortcutEnabled, forKey: UserDefaultsKeys.modeSwitchShortcutEnabled)
+            registerSelectedHotkey(force: true)
+        }
+    }
+
+    @Published var modeSwitchShortcut: HotkeyBinding {
+        didSet {
+            userDefaults.set(modeSwitchShortcut.rawValue, forKey: UserDefaultsKeys.modeSwitchShortcut)
+            registerSelectedHotkey(force: true)
+        }
+    }
+
     @Published var finalResultDeliveryMode: FinalResultDeliveryMode {
         didSet {
             userDefaults.set(finalResultDeliveryMode.rawValue, forKey: UserDefaultsKeys.finalResultDeliveryMode)
@@ -222,6 +349,27 @@ final class MacAppState: ObservableObject {
     @Published var showMenuBarShortcutHints: Bool {
         didSet {
             userDefaults.set(showMenuBarShortcutHints, forKey: UserDefaultsKeys.showMenuBarShortcutHints)
+        }
+    }
+
+    @Published var showInDock: Bool {
+        didSet {
+            userDefaults.set(showInDock, forKey: UserDefaultsKeys.showInDock)
+            applyActivationPolicy()
+        }
+    }
+
+    @Published var launchOnLoginEnabled: Bool {
+        didSet {
+            userDefaults.set(launchOnLoginEnabled, forKey: UserDefaultsKeys.launchOnLoginEnabled)
+            syncLaunchOnLogin()
+        }
+    }
+
+    @Published var automaticallyCheckForUpdates: Bool {
+        didSet {
+            userDefaults.set(automaticallyCheckForUpdates, forKey: UserDefaultsKeys.automaticallyCheckForUpdates)
+            syncAutomaticUpdateChecks()
         }
     }
 
@@ -270,6 +418,68 @@ final class MacAppState: ObservableObject {
     @Published var aiSalutation: AISalutation {
         didSet {
             userDefaults.set(aiSalutation.rawValue, forKey: UserDefaultsKeys.aiSalutation)
+        }
+    }
+
+    @Published var voiceModelActiveDuration: VoiceModelActiveDuration {
+        didSet {
+            userDefaults.set(voiceModelActiveDuration.rawValue, forKey: UserDefaultsKeys.voiceModelActiveDuration)
+            dictationRuntime.setVoiceModelActiveDuration(voiceModelActiveDuration)
+        }
+    }
+
+    @Published var automaticMicrophoneGainBoost: Bool {
+        didSet {
+            userDefaults.set(automaticMicrophoneGainBoost, forKey: UserDefaultsKeys.automaticMicrophoneGainBoost)
+        }
+    }
+
+    @Published var silenceRemovalEnabled: Bool {
+        didSet {
+            userDefaults.set(silenceRemovalEnabled, forKey: UserDefaultsKeys.silenceRemovalEnabled)
+        }
+    }
+
+    @Published var dynamicNormalizationEnabled: Bool {
+        didSet {
+            userDefaults.set(dynamicNormalizationEnabled, forKey: UserDefaultsKeys.dynamicNormalizationEnabled)
+        }
+    }
+
+    @Published var soundEffectsEnabled: Bool {
+        didSet {
+            userDefaults.set(soundEffectsEnabled, forKey: UserDefaultsKeys.soundEffectsEnabled)
+        }
+    }
+
+    @Published var soundEffectsVolume: Double {
+        didSet {
+            userDefaults.set(soundEffectsVolume, forKey: UserDefaultsKeys.soundEffectsVolume)
+        }
+    }
+
+    @Published var historyRetentionPolicy: HistoryRetentionPolicy {
+        didSet {
+            userDefaults.set(historyRetentionPolicy.rawValue, forKey: UserDefaultsKeys.historyRetentionPolicy)
+            pruneHistoryIfNeeded()
+        }
+    }
+
+    @Published var autoSendAfterPaste: Bool {
+        didSet {
+            userDefaults.set(autoSendAfterPaste, forKey: UserDefaultsKeys.autoSendAfterPaste)
+        }
+    }
+
+    @Published var restoreClipboardAfterPaste: Bool {
+        didSet {
+            userDefaults.set(restoreClipboardAfterPaste, forKey: UserDefaultsKeys.restoreClipboardAfterPaste)
+        }
+    }
+
+    @Published var simulateKeypresses: Bool {
+        didSet {
+            userDefaults.set(simulateKeypresses, forKey: UserDefaultsKeys.simulateKeypresses)
         }
     }
 
@@ -379,6 +589,28 @@ final class MacAppState: ObservableObject {
         return HotkeyAdvisor.advisory(for: holdShortcut)
     }
 
+    var cancelShortcutAdvisory: HotkeyAdvisory? {
+        if cancelShortcut == selectedHotkey || cancelShortcut == holdShortcut {
+            return HotkeyAdvisory(
+                severity: .warning,
+                title: "Konflikt mit Diktier-Shortcuts",
+                message: "Der Abbrechen-Shortcut sollte nicht mit Start/Stopp oder Hold-to-dictate kollidieren."
+            )
+        }
+        return HotkeyAdvisor.advisory(for: cancelShortcut)
+    }
+
+    var modeSwitchShortcutAdvisory: HotkeyAdvisory? {
+        if modeSwitchShortcut == selectedHotkey || modeSwitchShortcut == holdShortcut || modeSwitchShortcut == cancelShortcut {
+            return HotkeyAdvisory(
+                severity: .warning,
+                title: "Konflikt mit anderen Shortcuts",
+                message: "Der Moduswechsel-Shortcut sollte eine eigene, eindeutige Kombination verwenden."
+            )
+        }
+        return HotkeyAdvisor.advisory(for: modeSwitchShortcut)
+    }
+
     var statusBadgeText: String {
         switch recordingStatus {
         case "Recording":
@@ -444,8 +676,32 @@ final class MacAppState: ObservableObject {
         !missingPermissionTargets.isEmpty
     }
 
+    var appSupportDirectoryURL: URL {
+        Self.appSupportDirectory()
+    }
+
+    var appSupportDirectoryPathText: String {
+        Self.appSupportDirectory().path
+    }
+
+    var dockVisibilityStatusText: String {
+        showInDock
+            ? "Im Dock sichtbar"
+            : "Nur in der Menüleiste sichtbar"
+    }
+
+    var launchOnLoginStatusText: String {
+        launchOnLoginEnabled
+            ? "Beim Anmelden automatisch starten"
+            : "Nicht beim Anmelden starten"
+    }
+
     var availableQuickSettingsAIModels: [AIModelDescriptor] {
         aiModels.filter { $0.quickSettingsEligible && $0.availability.isAvailable }
+    }
+
+    var visibleAIModels: [AIModelDescriptor] {
+        aiModels
     }
 
     var selectedAIModel: AIModelDescriptor? {
@@ -473,6 +729,21 @@ final class MacAppState: ObservableObject {
         )
     }
 
+    var audioProcessingConfiguration: AudioProcessingConfiguration {
+        AudioProcessingConfiguration(
+            inputLevelCompensationEnabled: automaticMicrophoneGainBoost,
+            silenceRemovalEnabled: silenceRemovalEnabled,
+            dynamicNormalizationEnabled: dynamicNormalizationEnabled
+        )
+    }
+
+    var soundFeedbackConfiguration: SoundFeedbackConfiguration {
+        SoundFeedbackConfiguration(
+            enabled: soundEffectsEnabled,
+            volume: soundEffectsVolume
+        )
+    }
+
     private enum UserDefaultsKeys {
         static let streamingEnabled = "wispr.settings.streamingEnabled"
         static let selectedLanguage = "wispr.settings.selectedLanguage"
@@ -482,10 +753,17 @@ final class MacAppState: ObservableObject {
         static let toggleShortcutEnabled = "wispr.settings.toggleShortcutEnabled"
         static let holdToDictateEnabled = "wispr.settings.holdToDictateEnabled"
         static let holdShortcut = "wispr.settings.holdShortcut"
+        static let cancelShortcutEnabled = "wispr.settings.cancelShortcutEnabled"
+        static let cancelShortcut = "wispr.settings.cancelShortcut"
+        static let modeSwitchShortcutEnabled = "wispr.settings.modeSwitchShortcutEnabled"
+        static let modeSwitchShortcut = "wispr.settings.modeSwitchShortcut"
         static let finalResultDeliveryMode = "wispr.settings.finalResultDeliveryMode"
         static let clipboardFallbackWhenNoTarget = "wispr.settings.clipboardFallbackWhenNoTarget"
         static let liveRewriteScope = "wispr.settings.liveRewriteScope"
         static let showMenuBarShortcutHints = "wispr.settings.showMenuBarShortcutHints"
+        static let showInDock = "wispr.settings.showInDock"
+        static let launchOnLoginEnabled = "wispr.settings.launchOnLoginEnabled"
+        static let automaticallyCheckForUpdates = "wispr.settings.automaticallyCheckForUpdates"
         static let debugModeEnabled = "wispr.settings.debugModeEnabled"
         static let aiProcessingEnabled = "wispr.settings.aiProcessingEnabled"
         static let selectedAIModelID = "wispr.settings.selectedAIModelID"
@@ -494,6 +772,16 @@ final class MacAppState: ObservableObject {
         static let legacyAIProcessingScope = "wispr.settings.aiProcessingScope"
         static let aiWritingStyle = "wispr.settings.aiWritingStyle"
         static let aiSalutation = "wispr.settings.aiSalutation"
+        static let voiceModelActiveDuration = "wispr.settings.ai.voiceModelActiveDuration"
+        static let automaticMicrophoneGainBoost = "wispr.settings.automaticMicrophoneGainBoost"
+        static let silenceRemovalEnabled = "wispr.settings.silenceRemovalEnabled"
+        static let dynamicNormalizationEnabled = "wispr.settings.dynamicNormalizationEnabled"
+        static let soundEffectsEnabled = "wispr.settings.soundEffectsEnabled"
+        static let soundEffectsVolume = "wispr.settings.soundEffectsVolume"
+        static let historyRetentionPolicy = "wispr.settings.historyRetentionPolicy"
+        static let autoSendAfterPaste = "wispr.settings.autoSendAfterPaste"
+        static let restoreClipboardAfterPaste = "wispr.settings.restoreClipboardAfterPaste"
+        static let simulateKeypresses = "wispr.settings.simulateKeypresses"
         static let remoteProviders = "wispr.settings.ai.remoteProviders"
         static let selectedRemoteProviderID = "wispr.settings.ai.selectedRemoteProviderID"
     }
@@ -512,6 +800,7 @@ final class MacAppState: ObservableObject {
     private let appConfiguration: MacAppConfiguration
 
     private let licenseController: LicenseController
+    private weak var updaterController: SparkleUpdaterController?
     private var didActivateApplicationObserver: NSObjectProtocol?
     private var didBecomeActiveObserver: NSObjectProtocol?
     private var didWakeObserver: NSObjectProtocol?
@@ -571,7 +860,30 @@ final class MacAppState: ObservableObject {
             self.holdShortcut = .optionShiftSpace
         }
 
+        self.cancelShortcutEnabled = userDefaults.object(forKey: UserDefaultsKeys.cancelShortcutEnabled) as? Bool ?? false
+        if let rawCancelHotkey = userDefaults.string(forKey: UserDefaultsKeys.cancelShortcut),
+           let parsedCancelHotkey = HotkeyBinding.from(rawValue: rawCancelHotkey) {
+            self.cancelShortcut = parsedCancelHotkey
+        } else {
+            self.cancelShortcut = HotkeyBinding(keyCode: UInt32(kVK_Escape), carbonModifiers: UInt32(optionKey))
+        }
+
+        self.modeSwitchShortcutEnabled = userDefaults.object(forKey: UserDefaultsKeys.modeSwitchShortcutEnabled) as? Bool ?? false
+        if let rawModeSwitchHotkey = userDefaults.string(forKey: UserDefaultsKeys.modeSwitchShortcut),
+           let parsedModeSwitchHotkey = HotkeyBinding.from(rawValue: rawModeSwitchHotkey) {
+            self.modeSwitchShortcut = parsedModeSwitchHotkey
+        } else {
+            self.modeSwitchShortcut = HotkeyBinding(keyCode: UInt32(kVK_ANSI_M), carbonModifiers: UInt32(optionKey | shiftKey))
+        }
+
         self.showMenuBarShortcutHints = userDefaults.object(forKey: UserDefaultsKeys.showMenuBarShortcutHints) as? Bool ?? false
+        self.showInDock = userDefaults.object(forKey: UserDefaultsKeys.showInDock) as? Bool ?? false
+        if userDefaults.object(forKey: UserDefaultsKeys.launchOnLoginEnabled) != nil {
+            self.launchOnLoginEnabled = userDefaults.bool(forKey: UserDefaultsKeys.launchOnLoginEnabled)
+        } else {
+            self.launchOnLoginEnabled = Self.currentLaunchOnLoginEnabled()
+        }
+        self.automaticallyCheckForUpdates = userDefaults.object(forKey: UserDefaultsKeys.automaticallyCheckForUpdates) as? Bool ?? true
         self.debugModeEnabled = userDefaults.object(forKey: UserDefaultsKeys.debugModeEnabled) as? Bool ?? false
         if let rawDeliveryMode = userDefaults.string(forKey: UserDefaultsKeys.finalResultDeliveryMode),
            let parsedDeliveryMode = FinalResultDeliveryMode(rawValue: rawDeliveryMode) {
@@ -618,6 +930,30 @@ final class MacAppState: ObservableObject {
         } else {
             self.aiSalutation = .none
         }
+
+        if let rawVoiceModelActiveDuration = userDefaults.string(forKey: UserDefaultsKeys.voiceModelActiveDuration),
+           let parsedVoiceModelActiveDuration = VoiceModelActiveDuration(rawValue: rawVoiceModelActiveDuration) {
+            self.voiceModelActiveDuration = parsedVoiceModelActiveDuration
+        } else {
+            self.voiceModelActiveDuration = .oneMinute
+        }
+
+        self.automaticMicrophoneGainBoost = userDefaults.object(forKey: UserDefaultsKeys.automaticMicrophoneGainBoost) as? Bool ?? false
+        self.silenceRemovalEnabled = userDefaults.object(forKey: UserDefaultsKeys.silenceRemovalEnabled) as? Bool ?? false
+        self.dynamicNormalizationEnabled = userDefaults.object(forKey: UserDefaultsKeys.dynamicNormalizationEnabled) as? Bool ?? false
+        self.soundEffectsEnabled = userDefaults.object(forKey: UserDefaultsKeys.soundEffectsEnabled) as? Bool ?? false
+        self.soundEffectsVolume = userDefaults.object(forKey: UserDefaultsKeys.soundEffectsVolume) as? Double ?? 50
+
+        if let rawHistoryRetentionPolicy = userDefaults.string(forKey: UserDefaultsKeys.historyRetentionPolicy),
+           let parsedHistoryRetentionPolicy = HistoryRetentionPolicy(rawValue: rawHistoryRetentionPolicy) {
+            self.historyRetentionPolicy = parsedHistoryRetentionPolicy
+        } else {
+            self.historyRetentionPolicy = .forever
+        }
+
+        self.autoSendAfterPaste = userDefaults.object(forKey: UserDefaultsKeys.autoSendAfterPaste) as? Bool ?? false
+        self.restoreClipboardAfterPaste = userDefaults.object(forKey: UserDefaultsKeys.restoreClipboardAfterPaste) as? Bool ?? false
+        self.simulateKeypresses = userDefaults.object(forKey: UserDefaultsKeys.simulateKeypresses) as? Bool ?? false
 
         let persistedRemoteProviders: [AIRemoteProviderConfiguration]
         if let data = userDefaults.data(forKey: UserDefaultsKeys.remoteProviders),
@@ -675,6 +1011,12 @@ final class MacAppState: ObservableObject {
         hotkeyManager.onHoldRelease = { [weak self] in
             self?.handleHoldShortcutReleased()
         }
+        hotkeyManager.onCancel = { [weak self] in
+            self?.cancelTranscriptionFromUI()
+        }
+        hotkeyManager.onModeSwitch = { [weak self] in
+            self?.toggleDictationModeFromShortcut()
+        }
         registerSelectedHotkey(force: true)
 
         loadSnippets()
@@ -683,8 +1025,11 @@ final class MacAppState: ObservableObject {
         rebuildAIProcessingStack(reason: "initial-load")
         updateUpdaterState()
         loadExistingLicense()
+        dictationRuntime.setVoiceModelActiveDuration(voiceModelActiveDuration)
         dictationRuntime.prepareRuntime()
         refreshPermissionStates()
+        applyActivationPolicy()
+        syncLaunchOnLogin()
         configureLifecycleObservers()
     }
 
@@ -701,9 +1046,11 @@ final class MacAppState: ObservableObject {
     }
 
     func bindUpdater(_ updaterController: SparkleUpdaterController) {
+        self.updaterController = updaterController
         updaterConfigured = updaterController.isConfigured
         updaterStatusText = updaterController.statusText
         updaterFeedURLText = updaterController.feedURLDescription
+        syncAutomaticUpdateChecks()
         checkForUpdatesHandler = { [weak self, weak updaterController] in
             updaterController?.checkForUpdates()
             self?.updaterStatusText = updaterController?.statusText ?? "Updater nicht verfügbar"
@@ -725,6 +1072,24 @@ final class MacAppState: ObservableObject {
     func openHistorySettingsWindow() {
         selectedSettingsTab = .history
         openSettingsWindow()
+    }
+
+    func cancelTranscriptionFromUI() {
+        appendAudit("session.cancel")
+        dictationRuntime.cancel()
+    }
+
+    func toggleDictationModeFromShortcut() {
+        streamingEnabled.toggle()
+        appendAudit("mode.toggle streamingEnabled=\(streamingEnabled)")
+        appendDiagnostic(streamingEnabled ? "Live-Einfügen aktiviert. Der Wechsel gilt ab dem nächsten Diktat." : "Live-Einfügen deaktiviert. Der Wechsel gilt ab dem nächsten Diktat.")
+    }
+
+    func revealAppDataFolder() {
+        let folderURL = Self.appSupportDirectory()
+        try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        NSWorkspace.shared.activateFileViewerSelecting([folderURL])
+        appendAudit("storage.reveal path=\(folderURL.path)")
     }
 
     func addRemoteProvider(preset: AIRemoteProviderPreset) {
@@ -888,7 +1253,12 @@ final class MacAppState: ObservableObject {
             snippetRules: snippetRules,
             finalResultDeliveryMode: finalResultDeliveryMode,
             clipboardFallbackWhenNoTarget: clipboardFallbackWhenNoTarget,
-            aiProcessing: aiProcessingConfiguration
+            simulateKeypresses: simulateKeypresses,
+            restoreClipboardAfterPaste: restoreClipboardAfterPaste,
+            autoSendAfterPaste: autoSendAfterPaste,
+            aiProcessing: aiProcessingConfiguration,
+            audioProcessing: audioProcessingConfiguration,
+            soundFeedback: soundFeedbackConfiguration
         )
     }
 
@@ -1073,12 +1443,12 @@ final class MacAppState: ObservableObject {
             "Capability: \(capabilitySummary)",
             "Updater: \(updaterStatusText)",
             "License: \(licenseStatusText)",
-            "Debug mode: \(debugModeEnabled ? "enabled" : "disabled")",
+            "Technical logging: \(debugModeEnabled ? "enabled" : "disabled")",
             "",
             diagnosticsText,
             "",
-            "Debug Log",
-            debugLogText.isEmpty ? "No debug events captured." : debugLogText
+            "Technical Diagnostic Log",
+            debugLogText.isEmpty ? "No technical diagnostic events captured." : debugLogText
         ].joined(separator: "\n")
 
         do {
@@ -1111,16 +1481,16 @@ final class MacAppState: ObservableObject {
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "wispr-debug.log"
+        panel.nameFieldStringValue = "wispr-diagnostic-log.txt"
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
             try debugLogger.export(to: url)
-            appendDiagnostic("Debug-Log exportiert")
-            appendAudit("debug.export path=\(url.path)")
+            appendDiagnostic("Diagnoseprotokoll exportiert")
+            appendAudit("diagnostic-log.export path=\(url.path)")
         } catch {
-            appendDiagnostic("Debug-Log-Export fehlgeschlagen: \(error.localizedDescription)")
+            appendDiagnostic("Diagnoseprotokoll-Export fehlgeschlagen: \(error.localizedDescription)")
         }
     }
 
@@ -1162,6 +1532,7 @@ final class MacAppState: ObservableObject {
         )
 
         transcriptHistory.insert(entry, at: 0)
+        pruneHistoryIfNeeded()
         if transcriptHistory.count > 500 {
             transcriptHistory = Array(transcriptHistory.prefix(500))
         }
@@ -1230,6 +1601,7 @@ final class MacAppState: ObservableObject {
     private func loadHistory() {
         do {
             transcriptHistory = try historyStore.load()
+            pruneHistoryIfNeeded()
             appendDiagnostic("History geladen: \(transcriptHistory.count)")
         } catch {
             appendDiagnostic("History-Load fehlgeschlagen: \(error.localizedDescription)")
@@ -1242,6 +1614,17 @@ final class MacAppState: ObservableObject {
             try historyStore.save(transcriptHistory)
         } catch {
             appendDiagnostic("History-Save fehlgeschlagen: \(error.localizedDescription)")
+        }
+    }
+
+    private func pruneHistoryIfNeeded() {
+        guard let retainedDays = historyRetentionPolicy.retainedDays else { return }
+        let cutoff = Calendar.current.date(byAdding: .day, value: -retainedDays, to: Date()) ?? .distantPast
+        let originalCount = transcriptHistory.count
+        transcriptHistory.removeAll { $0.createdAt < cutoff }
+        if transcriptHistory.count != originalCount {
+            persistHistory()
+            appendDiagnostic("History aufgrund der Aufbewahrungsrichtlinie bereinigt: \(transcriptHistory.count) Einträge")
         }
     }
 
@@ -1352,6 +1735,7 @@ final class MacAppState: ObservableObject {
 
         if selectedAIModelID == nil {
             selectedAIModelID = catalog.availableModels.first?.id
+                ?? catalog.allModels.first?.id
         }
 
         if aiProcessingEnabled,
@@ -1386,6 +1770,10 @@ final class MacAppState: ObservableObject {
             shortcutEnabled: toggleShortcutEnabled,
             holdShortcut: holdShortcut,
             holdEnabled: holdToDictateEnabled,
+            cancelShortcut: cancelShortcut,
+            cancelEnabled: cancelShortcutEnabled,
+            modeShortcut: modeSwitchShortcut,
+            modeEnabled: modeSwitchShortcutEnabled,
             force: force
         )
         if didRegister {
@@ -1399,19 +1787,62 @@ final class MacAppState: ObservableObject {
                     ? "Hold-to-dictate aktiv: \(holdShortcut.displayName)"
                     : "Hold-to-dictate deaktiviert."
             )
+            appendDiagnostic(
+                cancelShortcutEnabled
+                    ? "Abbrechen-Shortcut aktiv: \(cancelShortcut.displayName)"
+                    : "Abbrechen-Shortcut deaktiviert."
+            )
+            appendDiagnostic(
+                modeSwitchShortcutEnabled
+                    ? "Moduswechsel-Shortcut aktiv: \(modeSwitchShortcut.displayName)"
+                    : "Moduswechsel-Shortcut deaktiviert."
+            )
             if let hotkeyAdvisory {
                 appendDiagnostic("Shortcut-Hinweis: \(hotkeyAdvisory.title) – \(hotkeyAdvisory.message)")
             }
             if holdToDictateEnabled, let holdShortcutAdvisory {
                 appendDiagnostic("Hold-Hinweis: \(holdShortcutAdvisory.title) – \(holdShortcutAdvisory.message)")
             }
+            if cancelShortcutEnabled, let cancelShortcutAdvisory {
+                appendDiagnostic("Abbrechen-Hinweis: \(cancelShortcutAdvisory.title) – \(cancelShortcutAdvisory.message)")
+            }
+            if modeSwitchShortcutEnabled, let modeSwitchShortcutAdvisory {
+                appendDiagnostic("Modus-Hinweis: \(modeSwitchShortcutAdvisory.title) – \(modeSwitchShortcutAdvisory.message)")
+            }
             appendAudit(
-                "hotkey.register value=\(selectedHotkey.rawValue) enabled=\(toggleShortcutEnabled) hold=\(holdShortcut.rawValue) holdEnabled=\(holdToDictateEnabled)"
+                "hotkey.register value=\(selectedHotkey.rawValue) enabled=\(toggleShortcutEnabled) hold=\(holdShortcut.rawValue) holdEnabled=\(holdToDictateEnabled) cancel=\(cancelShortcut.rawValue) cancelEnabled=\(cancelShortcutEnabled) mode=\(modeSwitchShortcut.rawValue) modeEnabled=\(modeSwitchShortcutEnabled)"
             )
         } else {
             appendDiagnostic("Globaler Shortcut konnte nicht registriert werden: \(selectedHotkey.displayName)")
             appendAudit("hotkey.register_failed value=\(selectedHotkey.rawValue)")
         }
+    }
+
+    private func applyActivationPolicy() {
+        let targetPolicy: NSApplication.ActivationPolicy = showInDock ? .regular : .accessory
+        if NSApplication.shared.activationPolicy() != targetPolicy {
+            NSApplication.shared.setActivationPolicy(targetPolicy)
+        }
+    }
+
+    private func syncLaunchOnLogin() {
+        do {
+            if launchOnLoginEnabled {
+                if #available(macOS 13.0, *), SMAppService.mainApp.status != .enabled {
+                    try SMAppService.mainApp.register()
+                    appendDiagnostic("Anmeldung beim Systemstart aktiviert.")
+                }
+            } else if #available(macOS 13.0, *), SMAppService.mainApp.status == .enabled {
+                try SMAppService.mainApp.unregister()
+                appendDiagnostic("Anmeldung beim Systemstart deaktiviert.")
+            }
+        } catch {
+            appendDiagnostic("Anmeldung beim Systemstart konnte nicht aktualisiert werden: \(error.localizedDescription)")
+        }
+    }
+
+    private func syncAutomaticUpdateChecks() {
+        updaterController?.setAutomaticallyChecksEnabled(automaticallyCheckForUpdates)
     }
 
     private func updateUpdaterState() {
@@ -1479,5 +1910,14 @@ final class MacAppState: ObservableObject {
 
     private static func legacyLicenseCacheURL() -> URL {
         appSupportDirectory().appendingPathComponent("license-cache.json", isDirectory: false)
+    }
+
+    private static func currentLaunchOnLoginEnabled() -> Bool {
+        #if canImport(ServiceManagement)
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        }
+        #endif
+        return false
     }
 }

@@ -54,6 +54,10 @@ let package = Package(
             dependencies: ["ASRCore"]
         ),
         .testTarget(
+            name: "AudioCoreTests",
+            dependencies: ["AudioCore"]
+        ),
+        .testTarget(
             name: "SnippetCoreTests",
             dependencies: ["SnippetCore"]
         ),

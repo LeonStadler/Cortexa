@@ -29,6 +29,16 @@ final class AIProcessingServiceTests: XCTestCase {
         XCTAssertEqual(catalog.quickSettingsModels.map(\.id), ["a"])
     }
 
+    func testAvailableModelsReturnAllAvailableEntries() {
+        let catalog = AIModelCatalog(descriptors: [
+            AIModelDescriptor(id: "stable", displayName: "Stable", providerKind: .appleFoundation, availability: .available, quickSettingsEligible: true),
+            AIModelDescriptor(id: "remote", displayName: "Remote", providerKind: .remoteAPI, availability: .available, quickSettingsEligible: true)
+        ])
+
+        XCTAssertEqual(catalog.availableModels.map(\.id), ["remote", "stable"])
+        XCTAssertEqual(catalog.quickSettingsModels.map(\.id), ["remote", "stable"])
+    }
+
     func testDisabledConfigurationBypassesProviderCall() async {
         let provider = StubProvider(
             providerID: "apple.foundation",

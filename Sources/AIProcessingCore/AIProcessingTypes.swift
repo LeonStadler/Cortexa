@@ -210,6 +210,26 @@ public struct AIRemoteModel: Codable, Equatable, Identifiable, Sendable {
         self.displayName = displayName
         self.quickSettingsEligible = quickSettingsEligible
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case displayName
+        case quickSettingsEligible
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        quickSettingsEligible = try container.decodeIfPresent(Bool.self, forKey: .quickSettingsEligible) ?? true
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(quickSettingsEligible, forKey: .quickSettingsEligible)
+    }
 }
 
 public enum AIWritingStyle: String, Codable, CaseIterable, Identifiable, Sendable {

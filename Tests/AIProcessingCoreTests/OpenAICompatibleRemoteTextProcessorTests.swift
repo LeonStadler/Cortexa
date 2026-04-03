@@ -84,6 +84,13 @@ final class OpenAICompatibleRemoteTextProcessorTests: XCTestCase {
         XCTAssertEqual(result, "Polished remote text")
     }
 
+    func testRemoteModelDecodingDefaultsToQuickSettingsEligible() throws {
+        let data = Data(#"{"id":"local-model","displayName":"Local model"}"#.utf8)
+        let model = try JSONDecoder().decode(AIRemoteModel.self, from: data)
+
+        XCTAssertTrue(model.quickSettingsEligible)
+    }
+
     func testOptionalAPIKeyProviderOmitsAuthorizationHeader() async throws {
         let session = makeSession()
         StubURLProtocol.requestHandler = { request in

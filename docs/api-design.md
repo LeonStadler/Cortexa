@@ -147,6 +147,8 @@ Current provider surface:
 - Remote models are discovered from the provider's `/models` endpoint and mapped into the shared model catalog via a provider-qualified selection ID (`providerID::modelID`), while the transport uses the provider's raw `requestModelID`.
 - Providers can declare whether they require an API key. This keeps local OpenAI-compatible runtimes such as Ollama or LM Studio usable without fake credentials while still filtering unavailable authenticated providers out of quick settings.
 - Models that are unavailable locally, unsupported on the current device, or missing required credentials are excluded from quick settings.
+- The macOS shell shows AI models directly without a separate model-visibility toggle; the catalog keeps only the provider metadata required for selection and quick settings.
+- The macOS shell keeps a configurable voice-model active duration so the runtime can unload idle model state after a short warm window instead of keeping it resident forever.
 - If AI processing is disabled, unavailable, or fails at runtime, the raw transcript path remains the fallback and dictation continues.
 
 ## AppShell Runtime Options (macOS)
@@ -174,7 +176,7 @@ The macOS app shell uses these options to:
 - optionally translate Whisper output to English only when `translationOutput == .english`
 - optionally run AI processing separately for live insertion updates and for the final result
 - maintain one provider-agnostic AI model picker across Apple on-device and remote API-backed providers
-- expose an optional debug mode that captures detailed runtime diagnostics plus ASR subprocess lifecycle events for support cases
+- expose optional technical diagnostic logging that captures detailed runtime diagnostics plus ASR subprocess lifecycle events for support cases
 - choose whether the final transcript is inserted or copied, and whether clipboard fallback is allowed when no text target is available
 - expose clipboard fallback as an explicit privacy tradeoff rather than a silent background path
 

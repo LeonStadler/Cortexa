@@ -160,6 +160,17 @@ private struct RemoteModelsResponse: Decodable {
     struct Model: Decodable {
         let id: String
         let name: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            name = try container.decodeIfPresent(String.self, forKey: .name)
+        }
     }
 
     let data: [Model]

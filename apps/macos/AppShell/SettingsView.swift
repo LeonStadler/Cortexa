@@ -88,7 +88,7 @@ struct SettingsView: View {
     }
 
     private var generalHasMatches: Bool {
-        matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints", "zugriff", "permissions", "berechtigungen", "mikrofon", "accessibility", "bedienungshilfen"])
+        matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints", "dock", "launch on login", "updates", "zugriff", "permissions", "berechtigungen", "mikrofon", "accessibility", "bedienungshilfen"])
     }
 
     private var dictationHasMatches: Bool {
@@ -106,6 +106,10 @@ struct SettingsView: View {
             "zwischenablage",
             "insert",
             "delivery",
+            "paste",
+            "auto-send",
+            "restore clipboard",
+            "keypress",
             "anpassung",
             "anpassungsradius",
             "anpassen",
@@ -123,7 +127,7 @@ struct SettingsView: View {
     }
 
     private var shortcutsHasMatches: Bool {
-        matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) 
+        matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat", "cancel", "abbrechen", "mode", "modus"])
     }
 
     private var aiHasMatches: Bool {
@@ -145,16 +149,17 @@ struct SettingsView: View {
             "openrouter",
             "provider",
             "anbieter",
-            "key"
+            "key",
+            "api key"
         ])
     }
 
     private var historyHasMatches: Bool {
-        matches(["history", "verlauf", "transkript", "dictation", "diktat"]) || !filteredHistory.isEmpty
+        matches(["history", "verlauf", "transkript", "dictation", "diktat", "retention", "aufbewahrung", "storage", "folder"]) || !filteredHistory.isEmpty
     }
 
     private var aboutHasMatches: Bool {
-        matches(["about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource", "open source", "intermedia", "design", "fotografie", "vorarlberg"])
+        matches(["about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource", "open source", "intermedia", "design", "fotografie", "vorarlberg", "changelog", "neuigkeiten", "release", "release notes", "änderungen", "aenderungen"])
     }
 
     private var snippetsHasMatches: Bool {
@@ -162,10 +167,14 @@ struct SettingsView: View {
     }
 
     private var advancedHasMatches: Bool {
-        matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit"]) ||
+        matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit", "storage", "folder", "app support", "logs", "protokolle", "voice", "modell", "model", "warm", "dauer", "duration", "laufzeit", "speicher halten", "runtime"]) ||
             appState.diagnosticsText.lowercased().contains(searchQuery) ||
             appState.capabilitySummary.lowercased().contains(searchQuery) ||
             appState.updaterStatusText.lowercased().contains(searchQuery)
+    }
+
+    private var soundHasMatches: Bool {
+        matches(["sound", "audio", "mikrofon", "volume", "loudness", "silence", "normalization", "normalisierung", "verstärkung", "gain", "feedback"])
     }
 
     private var compressedDiagnosticsText: String {
@@ -259,6 +268,8 @@ struct SettingsView: View {
             generalForm
         case .dictation:
             dictationForm
+        case .sound:
+            soundForm
         case .shortcuts:
             shortcutsForm
         case .ai:
@@ -296,8 +307,21 @@ struct SettingsView: View {
             Section(text("Live-Anpassung", "Live rewriting")) {
                 liveRewriteContent
             }
-            Section(text("Ablage", "Delivery")) {
+            Section(text("Texteingabe", "Text input")) {
                 dictationDeliveryContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+
+    private var soundForm: some View {
+        Form {
+            Section(text("Eingang", "Input")) {
+                soundInputContent
+            }
+            Section(text("Rückmeldung", "Feedback")) {
+                soundFeedbackContent
             }
         }
         .formStyle(.grouped)
@@ -312,6 +336,12 @@ struct SettingsView: View {
             Section(text("Halten zum Diktieren", "Hold to Dictate")) {
                 holdShortcutContent
             }
+            Section(text("Abbrechen", "Cancel")) {
+                cancelShortcutContent
+            }
+            Section(text("Moduswechsel", "Mode switch")) {
+                modeSwitchShortcutContent
+            }
         }
         .formStyle(.grouped)
         .frame(maxWidth: 760, alignment: .leading)
@@ -321,6 +351,9 @@ struct SettingsView: View {
         Form {
             Section(text("Verarbeitung", "Processing")) {
                 aiProcessingContent
+            }
+            Section(text("Anbieter", "Providers")) {
+                aiProviderContent
             }
             Section(text("Modelle", "Models")) {
                 aiModelContent
@@ -335,6 +368,9 @@ struct SettingsView: View {
             Section(text("Aktionen", "Actions")) {
                 historyActionContent
             }
+            Section(text("Aufbewahrung", "Retention")) {
+                historyRetentionContent
+            }
             Section(text("Transkriptverlauf", "Transcript History")) {
                 historyEntriesContent
             }
@@ -345,6 +381,9 @@ struct SettingsView: View {
 
     private var aboutForm: some View {
         Form {
+            Section(text("Changelog", "Changelog")) {
+                aboutChangelogContent
+            }
             Section(text("Über mich", "About me")) {
                 aboutProfileContent
             }
@@ -372,6 +411,12 @@ struct SettingsView: View {
         Form {
             Section {
                 advancedOverviewContent
+            }
+            Section(text("Modelllaufzeit", "Model runtime")) {
+                voiceModelRuntimeContent
+            }
+            Section(text("Speicherort", "Storage location")) {
+                advancedStorageContent
             }
             Section(text("Updates", "Updates")) {
                 updatesContent
@@ -407,6 +452,13 @@ struct SettingsView: View {
                 }
             }
 
+            if soundHasMatches {
+                Section(text("Sound", "Sound")) {
+                    soundInputContent
+                    soundFeedbackContent
+                }
+            }
+
             if shortcutsHasMatches {
                 Section(text("Kurzbefehle", "Shortcuts")) {
                     startStopShortcutContent
@@ -417,6 +469,7 @@ struct SettingsView: View {
             if aiHasMatches {
                 Section(text("AI", "AI")) {
                     aiProcessingContent
+                    aiProviderContent
                     aiModelContent
                 }
             }
@@ -430,6 +483,7 @@ struct SettingsView: View {
 
             if aboutHasMatches {
                 Section(text("About", "About")) {
+                    aboutChangelogContent
                     aboutProfileContent
                     if appState.isLicenseUIEnabledForDevelopment {
                         aboutSupportContent
@@ -446,6 +500,7 @@ struct SettingsView: View {
             if advancedHasMatches {
                 Section(text("Erweitert", "Advanced")) {
                     advancedOverviewContent
+                    voiceModelRuntimeContent
                     updatesContent
                     diagnosticsContent
                     if appState.isLicenseUIEnabledForDevelopment {
@@ -467,8 +522,8 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var generalAppearanceContent: some View {
-        if matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints"]) {
-            LabeledContent(text("App-Sprache", "App language")) {
+        if matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints", "dock", "launch on login", "updates"]) {
+            LabeledContent {
                 Picker(text("App-Sprache", "App Language"), selection: $uiLanguageRaw) {
                     ForEach(AppLanguage.allCases) { language in
                         Text(language.displayName).tag(language.rawValue)
@@ -476,36 +531,99 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .frame(minWidth: 170)
+            } label: {
+                SettingsFieldLabel(title: text("App-Sprache", "App language"))
             }
 
-            Toggle(text("Kurzbefehl-Hinweise im Menü anzeigen", "Show shortcut hints in menu"), isOn: $appState.showMenuBarShortcutHints)
+            Toggle(isOn: $appState.showMenuBarShortcutHints) {
+                SettingsFieldLabel(
+                    title: text("Kurzbefehl-Hinweise im Menü anzeigen", "Show shortcut hints in menu"),
+                    helpText: text(
+                        "Zeigt Tastenkombinationen direkt neben passenden Einträgen im Menüleisten-Menü an.",
+                        "Shows keyboard shortcuts directly next to matching menu bar items."
+                    )
+                )
+            }
 
-            Text(text(
-                "Diese Option zeigt Tastenkombinationen direkt neben passenden Einträgen im Dropdown-Menü an.",
-                "This option shows keyboard shortcuts next to matching items in the dropdown menu."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            Divider()
+
+            Toggle(text("Im Dock anzeigen", "Show in Dock"), isOn: $appState.showInDock)
+
+            Toggle(isOn: $appState.launchOnLoginEnabled) {
+                SettingsFieldLabel(
+                    title: text("Beim Anmelden starten", "Launch on login"),
+                    helpText: text(
+                        "Startet WisprLocal automatisch nach der macOS-Anmeldung.",
+                        "Starts WisprLocal automatically after you sign in to macOS."
+                    )
+                )
+            }
+
+            Toggle(isOn: $appState.automaticallyCheckForUpdates) {
+                SettingsFieldLabel(
+                    title: text("Updates automatisch prüfen", "Automatically check for updates"),
+                    helpText: text(
+                        "Prüft im Hintergrund regelmäßig über Sparkle, ob eine neuere Version verfügbar ist.",
+                        "Checks in the background via Sparkle to see whether a newer version is available."
+                    )
+                )
+            }
         }
     }
 
     @ViewBuilder
     private var advancedOverviewContent: some View {
         if matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit"]) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(text(
-                    "Hier bündelt WisprLocal alles, was eher administrativ ist: Update-Status, technische Diagnose und interne Prüfpfade.",
-                    "This section groups the more administrative parts of WisprLocal: update status, technical diagnostics, and internal inspection paths."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            EmptyView()
+        }
+    }
 
-                Text(text(
-                    "Updates laufen im Hintergrund über Sparkle; manuelle Checks bleiben hier erreichbar.",
-                    "Updates run in the background through Sparkle; manual checks remain available here."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+    @ViewBuilder
+    private var advancedStorageContent: some View {
+        if matches(["storage", "folder", "app support", "speicherort", "datenordner", "app folder", "logs", "protokolle"]) {
+            LabeledContent {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(appState.appSupportDirectoryPathText)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+
+                    Button(text("Ordner im Finder öffnen", "Open folder in Finder")) {
+                        appState.revealAppDataFolder()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } label: {
+                SettingsFieldLabel(
+                    title: text("App-Datenordner", "App data folder"),
+                    helpText: text(
+                        "Hier liegen Verlauf, Snippets, Logs und weitere lokale App-Daten.",
+                        "This folder stores history, snippets, logs, and other local app data."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var voiceModelRuntimeContent: some View {
+        if matches(["voice", "sprachmodell", "model runtime", "runtime", "duration", "dauer", "warm", "speicher halten", "modelllaufzeit"]) {
+            LabeledContent {
+                Picker(text("Sprachmodell im Speicher halten", "Keep voice model in memory"), selection: $appState.voiceModelActiveDuration) {
+                    ForEach(VoiceModelActiveDuration.allCases) { duration in
+                        Text(duration.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(duration)
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 220)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Sprachmodell im Speicher halten", "Keep voice model in memory"),
+                    helpText: text(
+                        "Längere Laufzeiten machen den nächsten Start schneller, kürzere sparen Speicher.",
+                        "Longer durations make the next start faster, shorter ones save memory."
+                    )
+                )
             }
         }
     }
@@ -514,13 +632,6 @@ struct SettingsView: View {
     private var updatesContent: some View {
         if matches(["update", "updates", "aktualisierung"]) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(text(
-                    "WisprLocal nutzt Sparkle direkt in der App und sucht automatisch im Hintergrund nach Aktualisierungen.",
-                    "WisprLocal uses Sparkle directly inside the app and checks for updates automatically in the background."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
                 HStack(alignment: .center, spacing: 10) {
                     Button(text("Nach Updates suchen", "Check for updates")) {
                         appState.checkForUpdates()
@@ -607,6 +718,13 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var aboutChangelogContent: some View {
+        if matches(["changelog", "neuigkeiten", "release", "release notes", "änderungen", "aenderungen", "features", "fixes"]) {
+            ChangelogSectionView(entries: AppChangelogCatalog.latestEntries, language: appLanguage)
+        }
+    }
+
+    @ViewBuilder
     private var aboutSupportContent: some View {
         if matches(["support", "spenden", "donate", "website", "webseite"]) {
             Text(text(
@@ -657,6 +775,73 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var soundInputContent: some View {
+        if soundHasMatches {
+            Toggle(isOn: $appState.automaticMicrophoneGainBoost) {
+                SettingsFieldLabel(
+                    title: text("Leise Eingänge verstärken", "Boost quiet input"),
+                    helpText: text(
+                        "Hebt ein schwaches Eingangssignal an, bevor die Erkennung startet. Das ändert nicht die systemweite Mikrofonlautstärke.",
+                        "Boosts a weak input signal before recognition begins. This does not change the system-wide microphone volume."
+                    )
+                )
+            }
+            Toggle(isOn: $appState.silenceRemovalEnabled) {
+                SettingsFieldLabel(
+                    title: text("Stille entfernen", "Silence removal"),
+                    helpText: text(
+                        "Schneidet längere ruhige Abschnitte vor der Erkennung weg. Das hilft vor allem bei Pausen am Anfang oder Ende eines Diktats.",
+                        "Trims longer quiet sections before recognition. This mainly helps with pauses at the beginning or end of a dictation."
+                    )
+                )
+            }
+            Toggle(isOn: $appState.dynamicNormalizationEnabled) {
+                SettingsFieldLabel(
+                    title: text("Dynamische Normalisierung", "Dynamic normalization"),
+                    helpText: text(
+                        "Gleicht Lautstärkeunterschiede innerhalb des laufenden Signals aus. Anders als die Eingangsverstärkung reagiert diese Option auf wechselnde Pegel während der Aufnahme.",
+                        "Balances loudness differences inside the live signal. Unlike quiet-input boosting, this reacts to changing levels while recording."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var soundFeedbackContent: some View {
+        if soundHasMatches {
+            Toggle(isOn: $appState.soundEffectsEnabled) {
+                SettingsFieldLabel(
+                    title: text("Soundeffekte aktivieren", "Enable sound effects"),
+                    helpText: text(
+                        "Spielt kurze Statussignale beim Starten, Stoppen oder bei wichtigen Zustandswechseln ab.",
+                        "Plays short status cues when starting, stopping, or when important states change."
+                    )
+                )
+            }
+
+            LabeledContent {
+                VStack(alignment: .leading, spacing: 6) {
+                    Slider(value: $appState.soundEffectsVolume, in: 0...100, step: 1)
+                    Text("\(Int(appState.soundEffectsVolume.rounded()))%")
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .frame(minWidth: 240)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Lautstärke", "Volume"),
+                    helpText: text(
+                        "Regelt nur die internen App-Sounds, nicht die Systemlautstärke.",
+                        "Controls only the app's internal sounds, not the system volume."
+                    )
+                )
+            }
+            .disabled(!appState.soundEffectsEnabled)
+        }
+    }
+
+    @ViewBuilder
     private var dictationRecognitionContent: some View {
         if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert", "translation", "übersetzung", "uebersetzung"]) {
             LabeledContent(text("Diktatsprache", "Dictation language")) {
@@ -684,7 +869,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var translationContent: some View {
         if matches(["translation", "translate", "übersetzung", "uebersetzung", "sprache", "language"]) {
-            LabeledContent(text("Übersetzen nach", "Translate to")) {
+            LabeledContent {
                 Picker(text("Übersetzen nach", "Translate to"), selection: $appState.translationOutputMode) {
                     ForEach(TranslationOutputMode.allCases) { mode in
                         Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
@@ -692,14 +877,15 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .frame(minWidth: 170)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Übersetzen nach", "Translate to"),
+                    helpText: text(
+                        "Keine Übersetzung gibt die gesprochene Sprache zurück. Nach Englisch aktiviert gezielt die Whisper-Übersetzung.",
+                        "No translation returns the spoken language. English explicitly enables Whisper translation."
+                    )
+                )
             }
-
-            Text(text(
-                "Auto-Spracherkennung übersetzt nicht mehr implizit. 'Keine Übersetzung' gibt die gesprochene Sprache zurück; 'Nach Englisch' aktiviert gezielt die Whisper-Übersetzung.",
-                "Auto language detection no longer translates implicitly. 'Original' returns the spoken language; 'English' explicitly enables Whisper translation."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
         }
     }
 
@@ -721,7 +907,7 @@ struct SettingsView: View {
             "weit zurück",
             "live"
         ]) {
-            LabeledContent(text("Anpassungsradius", "Adjustment radius")) {
+            LabeledContent {
                 Picker(text("Anpassungsradius", "Adjustment radius"), selection: $appState.liveRewriteScope) {
                     ForEach(LiveRewriteScope.allCases) { scope in
                         Text(scope.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(scope)
@@ -729,62 +915,92 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .frame(minWidth: 260)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Anpassungsradius", "Adjustment radius"),
+                    helpText: text(
+                        "Kleinere Bereiche sind stabiler. Größere Bereiche glätten stärker, dürfen aber weiter zurückliegende Wörter noch einmal anfassen.",
+                        "Smaller scopes are more stable. Larger scopes smooth more aggressively but may revisit words further back."
+                    )
+                )
             }
-
-            Text(text(
-                "Kleinere Bereiche sind stabiler und greifen nur am aktuellen Satz an; größere Bereiche glätten stärker, können aber weiter zurückliegende Wörter erneut anfassen.",
-                "Smaller scopes are more stable and only touch the current sentence; larger scopes smooth more aggressively and can revisit words further back."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
     private var dictationDeliveryContent: some View {
-        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert", "translation", "übersetzung", "uebersetzung"]) {
-            LabeledContent(text("Finales Ergebnis", "Final result")) {
+        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert", "translation", "übersetzung", "uebersetzung", "paste", "auto-send", "keypress"]) {
+            LabeledContent {
                 Picker(text("Finales Ergebnis", "Final result"), selection: $appState.finalResultDeliveryMode) {
                     Text(text("In Textfeld einfügen", "Insert into text field")).tag(FinalResultDeliveryMode.insert)
                     Text(text("Nur in Zwischenablage kopieren", "Copy to clipboard only")).tag(FinalResultDeliveryMode.clipboardOnly)
                 }
                 .labelsHidden()
                 .frame(minWidth: 220)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Finales Ergebnis", "Final result"),
+                    helpText: text(
+                        "Legt fest, wie das abgeschlossene Diktat ausgeliefert wird: direkt ins aktive Textfeld oder nur über die Zwischenablage.",
+                        "Controls how the finished dictation is delivered: directly into the active text field or only through the clipboard."
+                    )
+                )
             }
 
-            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
+            Toggle(isOn: $appState.streamingEnabled) {
+                SettingsFieldLabel(
+                    title: text("Live-Text einfügen", "Insert live text"),
+                    helpText: text(
+                        "Zeigt laufende Zwischenergebnisse direkt im Zieltextfeld an, solange gestreamt wird.",
+                        "Shows live intermediate results directly in the target text field while streaming is active."
+                    )
+                )
+            }
                 .disabled(appState.finalResultDeliveryMode == .clipboardOnly || !appState.dictationCapability.allowsDirectInsertion)
 
-            Toggle(text("Wenn kein Textfeld aktiv ist: Ergebnis in Zwischenablage kopieren", "If no text field is active: copy result to clipboard"), isOn: $appState.clipboardFallbackWhenNoTarget)
+            Toggle(isOn: $appState.clipboardFallbackWhenNoTarget) {
+                SettingsFieldLabel(
+                    title: text("Wenn kein Textfeld aktiv ist: Ergebnis in Zwischenablage kopieren", "If no text field is active: copy result to clipboard"),
+                    helpText: text(
+                        "Verwendet die Zwischenablage als Fallback, wenn macOS gerade kein direkt beschreibbares Textziel meldet.",
+                        "Uses the clipboard as a fallback when macOS does not currently report a directly writable text target."
+                    )
+                )
+            }
                 .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
 
-            if appState.finalResultDeliveryMode == .clipboardOnly {
-                Text(text(
-                    "Nur Zwischenablage verwendet immer den Abschluss-Pfad. Live-Einfügen wird in diesem Modus deaktiviert.",
-                    "Clipboard-only always uses the finalize path. Live insert is disabled in this mode."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Toggle(isOn: $appState.autoSendAfterPaste) {
+                SettingsFieldLabel(
+                    title: text("Nach dem Einfügen automatisch senden", "Auto-send after paste"),
+                    helpText: text(
+                        "Nützlich in Chats oder Formularen, wenn das eingefügte Ergebnis direkt abgeschickt werden soll.",
+                        "Useful in chats or forms when the inserted result should be sent immediately."
+                    )
+                )
+            }
+            Toggle(isOn: $appState.restoreClipboardAfterPaste) {
+                SettingsFieldLabel(
+                    title: text("Zwischenablage nach dem Einfügen wiederherstellen", "Restore clipboard after paste"),
+                    helpText: text(
+                        "Stellt den vorherigen Inhalt der Zwischenablage nach dem finalen Einfügen wieder her.",
+                        "Restores the previous clipboard contents after final insertion."
+                    )
+                )
+            }
+            Toggle(isOn: $appState.simulateKeypresses) {
+                SettingsFieldLabel(
+                    title: text("Tastatureingaben simulieren", "Simulate keypresses"),
+                    helpText: text(
+                        "Verwendet simulierte Tastenanschläge für finales Einfügen und Fallbacks, wenn der direkte Einfügepfad nicht ausreicht.",
+                        "Uses simulated keypresses for final insertion and fallbacks when the direct insertion path is not enough."
+                    )
+                )
+            }
 
-                Text(text(
-                    "Datenschutzhinweis: Zwischenablage ist absichtlich global. Andere Apps oder Clipboard-Tools können kopierten Text kurzfristig sehen.",
-                    "Privacy note: the clipboard is intentionally global. Other apps or clipboard tools may briefly observe copied text."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            } else if !appState.dictationCapability.allowsDirectInsertion {
+            if !appState.dictationCapability.allowsDirectInsertion {
                 Text(text(
                     "Ohne Bedienungshilfen startet die Aufnahme weiterhin, aber direktes Einfügen bleibt deaktiviert.",
                     "Without Accessibility, recording still starts, but direct insertion remains disabled."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
-            if appState.clipboardFallbackWhenNoTarget && appState.finalResultDeliveryMode != .clipboardOnly {
-                Text(text(
-                    "Wenn kein Textfeld aktiv ist, wird der finale Text über die globale Zwischenablage zugestellt. Das ist gewollt, aber weniger privat als direktes Einfügen.",
-                    "When no text field is active, the final text is delivered through the global clipboard. This is intentional, but less private than direct insertion."
                 ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -799,24 +1015,7 @@ struct SettingsView: View {
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
             if appState.aiProcessingEnabled {
-                LabeledContent(text("Modell", "Model")) {
-                    Picker(text("Modell", "Model"), selection: Binding(
-                        get: { appState.selectedAIModelID ?? "" },
-                        set: { appState.selectedAIModelID = $0.isEmpty ? nil : $0 }
-                    )) {
-                        if appState.aiModels.isEmpty {
-                            Text(text("Keine Modelle erkannt", "No models detected")).tag("")
-                        } else {
-                            ForEach(appState.aiModels) { model in
-                                Text(model.displayName).tag(model.id)
-                            }
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(minWidth: 220)
-                }
-
-                LabeledContent(text("AI anwenden bei", "Apply AI for")) {
+                LabeledContent {
                     VStack(alignment: .leading, spacing: 8) {
                         Toggle(
                             text("Live-Einfügen", "Live insertion"),
@@ -830,10 +1029,18 @@ struct SettingsView: View {
                         )
                     }
                     .frame(minWidth: 220, alignment: .leading)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("AI anwenden bei", "Apply AI for"),
+                        helpText: text(
+                            "Steuert, ob das Modell schon auf Live-Zwischenergebnisse, erst auf das finale Ergebnis oder auf beides angewendet wird.",
+                            "Controls whether the model is applied to live intermediate text, only to the final result, or to both."
+                        )
+                    )
                 }
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
-                LabeledContent(text("Stil / Ton", "Style / Tone")) {
+                LabeledContent {
                     Picker(text("Stil / Ton", "Style / Tone"), selection: $appState.aiWritingStyle) {
                         ForEach(AIWritingStyle.allCases) { style in
                             Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
@@ -841,10 +1048,18 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .frame(minWidth: 220)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("Stil / Ton", "Style / Tone"),
+                        helpText: text(
+                            "Gibt dem Modell eine sprachliche Richtung vor, etwa neutral, freundlich oder formeller.",
+                            "Gives the model a writing direction, such as neutral, friendly, or more formal."
+                        )
+                    )
                 }
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
-                LabeledContent(text("Anrede", "Salutation")) {
+                LabeledContent {
                     Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
                         ForEach(AISalutation.allCases) { salutation in
                             Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
@@ -852,133 +1067,296 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .frame(minWidth: 220)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("Anrede", "Salutation"),
+                        helpText: text(
+                            "Legt fest, ob das Modell eher duzt, siezt oder die vorhandene Anrede beibehält.",
+                            "Defines whether the model should prefer informal, formal, or unchanged forms of address."
+                        )
+                    )
                 }
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
             }
+        }
+    }
 
-            Section(text("API-Anbieter", "API providers")) {
-                HStack(spacing: 8) {
-                    Menu(text("Anbieter hinzufügen", "Add provider")) {
-                        ForEach(AIRemoteProviderPreset.allCases) { preset in
-                            Button(preset.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)) {
-                                appState.addRemoteProvider(preset: preset)
-                            }
+    @ViewBuilder
+    private var aiProviderContent: some View {
+        if aiHasMatches {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(text("Anbieter hinzufügen", "Add provider"))
+                    .font(.headline)
+
+                providerPresetGrid
+
+                if appState.remoteProviders.isEmpty {
+                    EmptyView()
+                } else {
+                    providerSelectionRow
+                    providerEditorCard
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var providerPresetGrid: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            providerPresetGroup(
+                title: text("Cloud-APIs", "Cloud APIs"),
+                presets: [.openRouter, .openAI, .groq, .mistral, .deepSeek, .togetherAI, .fireworksAI, .xAI]
+            )
+
+            providerPresetGroup(
+                title: text("Lokale Server", "Local servers"),
+                presets: [.ollama, .lmStudio]
+            )
+
+            providerPresetGroup(
+                title: text("Eigenes Setup", "Custom setup"),
+                presets: [.customOpenAICompatible]
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func providerPresetGroup(title: String, presets: [AIRemoteProviderPreset]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(presets) { preset in
+                    Button {
+                        appState.addRemoteProvider(preset: preset)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(preset.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
+                                .font(.body.weight(.semibold))
+                            Text(providerPresetDescription(for: preset))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    if appState.selectedRemoteProvider != nil {
-                        Button(role: .destructive) {
-                            appState.removeSelectedRemoteProvider()
-                        } label: {
-                            Text(text("Entfernen", "Remove"))
-                        }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+    }
+
+    private func providerPresetDescription(for preset: AIRemoteProviderPreset) -> String {
+        switch preset {
+        case .openRouter:
+            return text("Viele Modelle über einen zentralen Zugang.", "Many models through one unified gateway.")
+        case .openAI:
+            return text("Offizielle OpenAI-API.", "Official OpenAI API.")
+        case .groq:
+            return text("Schnelle OpenAI-kompatible Cloud-API.", "Fast OpenAI-compatible cloud API.")
+        case .mistral:
+            return text("Mistral über die OpenAI-kompatible Schnittstelle.", "Mistral via the OpenAI-compatible surface.")
+        case .deepSeek:
+            return text("DeepSeek mit Standard-Endpunkten.", "DeepSeek with standard endpoints.")
+        case .togetherAI:
+            return text("Modellvielfalt für Remote-Setups.", "Model variety for remote setups.")
+        case .fireworksAI:
+            return text("Gehostete Modelle mit klaren Endpunkten.", "Hosted models with clear endpoints.")
+        case .xAI:
+            return text("xAI über OpenAI-kompatible Calls.", "xAI over OpenAI-compatible calls.")
+        case .ollama:
+            return text("Lokale Modelle ohne API-Key.", "Local models without an API key.")
+        case .lmStudio:
+            return text("Lokaler Server für eigene Modelle.", "Local server for your own models.")
+        case .customOpenAICompatible:
+            return text("Eigene Base-URL und Endpunkte definieren.", "Define your own base URL and endpoints.")
+        }
+    }
+
+    @ViewBuilder
+    private var providerSelectionRow: some View {
+        LabeledContent(text("Aktiver Anbieter", "Active provider")) {
+            Picker(text("Aktiver Anbieter", "Active provider"), selection: Binding(
+                get: { appState.selectedRemoteProviderID ?? "" },
+                set: { appState.selectedRemoteProviderID = $0.isEmpty ? nil : $0 }
+            )) {
+                ForEach(appState.remoteProviders) { provider in
+                    Text(provider.displayName).tag(provider.id)
+                }
+            }
+            .labelsHidden()
+            .frame(minWidth: 240)
+        }
+    }
+
+    @ViewBuilder
+    private var providerEditorCard: some View {
+        if let provider = appState.selectedRemoteProvider {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(provider.displayName)
+                            .font(.headline)
+                        Text(provider.preset.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+
+                    Spacer()
+
+                    Toggle(text("Aktiv", "Enabled"), isOn: selectedRemoteProviderBinding(\.isEnabled, default: false))
+                        .toggleStyle(.switch)
                 }
 
-                if !appState.remoteProviders.isEmpty {
-                    LabeledContent(text("Anbieter", "Provider")) {
-                        Picker(text("Anbieter", "Provider"), selection: Binding(
-                            get: { appState.selectedRemoteProviderID ?? "" },
-                            set: { appState.selectedRemoteProviderID = $0.isEmpty ? nil : $0 }
-                        )) {
-                            ForEach(appState.remoteProviders) { provider in
-                                Text(provider.displayName).tag(provider.id)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(minWidth: 240)
-                    }
-                }
+                Divider()
 
-                if appState.selectedRemoteProvider != nil {
-                    LabeledContent(text("Typ", "Type")) {
-                        Text(appState.selectedRemoteProvider?.preset.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue) ?? "")
-                    }
-
-                    Toggle(
-                        text("Anbieter aktivieren", "Enable provider"),
-                        isOn: selectedRemoteProviderBinding(\.isEnabled, default: false)
-                    )
-
-                    LabeledContent(text("Name", "Name")) {
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
+                    GridRow {
+                        Text(text("Name", "Name"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         TextField(
                             text("Name", "Name"),
                             text: selectedRemoteProviderBinding(\.displayName, default: "")
                         )
-                        .frame(minWidth: 260)
+                        .textFieldStyle(.roundedBorder)
                     }
 
-                    LabeledContent(text("Base URL", "Base URL")) {
+                    GridRow {
+                        Text(text("Base URL", "Base URL"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         TextField(
                             "https://api.example.com/v1",
                             text: selectedRemoteProviderBinding(\.baseURLString, default: "")
                         )
-                        .frame(minWidth: 260)
+                        .textFieldStyle(.roundedBorder)
                     }
 
-                    LabeledContent(text("Modelle laden über", "Load models from")) {
+                    GridRow {
+                        Text(text("Modelle", "Models"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         TextField(
                             "/models",
                             text: selectedRemoteProviderBinding(\.modelsPath, default: "/models")
                         )
-                        .frame(minWidth: 220)
+                        .textFieldStyle(.roundedBorder)
                     }
 
-                    LabeledContent(text("Text-API", "Text API")) {
+                    GridRow {
+                        Text(text("Text-API", "Text API"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         TextField(
                             "/chat/completions",
                             text: selectedRemoteProviderBinding(\.chatCompletionsPath, default: "/chat/completions")
                         )
-                        .frame(minWidth: 220)
+                        .textFieldStyle(.roundedBorder)
                     }
 
-                    Toggle(
-                        text("API-Key erforderlich", "API key required"),
-                        isOn: selectedRemoteProviderBinding(\.requiresAPIKey, default: true)
-                    )
+                    GridRow {
+                        Text(text("API-Key nötig", "API key required"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Toggle(
+                            text("Ja", "Yes"),
+                            isOn: selectedRemoteProviderBinding(\.requiresAPIKey, default: true)
+                        )
+                        .toggleStyle(.switch)
+                    }
 
-                    LabeledContent(text("API-Key", "API key")) {
+                    GridRow {
+                        Text(text("API-Key", "API key"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         SecureField("sk-...", text: $appState.remoteProviderAPIKeyDraft)
-                            .frame(minWidth: 260)
-                    }
-
-                    HStack(spacing: 8) {
-                        Button(text("API-Key speichern", "Save API key")) {
-                            appState.saveSelectedRemoteProviderAPIKey()
-                        }
-                        Button(text("Modelle aktualisieren", "Refresh models")) {
-                            appState.refreshSelectedRemoteProviderModels()
-                        }
-                    }
-
-                    if let provider = appState.selectedRemoteProvider, !provider.discoveredModels.isEmpty {
-                        Text(text(
-                            "Verfügbare Modelle: \(provider.discoveredModels.count)",
-                            "Available models: \(provider.discoveredModels.count)"
-                        ))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    } else if let provider = appState.selectedRemoteProvider, !provider.requiresAPIKey {
-                        Text(text(
-                            "Für lokale OpenAI-kompatible Server wie Ollama oder LM Studio ist kein API-Key nötig.",
-                            "No API key is required for local OpenAI-compatible servers such as Ollama or LM Studio."
-                        ))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                            .textFieldStyle(.roundedBorder)
                     }
                 }
-            }
 
+                HStack(spacing: 8) {
+                    Button(text("API-Key speichern", "Save API key")) {
+                        appState.saveSelectedRemoteProviderAPIKey()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(text("Modelle aktualisieren", "Refresh models")) {
+                        appState.refreshSelectedRemoteProviderModels()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer()
+
+                    Button(role: .destructive) {
+                        appState.removeSelectedRemoteProvider()
+                    } label: {
+                        Text(text("Anbieter entfernen", "Remove provider"))
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if !provider.discoveredModels.isEmpty {
+                    Text(text(
+                        "Verfügbare Modelle: \(provider.discoveredModels.count)",
+                        "Available models: \(provider.discoveredModels.count)"
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
         }
     }
 
     @ViewBuilder
     private var aiModelContent: some View {
         if aiHasMatches {
-            if appState.aiModels.isEmpty {
+            LabeledContent {
+                Picker(text("Modell", "Model"), selection: Binding(
+                    get: { appState.selectedAIModelID ?? "" },
+                    set: { appState.selectedAIModelID = $0.isEmpty ? nil : $0 }
+                )) {
+                    if appState.visibleAIModels.isEmpty {
+                        Text(text("Keine Modelle erkannt", "No models detected")).tag("")
+                    } else {
+                        ForEach(appState.visibleAIModels) { model in
+                            Text(model.displayName).tag(model.id)
+                        }
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 220)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Modell", "Model"),
+                    helpText: text(
+                        "Zeigt alle aktuell erkannten lokalen und entfernten Modelle an, die WisprLocal verwenden kann.",
+                        "Shows all currently detected local and remote models that WisprLocal can use."
+                    )
+                )
+            }
+
+            if appState.visibleAIModels.isEmpty {
                 Text(text("Es wurde aktuell kein AI-Modell erkannt.", "There is currently no AI model available."))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(appState.aiModels, id: \AIModelDescriptor.id) { (model: AIModelDescriptor) in
+                ForEach(appState.visibleAIModels, id: \AIModelDescriptor.id) { (model: AIModelDescriptor) in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(model.displayName)
                             .font(.body.weight(.semibold))
@@ -1020,26 +1398,69 @@ struct SettingsView: View {
         if matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) {
             Toggle(text("Halten-zum-Diktieren aktiv", "Enable hold-to-dictate"), isOn: $appState.holdToDictateEnabled)
 
-            LabeledContent(text("Hold-Kurzbefehl", "Hold shortcut")) {
+            LabeledContent {
                 HotkeyRecorderField(
                     hotkey: $appState.holdShortcut,
                     label: text("Halten-zum-Diktieren-Kurzbefehl", "Hold-to-dictate shortcut"),
                     language: appLanguage
                 )
                 .frame(width: 260)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Hold-Kurzbefehl", "Hold shortcut"),
+                    helpText: text(
+                        "Fn allein wird im aktuellen globalen Hotkey-Pfad nicht zuverlässig unterstützt.",
+                        "Fn by itself is not supported reliably in the current global hotkey path."
+                    )
+                )
             }
             .disabled(!appState.holdToDictateEnabled)
 
             if appState.holdToDictateEnabled, let advisory = appState.holdShortcutAdvisory {
                 HotkeyAdvisoryBox(advisory: advisory)
             }
+        }
+    }
 
-            Text(text(
-                "Fn allein wird im aktuellen globalen Hotkey-Pfad nicht zuverlässig unterstützt.",
-                "Fn by itself is not supported reliably in the current global hotkey path."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+    @ViewBuilder
+    private var cancelShortcutContent: some View {
+        if matches(["shortcut", "kurzbefehl", "cancel", "abbrechen", "diktat"]) {
+            Toggle(text("Abbrechen-Shortcut aktiv", "Enable cancel shortcut"), isOn: $appState.cancelShortcutEnabled)
+
+            LabeledContent(text("Abbrechen-Kurzbefehl", "Cancel shortcut")) {
+                HotkeyRecorderField(
+                    hotkey: $appState.cancelShortcut,
+                    label: text("Abbrechen-Kurzbefehl", "Cancel shortcut"),
+                    language: appLanguage
+                )
+                .frame(width: 260)
+            }
+            .disabled(!appState.cancelShortcutEnabled)
+
+            if appState.cancelShortcutEnabled, let advisory = appState.cancelShortcutAdvisory {
+                HotkeyAdvisoryBox(advisory: advisory)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var modeSwitchShortcutContent: some View {
+        if matches(["shortcut", "kurzbefehl", "mode", "modus", "diktat"]) {
+            Toggle(text("Moduswechsel-Shortcut aktiv", "Enable mode switch shortcut"), isOn: $appState.modeSwitchShortcutEnabled)
+
+            LabeledContent(text("Moduswechsel-Kurzbefehl", "Mode switch shortcut")) {
+                HotkeyRecorderField(
+                    hotkey: $appState.modeSwitchShortcut,
+                    label: text("Moduswechsel-Kurzbefehl", "Mode switch shortcut"),
+                    language: appLanguage
+                )
+                .frame(width: 260)
+            }
+            .disabled(!appState.modeSwitchShortcutEnabled)
+
+            if appState.modeSwitchShortcutEnabled, let advisory = appState.modeSwitchShortcutAdvisory {
+                HotkeyAdvisoryBox(advisory: advisory)
+            }
         }
     }
 
@@ -1062,6 +1483,29 @@ struct SettingsView: View {
                     appState.clearHistory()
                 }
                 .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var historyRetentionContent: some View {
+        if historyHasMatches {
+            LabeledContent {
+                Picker(text("Verlauf aufbewahren", "Keep history"), selection: $appState.historyRetentionPolicy) {
+                    ForEach(HistoryRetentionPolicy.allCases) { policy in
+                        Text(policy.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(policy)
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 180)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Verlauf aufbewahren", "Keep history"),
+                    helpText: text(
+                        "Bereinigt nur den lokalen Transkriptverlauf. Systemdateien oder Roh-Audio werden dabei nicht verändert.",
+                        "Prunes only the local transcript history. System files or raw audio are not changed."
+                    )
+                )
             }
         }
     }
@@ -1155,20 +1599,28 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
 
-                Toggle(text("Debug-Modus aktivieren", "Enable debug mode"), isOn: $appState.debugModeEnabled)
+                Toggle(isOn: $appState.debugModeEnabled) {
+                    SettingsFieldLabel(
+                        title: text("Technische Protokollierung", "Technical logging"),
+                        helpText: text(
+                            "Erfasst zusätzliche Laufzeit- und Prozessdetails für die Diagnose. Nur einschalten, wenn du ein Problem genauer untersuchen willst.",
+                            "Captures additional runtime and process details for diagnostics. Enable this only when you want to investigate a problem more closely."
+                        )
+                    )
+                }
 
                 if appState.debugModeEnabled {
                     DisclosureGroup(
                         content: {
-                            Text(appState.debugLogText.isEmpty ? text("Noch keine Debug-Ereignisse erfasst.", "No debug events captured yet.") : appState.debugLogText)
+                            Text(appState.debugLogText.isEmpty ? text("Noch keine Diagnoseprotokoll-Einträge erfasst.", "No diagnostic log entries captured yet.") : appState.debugLogText)
                                 .font(.system(.body, design: .monospaced))
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         },
                         label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(text("Aktuelle Debug-Logs", "Recent debug logs"))
-                                Text(appState.debugLogText.isEmpty ? text("Debug-Modus ist aktiv. Neue Laufzeit- und Prozessereignisse erscheinen hier.", "Debug mode is enabled. New runtime and process events will appear here.") : appState.debugLogText.components(separatedBy: .newlines).suffix(3).joined(separator: "\n"))
+                                Text(text("Technisches Diagnoseprotokoll", "Technical diagnostic log"))
+                                Text(appState.debugLogText.isEmpty ? text("Die technische Protokollierung ist aktiv. Neue Laufzeit- und Prozessereignisse erscheinen hier.", "Technical logging is active. New runtime and process events will appear here.") : appState.debugLogText.components(separatedBy: .newlines).suffix(3).joined(separator: "\n"))
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                                     .textSelection(.enabled)
@@ -1209,7 +1661,7 @@ struct SettingsView: View {
                     .buttonStyle(.bordered)
 
                     if appState.debugModeEnabled {
-                        Button(text("Debug-Log exportieren", "Export debug log")) {
+                        Button(text("Diagnoseprotokoll exportieren", "Export diagnostic log")) {
                             appState.exportDebugLog()
                         }
                         .buttonStyle(.bordered)
@@ -1260,6 +1712,7 @@ struct SettingsView: View {
 enum SettingsTab: Hashable, CaseIterable {
     case general
     case dictation
+    case sound
     case shortcuts
     case ai
     case history
@@ -1271,6 +1724,7 @@ enum SettingsTab: Hashable, CaseIterable {
         switch self {
         case .general: return "gearshape"
         case .dictation: return "mic"
+        case .sound: return "speaker.wave.2"
         case .shortcuts: return "command"
         case .ai: return "sparkles"
         case .history: return "clock.arrow.circlepath"
@@ -1286,6 +1740,8 @@ enum SettingsTab: Hashable, CaseIterable {
             return language.text("Allgemein", "General")
         case .dictation:
             return language.text("Diktat", "Dictation")
+        case .sound:
+            return language.text("Sound", "Sound")
         case .shortcuts:
             return language.text("Kurzbefehle", "Shortcuts")
         case .ai:
@@ -1316,6 +1772,36 @@ private struct AboutFactRow: View {
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+private struct SettingsFieldLabel: View {
+    let title: String
+    var helpText: String? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            if let helpText, !helpText.isEmpty {
+                SettingsHelpIcon(text: helpText)
+            }
+        }
+    }
+}
+
+private struct SettingsHelpIcon: View {
+    let text: String
+    @State private var isHovering = false
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .font(.caption)
+            .foregroundStyle(isHovering ? .primary : .secondary)
+            .help(text)
+            .onHover { hovering in
+                isHovering = hovering
+            }
+            .accessibilityLabel(text)
     }
 }
 

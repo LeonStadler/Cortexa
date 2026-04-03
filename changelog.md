@@ -1,6 +1,40 @@
 # Changelog
 
+## Fixes
+
+- 2026-04-03: macOS-Settings-Tooltips, Diagnose-Begriffe und Build-Stabilitaet nachpoliert.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalitaet: Die Settings verwenden jetzt an weiteren erklaerungsbeduerftigen Stellen konsequent `i`-Hinweise statt dauerhafter Fliesstexte, wodurch Delivery-, Hold-Shortcut-, History- und Sound-Optionen deutlich kompakter wirken. Gleichzeitig wurden Diagnose-Exporte begrifflich auf technische Protokollierung vereinheitlicht, und ein doppeltes `SettingsFieldLabel` in der macOS-Settings-Datei wurde entfernt, damit der Xcode-Build wieder sauber durchlaeuft.
+
+- 2026-04-03: Letzte Experimental-Metadaten aus AI-Core und API-Doku entfernt.
+  - Dateien: `Sources/AIProcessingCore/AIProcessingTypes.swift`, `docs/api-design.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalitaet: Der AI-Core fuehrt kein separates Experimental-Feld mehr in Modell- oder Remote-Provider-Daten, und die API-Dokumentation beschreibt den Modellvertrag jetzt nur noch mit stabilen Feldern. Damit ist der AI-Modellkatalog semantisch schlanker und die macOS-UI muss keine veralteten Experimental-Konzept mehr mittransportieren.
+
+- 2026-04-03: macOS-AppState und Settings von toten Einstellungswegen bereinigt.
+  - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `VERSION`
+  - Funktionalitaet: Die alten Schalter fuer Menu-Bar-Autostart, Mauskurzbefehl und experimentelle Modelle wurden komplett aus State, Defaults, UI und Startverhalten entfernt. Die Menüleisten-Ansicht startet beim Auftauchen nicht mehr automatisch ein Diktat, der AI-Katalog zeigt nur noch reguläre Modelle, und die Warmhaltezeit fuer das Sprachmodell bleibt als technische Laufzeitoption im Advanced-Bereich erhalten.
+
 ## Features
+
+- 2026-04-03: AI-Provider-UI in der macOS-App vereinfacht und semantisch aufgeraeumt.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `README.md`, `docs/api-design.md`, `VERSION`
+  - Funktionalitaet: Die macOS-Settings zeigen experimentelle Modellkonzepte nicht mehr als eigene UI-Option, sondern listen AI-Modelle direkt und ohne Zusatzfilter. Der Provider-Bereich wurde in eine klarere Add-/Edit-Oberflaeche mit Preset-Gruppen fuer Cloud-, lokale und Custom-Server umgebaut, waehrend das Sprachmodell-Timing aus dem AI-Tab in die erweiterten Einstellungen verschoben und dort weiterhin als Speicherlaufzeit genutzt wird.
+
+- 2026-04-03: About-Changelog und Dock-Icon-Assets fuer die macOS-App hinzugefuegt.
+  - Dateien: `apps/macos/AppShell/ChangelogSupport.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/WisprLocalMac/project.yml`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_16x16.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_16x16@2x.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_32x32.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_32x32@2x.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256@2x.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512.png`, `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png`, `scripts/generate_dock_icon.swift`, `VERSION`
+  - Funktionalitaet: Die About-Seite der macOS-App zeigt jetzt eine app-taugliche Changelog-Ansicht mit den neuesten Eintraegen aus der gebuendelten `changelog.md`. Die Darstellung liest die Release-Eintraege aus dem Markdown, hebt die neueste Version als prominente Hero-Karte hervor, zeigt Datum, Kategorie, Titel und Highlights in einer kompakten Kartenansicht und bleibt auch in der Settings-Suche auffindbar. Zusaetzlich wurden die Settings-Hinweise fuer erklaerungsbeduerftige Felder als kleine Info-Icons mit Hover-Text vereinheitlicht, und das Dock-Icon wurde als echtes Bitmap-Asset neu erzeugt, orientiert sich visuell an der Waveform-Idee des Menu-Bar-Icons und ersetzt die bisherigen generischen PNGs durch ein konsistentes, reproduzierbar generiertes Icon-Set.
+
+- 2026-04-03: Audio-/Sound-Workstream in der macOS-App implementiert.
+  - Dateien: `Sources/AudioCore/AudioPreprocessor.swift`, `Tests/AudioCoreTests/AudioPreprocessorTests.swift`, `apps/macos/AppShell/AudioFeedback.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/WisprLocalMac/project.yml`, `Package.swift`, `README.md`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`
+  - Funktionalität: Die macOS-App verarbeitet Audio jetzt mit settings-gestuetzter Eingangsverstärkung auf App-Ebene, Stille-Entfernung und dynamischer Normalisierung, bevor die Samples an Whisper uebergeben werden. Zusätzlich kann die App Start-/Stopp-/Fehler-Soundfeedbacks mit einstellbarer Lautstärke abspielen. Die neuen Optionen sind in den Sound-Settings verdrahtet, bleiben aber bewusst getrennt von systemweiter Mikrofonsteuerung oder unklarer Playback-Pausierung.
+
+- 2026-04-03: macOS-Settings-AI semantisch erweitert und in Sound, App-Verhalten, Textinput, AI-Modelle und History aufgeteilt.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `README.md`, `apps/macos/README.md`, `docs/api-design.md`, `docs/system-design.md`, `VERSION`
+  - Funktionalität: Die Einstellungen der macOS-App haben jetzt einen eigenen `Sound`-Tab, klarere App-Verhaltensschalter, Texteingabe-Optionen wie Auto-Send, Clipboard-Restore und simulierte Tastatureingaben, eine History-Aufbewahrung mit lokalem Pruning, einen Modellsichtbarkeits-Schalter fuer experimentelle Modelle sowie eine Warmhalte-Dauer fuer Sprachmodelle. Die App zeigt ausserdem den lokalen App-Support-Ordner in den Settings an und kann die vorhandenen Lifecycle- und Update-Settings direkt ueber den State synchronisieren.
+
+- 2026-04-03: macOS-Lifecycle-, Storage- und Update-Settings semantisch erweitert.
+  - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SparkleUpdaterController.swift`, `README.md`, `apps/macos/README.md`, `VERSION`
+  - Funktionalität: Die macOS-App kann jetzt Dock-Sichtbarkeit, Login-Start, Menu-Bar-Click-Start, automatische Update-Pruefung, History-Retention und den aktuellen App-Datenordner sauber in der Oberfläche abbilden. Dock- und Login-Settings wirken unmittelbar auf die App-Lifecycle-APIs, automatische Updates werden mit Sparkle synchronisiert, die Menüleisten-Click-Option startet bei Idle direkt ein Diktat, und der Storage-Dialog zeigt den lokalen App-Support-Ordner samt Reveal-Funktion und dokumentiert den noch nicht verschiebbaren Speicherort als bewusstes Migrationslimit. Die History-Aufbewahrung bereinigt nur den lokalen Transkriptverlauf und laesst Roh-Audio unangetastet.
 
 - 2026-04-03: Debug-Modus fuer haengende Runtime-/Subprozess-Pfade in der macOS-App eingefuehrt.
   - Dateien: `Sources/ASRCore/WhisperCLIExecutor.swift`, `Sources/ASRCore/WhisperCppEngine.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `README.md`, `apps/macos/README.md`, `docs/api-design.md`, `docs/system-design.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`

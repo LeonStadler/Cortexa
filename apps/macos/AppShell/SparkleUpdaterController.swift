@@ -99,6 +99,11 @@ final class SparkleUpdaterController: ObservableObject {
         }
         updaterController.checkForUpdates(nil)
     }
+
+    func setAutomaticallyChecksEnabled(_ enabled: Bool) {
+        guard let updaterController else { return }
+        updaterController.updater.automaticallyChecksForUpdates = enabled
+    }
 }
 #else
 import Foundation
@@ -165,6 +170,10 @@ final class SparkleUpdaterController: ObservableObject {
                 self.state = .ready
             }
         }
+    }
+
+    func setAutomaticallyChecksEnabled(_ enabled: Bool) {
+        _ = enabled
     }
 }
 #endif

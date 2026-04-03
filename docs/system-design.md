@@ -20,6 +20,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - AVAudioEngine capture
 - 16k mono normalized chunk output
 - interruption and route change signals
+- optional app-level preprocessing for input level compensation, silence removal, and dynamic normalization
 
 3. `SessionCore`
 - transcription state machine
@@ -55,7 +56,9 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
   snippet persistence/import/export UI, language/performance selection, translation selection,
-  transcript history, AI processing model/style controls, license activation UI, and hotkey control
+  transcript history, AI processing model/style controls, license activation UI, hotkey control,
+  dedicated app-behavior, sound, text-input, history-retention, and model-visibility settings
+- sound feedback controls are app-local cues for start/stop/failure states and do not control the system microphone volume or any global playback-pausing behavior
 - local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
 - optional debug log for high-detail runtime/process tracing, including `whisper-cli` launch, exit, and timeout events
 - persistent user settings (mode/language/performance/translation/AI processing) via `UserDefaults`
@@ -69,6 +72,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 1. Hotkey starts session.
 2. AX target snapshot captured once (`bindingID` immutable).
 3. Audio captured and sent to ASR.
+   Optional preprocessing may adjust input level, suppress silence, or normalize dynamic gain before samples reach ASR.
 4. Final transcript returned in the spoken language unless explicit translation is enabled.
 5. Snippet replacement applied.
 6. Optional translation applied.
@@ -135,6 +139,8 @@ Core invariants:
 - optional fallback path isolated behind config
 - provider-agnostic AI processing layer supports Apple on-device and dynamic remote API catalogs without baking remote model IDs into the app
 - remote provider presets share one OpenAI-compatible transport layer, so brokers like OpenRouter and direct providers such as OpenAI, Groq, Mistral, DeepSeek or local runtimes like Ollama/LM Studio can be added without a separate model registry per vendor
+- the menu bar shell persists semantically named settings groups for app lifecycle, audio preprocessing, sound feedback, text delivery, model visibility, and transcript retention, and some of them are applied immediately through the app state
+- the voice-model active duration gives the runtime a warm/unload boundary, so loaded model state can be released after inactivity and rebuilt on demand without changing provider behavior
 - AI provider errors degrade to untranslated/unprocessed text instead of blocking dictation
 - clipboard-based fallback remains explicit because it is less private than direct insertion
 
