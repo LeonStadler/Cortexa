@@ -15,6 +15,10 @@ The settings also warn when the chosen shortcut overlaps with common macOS/syste
 An optional hold-to-dictate shortcut can be configured separately from the normal toggle shortcut and can also be disabled independently.
 Final transcript delivery can be configured independently from recognition mode: insert into the current text target, or copy only to the clipboard.
 The dictation settings also include a live rewrite scope that limits how far back partial transcripts may be reshaped while you keep speaking, so older sentences stabilize sooner instead of being rewritten wholesale.
+Translation remains part of the dictation settings and is separate from language recognition: `Default` keeps the spoken language, `English` enables Whisper translation.
+The settings now also include a dedicated `AI` area for post-processing with provider/model selection, style/tone, salutation, and separate toggles for live insertion and the final result.
+The AI settings can host both Apple on-device processing and remote API providers without hardcoding a fixed model list; OpenRouter, OpenAI, Groq, Mistral, DeepSeek, Together AI, Fireworks AI, xAI, Ollama and LM Studio are available as presets, and custom OpenAI-compatible endpoints can be configured manually.
+The diagnostics area also includes a dedicated debug mode that records detailed runtime and `whisper-cli` lifecycle events, including subprocess starts, exits, timeouts, and exportable debug logs.
 
 Operational notes:
 
@@ -25,8 +29,10 @@ Operational notes:
 - `Settings…` from the menu bar opens an explicit preference-styled settings window, which is more reliable for the agent/menu bar app than relying on the default SwiftUI settings selector.
 - The settings let you switch the visible app UI between German and English.
 - The settings window is organized into a sidebar-driven preferences layout for general app preferences, dictation, shortcuts, history, about, snippets, and advanced options.
+- The settings sidebar now also includes a dedicated `AI` tab, while translation remains under `Diktat` because it belongs to the ASR/transcription path rather than the text-rewrite provider layer.
 - The settings use a fixed source-list sidebar plus a global native search field above the detail view, so switching sections and searching across areas stays compact and predictable.
 - Settings search scans across all top-level areas and shows grouped results per section instead of restricting the search to the currently selected area.
+- Menu bar quick settings expose the AI processing toggle plus, when enabled, the eligible model choice, live/final application toggles, style, salutation, and translation output without surfacing unavailable local models or remote models whose provider is disabled or missing credentials.
 - Search results reuse the same preference cards as the normal tabs, but without nesting full pane containers inside the search mode; this keeps the global search view flatter and closer to native macOS preferences behavior.
 - The settings window keeps a fixed width so long history entries do not stretch the preferences layout horizontally.
 - The settings window now leans more heavily on native macOS structures such as toolbar search, `Form`-based content flow, and restrained `GroupBox` grouping instead of a heavily custom header/search/card shell.
@@ -42,6 +48,9 @@ Operational notes:
 - Diagnostics are shown in a compressed preview first and can be expanded for the full log text, which can also be copied to the clipboard.
 - Streaming quality now uses the capability preset values for beam size, decode cadence, and thread count rather than only switching the model file; `balanced` and `accurate` also use a more conservative streaming commit strategy than `fast`.
 - The live rewrite scope in settings lets you choose how aggressively the current streaming tail may adapt, from only the current sentence up to a much wider context.
+- Apple on-device AI processing is offered as an optional post-processing layer only on supported Macs; if the Apple model is unavailable or fails, dictation falls back to the raw transcript instead of failing the session.
+- Remote AI processing can be added through provider presets or custom OpenAI-compatible API endpoints. Models are discovered dynamically from the provider catalog, API keys are stored in the macOS Keychain, and providers without credentials stay out of the quick settings until they are operational. Local OpenAI-compatible servers such as Ollama or LM Studio can also run without an API key.
+- Auto language detection no longer implies translation. The spoken language is preserved unless translation is explicitly enabled.
 - Basic speech-activity gating suppresses no-speech hallucinations so short idle outputs such as `Musik` are less likely to be inserted when the microphone captures no real dictation.
 - If the focused text element briefly disappears during startup, the dictation runtime can recover by reusing the last known AX text target in the same frontmost app.
 - Dictation can start even when no text field is currently active; streaming waits and inserts once a target is focused, and the final transcript waits up to five seconds after stop before either inserting, copying to the clipboard, or falling back to history-only retention depending on the chosen delivery mode.

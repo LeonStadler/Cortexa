@@ -40,18 +40,25 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - device profile collection
 - adaptive presets (streaming/quality/fallback)
 
-7. `LicenseCore`
+7. `AIProcessingCore`
+- provider-agnostic text post-processing abstractions
+- Apple on-device Foundation Models integration for supported Macs
+- model catalog and quick-settings eligibility filtering
+- final-only or live-tail-plus-final processing modes
+
+8. `LicenseCore`
 - offline key format + verification
 - keychain storage for raw keys without plaintext disk fallback
 
-8. `AppShell`
+9. `AppShell`
 - macOS menu bar app + settings
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
-  snippet persistence/import/export UI, language/performance selection, transcript history,
-  license activation UI, and hotkey control
+  snippet persistence/import/export UI, language/performance selection, translation selection,
+  transcript history, AI processing model/style controls, license activation UI, and hotkey control
 - local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
-- persistent user settings (mode/language/performance) via `UserDefaults`
+- optional debug log for high-detail runtime/process tracing, including `whisper-cli` launch, exit, and timeout events
+- persistent user settings (mode/language/performance/translation/AI processing) via `UserDefaults`
  - iOS shell now includes a host app backed by app-group storage and a keyboard extension
    that can insert the latest shared transcript and shared snippet replacements
 
@@ -62,19 +69,23 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 1. Hotkey starts session.
 2. AX target snapshot captured once (`bindingID` immutable).
 3. Audio captured and sent to ASR.
-4. Final transcript returned.
+4. Final transcript returned in the spoken language unless explicit translation is enabled.
 5. Snippet replacement applied.
-6. Single deterministic insert into original target.
-7. Session transitions to completed.
+6. Optional translation applied.
+7. Optional AI processing applied.
+8. Single deterministic insert into original target.
+9. Session transitions to completed.
 
 ### 2) Streaming Insert (macOS)
 
 1. Start session and capture immutable target.
 2. Partial segments arrive continuously.
 3. Stabilizer computes `committedPrefix` and `tail`.
-4. Inserter patches only the mutable tail while preserving committed text already shown to the user.
-5. Focus changes are ignored (target remains locked).
-6. Stop finalizes tail and closes session.
+4. Snippet replacement applies to the current streaming text.
+5. Optional live AI processing can reshape only the current mutable tail, never previously committed text.
+6. Inserter patches only the mutable tail while preserving committed text already shown to the user.
+7. Focus changes are ignored (target remains locked).
+8. Stop finalizes the tail, runs a final AI pass when enabled, and closes the session.
 
 ### 3) iOS/iPadOS Keyboard Flow
 
@@ -103,6 +114,9 @@ Core invariants:
 - Only `uncommittedTail` may be replaced.
 - Insert operation IDs are idempotent.
 - The live rewrite scope determines how much recent text may still be reshaped before it is considered committed.
+- Auto language detection controls recognition only and never implies translation.
+- Translation is explicit and currently limited to Whisper's English translation path.
+- AI processing is optional post-processing and must fail closed to the raw transcript path.
 
 ## Permission / Security Matrix
 
@@ -110,13 +124,18 @@ Core invariants:
 - Accessibility (macOS): required for AX insertion.
 - Automation: not required by default.
 - Network: not required by default for product function.
+- Network: optional when the user explicitly enables remote AI providers such as OpenRouter or a custom OpenAI-compatible endpoint.
 
 ## Reliability Strategy
 
 - explicit state machine transitions
 - interruption handling (`audioInterrupted`, `permissionChanged`)
 - deterministic insertion semantics
+- explicit `Transcription -> optional Translation -> optional AI Processing` staging
 - optional fallback path isolated behind config
+- provider-agnostic AI processing layer supports Apple on-device and dynamic remote API catalogs without baking remote model IDs into the app
+- remote provider presets share one OpenAI-compatible transport layer, so brokers like OpenRouter and direct providers such as OpenAI, Groq, Mistral, DeepSeek or local runtimes like Ollama/LM Studio can be added without a separate model registry per vendor
+- AI provider errors degrade to untranslated/unprocessed text instead of blocking dictation
 - clipboard-based fallback remains explicit because it is less private than direct insertion
 
 ## Performance Strategy

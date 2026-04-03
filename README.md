@@ -19,6 +19,7 @@ Offline-first dictation and transcription stack for Apple platforms with a macOS
 - `Sources/SnippetCore`: snippet matching + persistence
 - `Sources/TextTargetMac`: macOS Accessibility target capture/insertion
 - `Sources/CapabilityCore`: capability profiling and adaptive presets
+- `Sources/AIProcessingCore`: provider-agnostic AI post-processing, model catalog, Apple on-device integration, dynamic remote API providers
 - `Sources/LicenseCore`: offline license key codec, verifier, secure storage
 - `apps/macos`: macOS app shell blueprint
 - `apps/ios`: iOS app + keyboard extension blueprint
@@ -83,13 +84,18 @@ Features implemented in macOS app shell:
 - Snippet replacement + snippet import/export (JSON)
 - Transkript-History mit Copy/Delete/Clear + Export (TXT), lokal persistent
 - Language switch (`de`, `en`, `auto`) and profile presets (`auto`, `fast`, `balanced`, `accurate`)
+- Explizite Translation-Ausgabe (`Keine Übersetzung` oder `Nach Englisch`), getrennt von der Sprachwahl
+- Optionales AI Processing mit Apple-On-Device- und API-Modellkatalog, Stil/Ton, Anrede sowie getrennten Aktivierungen für Live-Einfügen und finales Ergebnis
+- Dynamische API-Anbieter fuer Text-Postprocessing ohne fest verdrahtete Modellliste; OpenRouter und weitere Presets wie OpenAI, Groq, Mistral, DeepSeek, Together AI, Fireworks AI, xAI, Ollama und LM Studio lassen sich ueber dieselbe OpenAI-kompatible Surface anbinden, Modelle werden per `/models` geladen und API-Keys landen im Keychain
 - Offline licensing UI (key input, local verification, Keychain-only secret persistence with legacy cache cleanup)
 - Lokales Audit-Log mit Rotation (`~/Library/Application Support/WisprLocal/audit.log`)
+- Optionaler Debug-Modus mit detaillierten Runtime-/Subprozess-Logs (`~/Library/Application Support/WisprLocal/debug.log`) inklusive `whisper-cli`-Starts, Exit-Codes und Timeouts
 - Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI
 - Sparkle-kompatibler Auto-Updater mit permanent sichtbarem manuellen Check im Menü und in den Settings
 - Lifecycle-Refresh nach App-Aktivierung und System-Wake für Berechtigungen, Runtime und Hotkey-Registrierung
 - Eingeschränkter Transkriptionsmodus ohne Bedienungshilfen; direktes Einfügen bleibt dann deaktiviert, Verlauf und Zwischenablage bleiben nutzbar
 - Interner Speicher für Snippets, Verlauf und Audit-Dateien wird lokal gehärtet; Zwischenablage-Fallback bleibt absichtlich optional und ist als weniger privater Zustellpfad gekennzeichnet
+- Auto-Spracherkennung steuert nur noch die Transkription; Ubersetzung nach Englisch wird ausschliesslich ueber die separate Translation-Option aktiviert
 
 ## macOS Release Archive
 

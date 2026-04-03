@@ -6,10 +6,18 @@ final class DocsContractTests: XCTestCase {
     func testApiDesignDocumentsCurrentDictationOptions() throws {
         let apiDesign = try readRepositoryFile("docs/api-design.md")
 
+        XCTAssertTrue(apiDesign.contains("translationOutput"))
+        XCTAssertTrue(apiDesign.contains("aiProcessing"))
+        XCTAssertTrue(apiDesign.contains("AIProcessingConfiguration"))
+        XCTAssertTrue(apiDesign.contains("AIRemoteProviderConfiguration"))
+        XCTAssertTrue(apiDesign.contains("case openAI"))
+        XCTAssertTrue(apiDesign.contains("requiresAPIKey"))
+        XCTAssertTrue(apiDesign.contains("providerID::modelID"))
         XCTAssertTrue(apiDesign.contains("liveRewriteScope"))
         XCTAssertTrue(apiDesign.contains("finalResultDeliveryMode"))
         XCTAssertTrue(apiDesign.contains("clipboardFallbackWhenNoTarget"))
         XCTAssertTrue(apiDesign.contains("bounded mutable tail"))
+        XCTAssertTrue(apiDesign.contains("raw Whisper transcript"))
     }
 
     func testSystemDesignDescribesMutableTailAndLiveRewriteScope() throws {
@@ -17,6 +25,10 @@ final class DocsContractTests: XCTestCase {
 
         XCTAssertTrue(systemDesign.contains("mutable tail"))
         XCTAssertTrue(systemDesign.contains("live rewrite scope"))
+        XCTAssertTrue(systemDesign.contains("Transcription -> optional Translation -> optional AI Processing"))
+        XCTAssertTrue(systemDesign.contains("Auto language detection controls recognition only and never implies translation"))
+        XCTAssertTrue(systemDesign.contains("dynamic remote API catalogs"))
+        XCTAssertTrue(systemDesign.contains("OpenAI, Groq, Mistral, DeepSeek"))
     }
 
     func testLicensingAndReadmeMatchDeactivateAndUpdateBehavior() throws {
@@ -35,7 +47,7 @@ final class DocsContractTests: XCTestCase {
 
         XCTAssertFalse(version.isEmpty)
         XCTAssertNotNil(version.range(of: versionPattern, options: .regularExpression))
-        XCTAssertEqual(version, "0.22.2")
+        XCTAssertEqual(version, "0.27.0")
     }
 
     private func readRepositoryFile(_ relativePath: String) throws -> String {

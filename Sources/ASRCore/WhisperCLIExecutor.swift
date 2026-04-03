@@ -1,4 +1,7 @@
 import Foundation
+#if os(macOS)
+import Darwin
+#endif
 
 enum WhisperCLIExecutor {
     static func resolveCLIPath(explicitPath: URL?, modelPath: URL) -> URL? {
@@ -40,9 +43,12 @@ enum WhisperCLIExecutor {
         modelPath: URL,
         inputWav: URL,
         languageHint: String?,
+        translationMode: ASRTranslationMode,
         threads: Int,
         beamSize: Int,
-        outputBase: URL
+        outputBase: URL,
+        timeout: TimeInterval = 90,
+        debugLog: ((String) -> Void)? = nil
     ) throws -> URL {
         #if os(macOS)
         let process = Process()
@@ -51,21 +57,59 @@ enum WhisperCLIExecutor {
             modelPath: modelPath,
             inputWav: inputWav,
             languageHint: languageHint,
+            translationMode: translationMode,
             threads: threads,
             beamSize: beamSize,
             outputBase: outputBase
         )
 
         let stderrPipe = Pipe()
+        let stdoutPipe = Pipe()
         process.standardError = stderrPipe
-        process.standardOutput = Pipe()
+        process.standardOutput = stdoutPipe
+
+        let startedAt = Date()
+        let terminationSemaphore = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in
+            terminationSemaphore.signal()
+        }
 
         try process.run()
-        process.waitUntilExit()
+        debugLog?(
+            "whisper-cli.start pid=\(process.processIdentifier) cli=\(cliPath.lastPathComponent) model=\(modelPath.lastPathComponent) threads=\(threads) beam=\(beamSize) translation=\(translationMode.rawValue) timeout=\(Int(timeout))s"
+        )
+
+        if terminationSemaphore.wait(timeout: .now() + timeout) == .timedOut {
+            debugLog?("whisper-cli.timeout pid=\(process.processIdentifier) after=\(Int(Date().timeIntervalSince(startedAt)))s")
+            process.interrupt()
+
+            if terminationSemaphore.wait(timeout: .now() + 2) == .timedOut {
+                process.terminate()
+            }
+
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+                _ = terminationSemaphore.wait(timeout: .now() + 1)
+            }
+
+            throw NSError(
+                domain: "WhisperCLIExecutor",
+                code: 408,
+                userInfo: [NSLocalizedDescriptionKey: "whisper-cli timed out after \(Int(timeout)) seconds"]
+            )
+        }
+
+        let duration = String(format: "%.2f", Date().timeIntervalSince(startedAt))
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        let stdoutText = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderrText = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         if process.terminationStatus != 0 {
-            let errorData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorText = String(data: errorData, encoding: .utf8) ?? "Unknown whisper-cli error"
+            debugLog?(
+                "whisper-cli.exit pid=\(process.processIdentifier) status=\(process.terminationStatus) duration=\(duration)s stderr=\(truncate(stderrText))"
+            )
+            let errorText = stderrText.isEmpty ? "Unknown whisper-cli error" : stderrText
             throw NSError(
                 domain: "WhisperCLIExecutor",
                 code: Int(process.terminationStatus),
@@ -73,12 +117,23 @@ enum WhisperCLIExecutor {
             )
         }
 
+        if !stderrText.isEmpty {
+            debugLog?("whisper-cli.stderr pid=\(process.processIdentifier) text=\(truncate(stderrText))")
+        }
+        if !stdoutText.isEmpty {
+            debugLog?("whisper-cli.stdout pid=\(process.processIdentifier) text=\(truncate(stdoutText))")
+        }
+        debugLog?(
+            "whisper-cli.exit pid=\(process.processIdentifier) status=0 duration=\(duration)s output=\(outputBase.lastPathComponent).json"
+        )
+
         return outputBase.appendingPathExtension("json")
         #else
         _ = cliPath
         _ = modelPath
         _ = inputWav
         _ = languageHint
+        _ = translationMode
         _ = threads
         _ = beamSize
         _ = outputBase
@@ -90,6 +145,7 @@ enum WhisperCLIExecutor {
         modelPath: URL,
         inputWav: URL,
         languageHint: String?,
+        translationMode: ASRTranslationMode,
         threads: Int,
         beamSize: Int,
         outputBase: URL
@@ -108,6 +164,15 @@ enum WhisperCLIExecutor {
             arguments += ["-l", languageHint]
         }
 
+        if translationMode == .toEnglish {
+            arguments.append("-tr")
+        }
+
         return arguments
+    }
+
+    private static func truncate(_ text: String, limit: Int = 500) -> String {
+        guard text.count > limit else { return text }
+        return "\(text.prefix(limit))…"
     }
 }

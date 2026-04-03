@@ -34,7 +34,6 @@ final class LicenseController {
         self.configuration = configuration
         self.store = store
         self.legacyCacheFileURL = cacheFileURL
-        try? removeLegacyCacheIfPresent()
 
         if let configuredKey = configuration.licensePublicKeyBase64,
            !configuredKey.isEmpty {
@@ -42,6 +41,8 @@ final class LicenseController {
         } else {
             self.verifier = try? LicenseVerifier()
         }
+
+        try? Self.removeLegacyCacheIfPresent(at: cacheFileURL)
     }
 
     func activate(licenseKey: String) -> LicenseStatusSnapshot {
@@ -135,10 +136,14 @@ final class LicenseController {
     }
 
     private func removeLegacyCacheIfPresent() throws {
-        guard FileManager.default.fileExists(atPath: legacyCacheFileURL.path) else {
+        try Self.removeLegacyCacheIfPresent(at: legacyCacheFileURL)
+    }
+
+    private static func removeLegacyCacheIfPresent(at url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return
         }
 
-        try FileManager.default.removeItem(at: legacyCacheFileURL)
+        try FileManager.default.removeItem(at: url)
     }
 }

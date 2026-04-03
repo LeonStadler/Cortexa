@@ -42,6 +42,8 @@ targets:
           ENABLE_HARDENED_RUNTIME: YES
     dependencies:
       - package: WisprLocalPackage
+        product: AIProcessingCore
+      - package: WisprLocalPackage
         product: ASRCore
       - package: WisprLocalPackage
         product: SnippetCore

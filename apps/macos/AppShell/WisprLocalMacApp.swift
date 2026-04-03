@@ -1,4 +1,5 @@
 import AppKit
+import AIProcessingCore
 import SwiftUI
 
 @main
@@ -290,6 +291,53 @@ struct MenuBarContentView: View {
                 }
             }
 
+            Picker(text("Übersetzung", "Translation"), selection: $appState.translationOutputMode) {
+                ForEach(TranslationOutputMode.allCases) { mode in
+                    Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
+                }
+            }
+
+            Divider()
+
+            Toggle(text("AI-Verarbeitung", "AI processing"), isOn: $appState.aiProcessingEnabled)
+                .disabled(appState.availableQuickSettingsAIModels.isEmpty)
+
+            if appState.aiProcessingEnabled {
+                Picker(text("AI-Modell", "AI model"), selection: Binding(
+                    get: { appState.selectedAIModelID ?? "" },
+                    set: { appState.selectedAIModelID = $0.isEmpty ? nil : $0 }
+                )) {
+                    if appState.availableQuickSettingsAIModels.isEmpty {
+                        Text(text("Keine Modelle", "No models")).tag("")
+                    } else {
+                        ForEach(appState.availableQuickSettingsAIModels) { model in
+                            Text(model.displayName).tag(model.id)
+                        }
+                    }
+                }
+                .disabled(appState.availableQuickSettingsAIModels.isEmpty)
+
+                Toggle(text("Bei Live-Einfügen", "For live insertion"), isOn: $appState.aiProcessingApplyDuringLiveInsertion)
+                    .disabled(!appState.streamingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
+
+                Toggle(text("Beim finalen Ergebnis", "For final result"), isOn: $appState.aiProcessingApplyToFinalResult)
+                    .disabled(appState.availableQuickSettingsAIModels.isEmpty)
+
+                Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
+                    ForEach(AIWritingStyle.allCases) { style in
+                        Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
+                    }
+                }
+                .disabled(appState.availableQuickSettingsAIModels.isEmpty)
+
+                Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                    ForEach(AISalutation.allCases) { salutation in
+                        Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
+                    }
+                }
+                .disabled(appState.availableQuickSettingsAIModels.isEmpty)
+            }
+
             if appState.hasPermissionProblems {
                 Divider()
                 Text(text("Berechtigungen", "Permissions"))
@@ -310,6 +358,9 @@ struct MenuBarContentView: View {
             if !appState.latestDictationText.isEmpty {
                 Divider()
                 copyLastDictationButton
+                Button(text("Verlauf", "History")) {
+                    appState.openHistorySettingsWindow()
+                }
             }
 
             Divider()
@@ -337,7 +388,7 @@ struct MenuBarContentView: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .frame(width: 332)
+        .frame(width: 300)
         .controlSize(.small)
     }
 

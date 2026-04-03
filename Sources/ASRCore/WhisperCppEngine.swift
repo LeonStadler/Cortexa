@@ -3,6 +3,7 @@ import Foundation
 public final class WhisperCppEngine: WhisperEngine {
     public var onPartial: ((PartialTranscript) -> Void)?
     public var onFinalSegment: ((FinalSegment) -> Void)?
+    public var onDebugEvent: ((String) -> Void)?
 
     private let explicitCLIPath: URL?
     private let stateQueue = DispatchQueue(label: "wispr.asr.whispercpp.state", qos: .userInitiated)
@@ -53,6 +54,7 @@ public final class WhisperCppEngine: WhisperEngine {
             )
         }
 
+        emitDebug("engine.loadModel cli=\(cliPath.lastPathComponent) model=\(path.lastPathComponent) backend=\(config.backend.rawValue) latency=\(config.latencyProfile.rawValue)")
         self.modelPath = path
         self.config = config
         self.resolvedCLIPath = cliPath
@@ -76,6 +78,8 @@ public final class WhisperCppEngine: WhisperEngine {
         if !didStart {
             throw WhisperEngineError.engineAlreadyRunning
         }
+
+        emitDebug("engine.startStreaming")
     }
 
     public func pushAudioPCM16kMono(_ buffer: UnsafePointer<Float>, frameCount: Int) throws {
@@ -132,6 +136,7 @@ public final class WhisperCppEngine: WhisperEngine {
             throw WhisperEngineError.engineNotRunning
         }
 
+        emitDebug("engine.stopStreaming samples=\(snapshot.0.count)")
         let final = try transcribe(samples: snapshot.0, config: snapshot.1, modelPath: snapshot.2, cliPath: snapshot.3)
         for segment in final.segments {
             onFinalSegment?(segment)
@@ -147,6 +152,7 @@ public final class WhisperCppEngine: WhisperEngine {
             sequence = 0
             decodeVersion += 1
         }
+        emitDebug("engine.resetStreaming")
     }
 
     public func transcribeFile(url: URL) async throws -> FinalTranscript {
@@ -163,6 +169,8 @@ public final class WhisperCppEngine: WhisperEngine {
             modelPath: modelPath,
             cliPath: cliPath
         )
+
+        emitDebug("engine.transcribeFile path=\(url.lastPathComponent) textLength=\(transcript.text.count)")
 
         for segment in transcript.segments {
             onFinalSegment?(segment)
@@ -196,7 +204,7 @@ public final class WhisperCppEngine: WhisperEngine {
             guard update.shouldPublish else { return }
             onPartial?(PartialTranscript(text: partial.text, sequenceNumber: update.sequence))
         } catch {
-            // Ignore partial decoding errors to keep the stream alive.
+            emitDebug("engine.partialDecodeFailed version=\(version) error=\(error.localizedDescription)")
         }
     }
 
@@ -223,14 +231,20 @@ public final class WhisperCppEngine: WhisperEngine {
         let threads = max(1, config.threadCount > 0 ? config.threadCount : ProcessInfo.processInfo.activeProcessorCount - 1)
         let beam = max(1, config.beamSize)
 
+        emitDebug("engine.transcribeWav model=\(modelPath.lastPathComponent) wav=\(wavURL.lastPathComponent) threads=\(threads) beam=\(beam) translation=\(config.translationMode.rawValue)")
+
         let jsonURL = try WhisperCLIExecutor.run(
             cliPath: cliPath,
             modelPath: modelPath,
             inputWav: wavURL,
             languageHint: config.languageHint,
+            translationMode: config.translationMode,
             threads: threads,
             beamSize: beam,
-            outputBase: outputBase
+            outputBase: outputBase,
+            debugLog: { [weak self] message in
+                self?.emitDebug(message)
+            }
         )
 
         guard FileManager.default.fileExists(atPath: jsonURL.path) else {
@@ -238,6 +252,10 @@ public final class WhisperCppEngine: WhisperEngine {
         }
 
         return try WhisperCLIParser.parseResult(at: jsonURL)
+    }
+
+    private func emitDebug(_ message: String) {
+        onDebugEvent?("[WhisperCpp] \(message)")
     }
 
     private func minimumSamplesForPartial(for config: ASRConfig?) -> Int {

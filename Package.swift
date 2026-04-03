@@ -9,6 +9,7 @@ let package = Package(
         .iOS(.v17)
     ],
     products: [
+        .library(name: "AIProcessingCore", targets: ["AIProcessingCore"]),
         .library(name: "ASRCore", targets: ["ASRCore"]),
         .library(name: "AudioCore", targets: ["AudioCore"]),
         .library(name: "SessionCore", targets: ["SessionCore"]),
@@ -18,6 +19,9 @@ let package = Package(
         .library(name: "LicenseCore", targets: ["LicenseCore"])
     ],
     targets: [
+        .target(
+            name: "AIProcessingCore"
+        ),
         .target(
             name: "ASRCore"
         ),
@@ -40,6 +44,10 @@ let package = Package(
         ),
         .target(
             name: "LicenseCore"
+        ),
+        .testTarget(
+            name: "AIProcessingCoreTests",
+            dependencies: ["AIProcessingCore"]
         ),
         .testTarget(
             name: "ASRCoreTests",

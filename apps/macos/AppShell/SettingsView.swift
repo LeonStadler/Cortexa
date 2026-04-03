@@ -1,4 +1,5 @@
 import AppKit
+import AIProcessingCore
 import Carbon
 import SnippetCore
 import SwiftUI
@@ -7,7 +8,6 @@ struct SettingsView: View {
     @EnvironmentObject private var appState: MacAppState
     @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.german.rawValue
 
-    @State private var selectedTab: SettingsTab = .general
     @State private var diagnosticsExpanded = false
     @State private var newSnippetTrigger: String = ""
     @State private var newSnippetReplacement: String = ""
@@ -41,6 +41,22 @@ struct SettingsView: View {
     private func matches(_ keywords: [String]) -> Bool {
         guard isSearching else { return true }
         return keywords.contains { $0.lowercased().contains(searchQuery) }
+    }
+
+    private func selectedRemoteProviderBinding<T>(
+        _ keyPath: WritableKeyPath<AIRemoteProviderConfiguration, T>,
+        default defaultValue: T
+    ) -> Binding<T> {
+        Binding(
+            get: {
+                appState.selectedRemoteProvider?[keyPath: keyPath] ?? defaultValue
+            },
+            set: { newValue in
+                appState.updateSelectedRemoteProvider { provider in
+                    provider[keyPath: keyPath] = newValue
+                }
+            }
+        )
     }
 
     private var filteredHistory: [TranscriptHistoryEntry] {
@@ -79,6 +95,10 @@ struct SettingsView: View {
         matches([
             "sprache",
             "language",
+            "translation",
+            "translate",
+            "übersetzung",
+            "uebersetzung",
             "qualität",
             "quality",
             "streaming",
@@ -104,6 +124,29 @@ struct SettingsView: View {
 
     private var shortcutsHasMatches: Bool {
         matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) 
+    }
+
+    private var aiHasMatches: Bool {
+        matches([
+            "ai",
+            "processing",
+            "modell",
+            "model",
+            "rewrite",
+            "stil",
+            "style",
+            "ton",
+            "tone",
+            "anrede",
+            "formal",
+            "informal",
+            "apple intelligence",
+            "api",
+            "openrouter",
+            "provider",
+            "anbieter",
+            "key"
+        ])
     }
 
     private var historyHasMatches: Bool {
@@ -136,7 +179,7 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
-                List(selection: $selectedTab) {
+                List(selection: selectedTabSelection) {
                     Section {
                         ForEach(SettingsTab.allCases, id: \.self) { tab in
                             Label(tab.title(language: appLanguage), systemImage: tab.symbolName)
@@ -157,7 +200,7 @@ struct SettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 14) {
-                Text(isSearching ? text("Suchergebnisse", "Search Results") : selectedTab.title(language: appLanguage))
+                Text(isSearching ? text("Suchergebnisse", "Search Results") : currentSelectedTab.title(language: appLanguage))
                     .font(.title2.weight(.semibold))
                     .frame(maxWidth: 780, alignment: .leading)
 
@@ -180,8 +223,8 @@ struct SettingsView: View {
                         if isSearching {
                             searchResultsForm
                         } else {
-                            selectedForm
-                        }
+                    selectedForm
+                }
                     }
                     .padding(8)
                 }
@@ -211,13 +254,15 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var selectedForm: some View {
-        switch selectedTab {
+        switch currentSelectedTab {
         case .general:
             generalForm
         case .dictation:
             dictationForm
         case .shortcuts:
             shortcutsForm
+        case .ai:
+            aiForm
         case .history:
             historyForm
         case .about:
@@ -229,10 +274,24 @@ struct SettingsView: View {
         }
     }
 
+    private var selectedTabSelection: Binding<SettingsTab> {
+        Binding(
+            get: { appState.selectedSettingsTab },
+            set: { appState.selectedSettingsTab = $0 }
+        )
+    }
+
+    private var currentSelectedTab: SettingsTab {
+        appState.selectedSettingsTab
+    }
+
     private var dictationForm: some View {
         Form {
             Section(text("Erkennung", "Recognition")) {
                 dictationRecognitionContent
+            }
+            Section(text("Übersetzung", "Translation")) {
+                translationContent
             }
             Section(text("Live-Anpassung", "Live rewriting")) {
                 liveRewriteContent
@@ -252,6 +311,19 @@ struct SettingsView: View {
             }
             Section(text("Halten zum Diktieren", "Hold to Dictate")) {
                 holdShortcutContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+
+    private var aiForm: some View {
+        Form {
+            Section(text("Verarbeitung", "Processing")) {
+                aiProcessingContent
+            }
+            Section(text("Modelle", "Models")) {
+                aiModelContent
             }
         }
         .formStyle(.grouped)
@@ -329,6 +401,7 @@ struct SettingsView: View {
             if dictationHasMatches {
                 Section(text("Diktat", "Dictation")) {
                     dictationRecognitionContent
+                    translationContent
                     liveRewriteContent
                     dictationDeliveryContent
                 }
@@ -338,6 +411,13 @@ struct SettingsView: View {
                 Section(text("Kurzbefehle", "Shortcuts")) {
                     startStopShortcutContent
                     holdShortcutContent
+                }
+            }
+
+            if aiHasMatches {
+                Section(text("AI", "AI")) {
+                    aiProcessingContent
+                    aiModelContent
                 }
             }
 
@@ -374,7 +454,7 @@ struct SettingsView: View {
                 }
             }
 
-            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !historyHasMatches && !aboutHasMatches && !snippetsHasMatches && !advancedHasMatches {
+            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !aiHasMatches && !historyHasMatches && !aboutHasMatches && !snippetsHasMatches && !advancedHasMatches {
                 Section {
                     Text(text("Keine passenden Einstellungen gefunden.", "No matching settings found."))
                         .foregroundStyle(.secondary)
@@ -578,7 +658,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var dictationRecognitionContent: some View {
-        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert"]) {
+        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert", "translation", "übersetzung", "uebersetzung"]) {
             LabeledContent(text("Diktatsprache", "Dictation language")) {
                 Picker(text("Diktatsprache", "Dictation language"), selection: $appState.selectedLanguage) {
                     ForEach(DictationLanguage.allCases) { language in
@@ -598,6 +678,28 @@ struct SettingsView: View {
                 .labelsHidden()
                 .frame(minWidth: 170)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var translationContent: some View {
+        if matches(["translation", "translate", "übersetzung", "uebersetzung", "sprache", "language"]) {
+            LabeledContent(text("Übersetzen nach", "Translate to")) {
+                Picker(text("Übersetzen nach", "Translate to"), selection: $appState.translationOutputMode) {
+                    ForEach(TranslationOutputMode.allCases) { mode in
+                        Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 170)
+            }
+
+            Text(text(
+                "Auto-Spracherkennung übersetzt nicht mehr implizit. 'Keine Übersetzung' gibt die gesprochene Sprache zurück; 'Nach Englisch' aktiviert gezielt die Whisper-Übersetzung.",
+                "Auto language detection no longer translates implicitly. 'Original' returns the spoken language; 'English' explicitly enables Whisper translation."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -640,7 +742,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var dictationDeliveryContent: some View {
-        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert"]) {
+        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert", "translation", "übersetzung", "uebersetzung"]) {
             LabeledContent(text("Finales Ergebnis", "Final result")) {
                 Picker(text("Finales Ergebnis", "Final result"), selection: $appState.finalResultDeliveryMode) {
                     Text(text("In Textfeld einfügen", "Insert into text field")).tag(FinalResultDeliveryMode.insert)
@@ -686,6 +788,209 @@ struct SettingsView: View {
                 ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var aiProcessingContent: some View {
+        if aiHasMatches {
+            Toggle(text("AI-Verarbeitung aktivieren", "Enable AI processing"), isOn: $appState.aiProcessingEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+            if appState.aiProcessingEnabled {
+                LabeledContent(text("Modell", "Model")) {
+                    Picker(text("Modell", "Model"), selection: Binding(
+                        get: { appState.selectedAIModelID ?? "" },
+                        set: { appState.selectedAIModelID = $0.isEmpty ? nil : $0 }
+                    )) {
+                        if appState.aiModels.isEmpty {
+                            Text(text("Keine Modelle erkannt", "No models detected")).tag("")
+                        } else {
+                            ForEach(appState.aiModels) { model in
+                                Text(model.displayName).tag(model.id)
+                            }
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(minWidth: 220)
+                }
+
+                LabeledContent(text("AI anwenden bei", "Apply AI for")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(
+                            text("Live-Einfügen", "Live insertion"),
+                            isOn: $appState.aiProcessingApplyDuringLiveInsertion
+                        )
+                        .disabled(!appState.streamingEnabled)
+
+                        Toggle(
+                            text("Finalem Ergebnis", "Final result"),
+                            isOn: $appState.aiProcessingApplyToFinalResult
+                        )
+                    }
+                    .frame(minWidth: 220, alignment: .leading)
+                }
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+                LabeledContent(text("Stil / Ton", "Style / Tone")) {
+                    Picker(text("Stil / Ton", "Style / Tone"), selection: $appState.aiWritingStyle) {
+                        ForEach(AIWritingStyle.allCases) { style in
+                            Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(minWidth: 220)
+                }
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+                LabeledContent(text("Anrede", "Salutation")) {
+                    Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                        ForEach(AISalutation.allCases) { salutation in
+                            Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(minWidth: 220)
+                }
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+            }
+
+            Section(text("API-Anbieter", "API providers")) {
+                HStack(spacing: 8) {
+                    Menu(text("Anbieter hinzufügen", "Add provider")) {
+                        ForEach(AIRemoteProviderPreset.allCases) { preset in
+                            Button(preset.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)) {
+                                appState.addRemoteProvider(preset: preset)
+                            }
+                        }
+                    }
+                    if appState.selectedRemoteProvider != nil {
+                        Button(role: .destructive) {
+                            appState.removeSelectedRemoteProvider()
+                        } label: {
+                            Text(text("Entfernen", "Remove"))
+                        }
+                    }
+                }
+
+                if !appState.remoteProviders.isEmpty {
+                    LabeledContent(text("Anbieter", "Provider")) {
+                        Picker(text("Anbieter", "Provider"), selection: Binding(
+                            get: { appState.selectedRemoteProviderID ?? "" },
+                            set: { appState.selectedRemoteProviderID = $0.isEmpty ? nil : $0 }
+                        )) {
+                            ForEach(appState.remoteProviders) { provider in
+                                Text(provider.displayName).tag(provider.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(minWidth: 240)
+                    }
+                }
+
+                if appState.selectedRemoteProvider != nil {
+                    LabeledContent(text("Typ", "Type")) {
+                        Text(appState.selectedRemoteProvider?.preset.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue) ?? "")
+                    }
+
+                    Toggle(
+                        text("Anbieter aktivieren", "Enable provider"),
+                        isOn: selectedRemoteProviderBinding(\.isEnabled, default: false)
+                    )
+
+                    LabeledContent(text("Name", "Name")) {
+                        TextField(
+                            text("Name", "Name"),
+                            text: selectedRemoteProviderBinding(\.displayName, default: "")
+                        )
+                        .frame(minWidth: 260)
+                    }
+
+                    LabeledContent(text("Base URL", "Base URL")) {
+                        TextField(
+                            "https://api.example.com/v1",
+                            text: selectedRemoteProviderBinding(\.baseURLString, default: "")
+                        )
+                        .frame(minWidth: 260)
+                    }
+
+                    LabeledContent(text("Modelle laden über", "Load models from")) {
+                        TextField(
+                            "/models",
+                            text: selectedRemoteProviderBinding(\.modelsPath, default: "/models")
+                        )
+                        .frame(minWidth: 220)
+                    }
+
+                    LabeledContent(text("Text-API", "Text API")) {
+                        TextField(
+                            "/chat/completions",
+                            text: selectedRemoteProviderBinding(\.chatCompletionsPath, default: "/chat/completions")
+                        )
+                        .frame(minWidth: 220)
+                    }
+
+                    Toggle(
+                        text("API-Key erforderlich", "API key required"),
+                        isOn: selectedRemoteProviderBinding(\.requiresAPIKey, default: true)
+                    )
+
+                    LabeledContent(text("API-Key", "API key")) {
+                        SecureField("sk-...", text: $appState.remoteProviderAPIKeyDraft)
+                            .frame(minWidth: 260)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button(text("API-Key speichern", "Save API key")) {
+                            appState.saveSelectedRemoteProviderAPIKey()
+                        }
+                        Button(text("Modelle aktualisieren", "Refresh models")) {
+                            appState.refreshSelectedRemoteProviderModels()
+                        }
+                    }
+
+                    if let provider = appState.selectedRemoteProvider, !provider.discoveredModels.isEmpty {
+                        Text(text(
+                            "Verfügbare Modelle: \(provider.discoveredModels.count)",
+                            "Available models: \(provider.discoveredModels.count)"
+                        ))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    } else if let provider = appState.selectedRemoteProvider, !provider.requiresAPIKey {
+                        Text(text(
+                            "Für lokale OpenAI-kompatible Server wie Ollama oder LM Studio ist kein API-Key nötig.",
+                            "No API key is required for local OpenAI-compatible servers such as Ollama or LM Studio."
+                        ))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+        }
+    }
+
+    @ViewBuilder
+    private var aiModelContent: some View {
+        if aiHasMatches {
+            if appState.aiModels.isEmpty {
+                Text(text("Es wurde aktuell kein AI-Modell erkannt.", "There is currently no AI model available."))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(appState.aiModels, id: \AIModelDescriptor.id) { (model: AIModelDescriptor) in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.displayName)
+                            .font(.body.weight(.semibold))
+                        Text(model.providerKind.rawValue)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(model.availability.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
+                            .font(.footnote)
+                            .foregroundStyle(model.availability.isAvailable ? Color.secondary : Color.orange)
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
     }
@@ -850,6 +1155,28 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
 
+                Toggle(text("Debug-Modus aktivieren", "Enable debug mode"), isOn: $appState.debugModeEnabled)
+
+                if appState.debugModeEnabled {
+                    DisclosureGroup(
+                        content: {
+                            Text(appState.debugLogText.isEmpty ? text("Noch keine Debug-Ereignisse erfasst.", "No debug events captured yet.") : appState.debugLogText)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        },
+                        label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(text("Aktuelle Debug-Logs", "Recent debug logs"))
+                                Text(appState.debugLogText.isEmpty ? text("Debug-Modus ist aktiv. Neue Laufzeit- und Prozessereignisse erscheinen hier.", "Debug mode is enabled. New runtime and process events will appear here.") : appState.debugLogText.components(separatedBy: .newlines).suffix(3).joined(separator: "\n"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    )
+                }
+
                 DisclosureGroup(
                     isExpanded: $diagnosticsExpanded,
                     content: {
@@ -880,6 +1207,13 @@ struct SettingsView: View {
                         appState.exportDiagnosticsReport()
                     }
                     .buttonStyle(.bordered)
+
+                    if appState.debugModeEnabled {
+                        Button(text("Debug-Log exportieren", "Export debug log")) {
+                            appState.exportDebugLog()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
             }
         }
@@ -923,10 +1257,11 @@ struct SettingsView: View {
     }
 }
 
-private enum SettingsTab: Hashable, CaseIterable {
+enum SettingsTab: Hashable, CaseIterable {
     case general
     case dictation
     case shortcuts
+    case ai
     case history
     case about
     case snippets
@@ -937,6 +1272,7 @@ private enum SettingsTab: Hashable, CaseIterable {
         case .general: return "gearshape"
         case .dictation: return "mic"
         case .shortcuts: return "command"
+        case .ai: return "sparkles"
         case .history: return "clock.arrow.circlepath"
         case .about: return "person.crop.circle"
         case .snippets: return "text.badge.plus"
@@ -952,6 +1288,8 @@ private enum SettingsTab: Hashable, CaseIterable {
             return language.text("Diktat", "Dictation")
         case .shortcuts:
             return language.text("Kurzbefehle", "Shortcuts")
+        case .ai:
+            return "AI"
         case .history:
             return language.text("Verlauf", "History")
         case .about:

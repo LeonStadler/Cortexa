@@ -1,4 +1,5 @@
 import ASRCore
+import AIProcessingCore
 import AVFoundation
 import AppKit
 import ApplicationServices
@@ -50,7 +51,7 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
         case .english:
             return "en"
         case .auto:
-            return nil
+            return "auto"
         }
     }
 
@@ -62,6 +63,35 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return Locale(identifier: "en_US")
         case .auto:
             return Locale.current
+        }
+    }
+}
+
+enum TranslationOutputMode: String, CaseIterable, Identifiable {
+    case original
+    case english
+
+    var id: String { rawValue }
+
+    func localizedDisplayName(interfaceLanguageCode: String) -> String {
+        switch (interfaceLanguageCode, self) {
+        case ("en", .original):
+            return "Original"
+        case ("en", .english):
+            return "English"
+        case (_, .original):
+            return "Keine Übersetzung"
+        case (_, .english):
+            return "Nach Englisch"
+        }
+    }
+
+    var asrTranslationMode: ASRTranslationMode {
+        switch self {
+        case .original:
+            return .original
+        case .english:
+            return .toEnglish
         }
     }
 }
@@ -106,11 +136,13 @@ enum DictationPerformance: String, CaseIterable, Identifiable {
 struct DictationStartOptions {
     let mode: DictationMode
     let language: DictationLanguage
+    let translationOutput: TranslationOutputMode
     let performance: DictationPerformance
     let liveRewriteScope: LiveRewriteScope
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
+    let aiProcessing: AIProcessingConfiguration
 }
 
 enum FinalResultDeliveryMode: String, CaseIterable, Identifiable {
@@ -177,6 +209,7 @@ private struct LockedTextTarget {
 final class DictationRuntime: @unchecked Sendable {
     var onStatus: ((String) -> Void)?
     var onDiagnostic: ((String) -> Void)?
+    var onDebugEvent: ((String) -> Void)?
     var onTranscript: ((String) -> Void)?
     var onFinalTranscript: ((FinalTranscriptEvent) -> Void)?
     var onSessionActivityChanged: ((Bool) -> Void)?
@@ -185,6 +218,7 @@ final class DictationRuntime: @unchecked Sendable {
     private let processQueue = DispatchQueue(label: "wispr.dictation.process", qos: .userInitiated)
     private let insertionQueue = DispatchQueue(label: "wispr.dictation.insert", qos: .userInitiated)
     private let capabilityProfiler = CapabilityProfiler()
+    private var aiProcessingService = AIProcessingService()
     private let sessionLock = NSLock()
 
     private let audioEngine = AVAudioEngine()
@@ -234,12 +268,14 @@ final class DictationRuntime: @unchecked Sendable {
 
     func prepareRuntime() {
         guard !runtimePrepared else { return }
+        publishDebug("runtime.prepare.begin")
 
         do {
             let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(bundle: .main, appName: "WisprLocal")
             let bootstrapModel = runtime.modelsDirectoryURL.appendingPathComponent(runtime.defaultModelFileName)
             let bootstrapConfig = ASRConfig(
                 languageHint: "de",
+                translationMode: .original,
                 modelID: runtime.defaultModelFileName,
                 backend: .whisperCpp,
                 latencyProfile: .streaming,
@@ -252,13 +288,18 @@ final class DictationRuntime: @unchecked Sendable {
             loadedConfig = bootstrapConfig
             runtimePrepared = true
             publishDiagnostic("ASR runtime ready (bundled model loaded).")
+            publishDebug("runtime.prepare.ready model=\(bootstrapModel.lastPathComponent)")
 
             whisperEngine.onPartial = { [weak self] partial in
                 self?.handlePartialText(partial.text)
             }
+            whisperEngine.onDebugEvent = { [weak self] event in
+                self?.publishDebug(event)
+            }
         } catch {
             publishStatus("Error")
             publishDiagnostic("ASR init failed: \(error.localizedDescription)")
+            publishDebug("runtime.prepare.failed error=\(error.localizedDescription)")
         }
     }
 
@@ -286,6 +327,9 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     func start(options: DictationStartOptions) {
+        publishDebug(
+            "dictation.start.requested mode=\(options.mode == .streaming ? "streaming" : "finalize") language=\(options.language.rawValue) translation=\(options.translationOutput.rawValue) performance=\(options.performance.rawValue)"
+        )
         let startPermissionMessage = withSessionLock { () -> String? in
             if isRunning {
                 return DictationRuntimeError.alreadyRunning.localizedDescription
@@ -320,6 +364,7 @@ final class DictationRuntime: @unchecked Sendable {
             }
 
             let micGranted = await requestMicrophonePermission()
+            self.publishDebug("permissions.microphone granted=\(micGranted)")
             guard micGranted else {
                 publishStatus("Error")
                 publishDiagnostic(DictationRuntimeError.microphonePermissionDenied.localizedDescription)
@@ -329,6 +374,7 @@ final class DictationRuntime: @unchecked Sendable {
             do {
                 let requiresDirectInsertion = options.mode == .streaming || options.finalResultDeliveryMode == .insert
                 let accessibilityGranted = requestAccessibilityPermission(promptIfNeeded: requiresDirectInsertion)
+                publishDebug("permissions.accessibility granted=\(accessibilityGranted) requiresDirectInsertion=\(requiresDirectInsertion)")
                 accessibilityPermissionGranted = accessibilityGranted
                 try configureEngine(for: options)
 
@@ -372,6 +418,7 @@ final class DictationRuntime: @unchecked Sendable {
 
                 try whisperEngine.startStreaming()
                 try startAudioCapture()
+                publishDebug("dictation.start.ready effectiveMode=\(effectiveMode == .streaming ? "streaming" : "finalize")")
 
                 withSessionLock {
                     self.isRunning = true
@@ -379,7 +426,8 @@ final class DictationRuntime: @unchecked Sendable {
                 publishSessionActivity(true)
                 publishStatus("Recording")
                 let modeText = effectiveMode == .streaming ? "Streaming Insert" : "Finalize Insert"
-                publishDiagnostic("Recording (\(modeText), \(options.language.displayName))")
+                let translationText = options.translationOutput == .english ? ", translated to English" : ""
+                publishDiagnostic("Recording (\(modeText), \(options.language.displayName)\(translationText))")
             } catch {
                 abortSession(reason: "Start failed: \(error.localizedDescription)")
             }
@@ -394,10 +442,31 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         do {
+            publishDebug("dictation.stop.begin")
             stopAudioCapture()
             let final = try await whisperEngine.stopStreaming()
+            let detectedLanguageCode = resolvedLanguageCode(from: final)
+            let effectiveLocale = locale(for: detectedLanguageCode) ?? runningLocale
             let normalized = normalizeText(final.text)
-            let finalText = applySnippetsToFinalText(normalized, locale: runningLocale)
+            let snippetAdjustedText = applySnippetsToFinalText(normalized, locale: effectiveLocale)
+            let processingService = withSessionLock { aiProcessingService }
+            let finalProcessingOutcome: AIProcessingOutcome
+            if shouldRunFinalAIProcessing() {
+                finalProcessingOutcome = await processingService.process(
+                    AIProcessingRequest(
+                        text: snippetAdjustedText,
+                        stage: .final,
+                        locale: effectiveLocale,
+                        configuration: currentAIProcessingConfiguration()
+                    )
+                )
+            } else {
+                finalProcessingOutcome = .bypassed(
+                    text: snippetAdjustedText,
+                    reason: "Final AI processing is skipped while live insertion is active."
+                )
+            }
+            let finalText = finalProcessingOutcome.text
 
             if shouldDiscardTranscript(finalText) {
                 publishTranscript("")
@@ -410,9 +479,10 @@ final class DictationRuntime: @unchecked Sendable {
             let deliveryOutcome = await deliverFinalText(finalText)
 
             publishTranscript(finalText)
+            emitProcessingDiagnosticIfNeeded(finalProcessingOutcome, stage: .final)
             let finalEventMetadata = withSessionLock {
                 (
-                    languageCode: currentOptions?.language.rawValue ?? "auto",
+                    languageCode: detectedLanguageCode,
                     mode: currentOptions?.mode ?? .finalize
                 )
             }
@@ -426,6 +496,7 @@ final class DictationRuntime: @unchecked Sendable {
             )
             publishStatus("Idle")
             publishDiagnostic("Letztes Transkript verarbeitet.")
+            publishDebug("dictation.stop.completed textLength=\(finalText.count) delivery=\(String(describing: deliveryOutcome))")
         } catch {
             abortSession(reason: "Stop failed: \(error.localizedDescription)")
             return
@@ -442,6 +513,12 @@ final class DictationRuntime: @unchecked Sendable {
     func openAccessibilitySettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    func setAIProcessingService(_ service: AIProcessingService) {
+        withSessionLock {
+            aiProcessingService = service
+        }
     }
 
     private func handlePartialText(_ text: String) {
@@ -466,7 +543,8 @@ final class DictationRuntime: @unchecked Sendable {
             do {
                 let stable = self.stableCommitter.ingestPartial(normalized)
                 let committedWithSnippets = self.applySnippetsToFinalText(stable.committedPrefix, locale: self.runningLocale)
-                let patchText = self.normalizeText(committedWithSnippets + stable.tail)
+                let mergedPatchText = self.normalizeText(committedWithSnippets + stable.tail)
+                let patchText = self.processLiveTextIfNeeded(mergedPatchText)
                 recoverablePatchText = patchText
 
                 guard !patchText.isEmpty else { return }
@@ -897,11 +975,13 @@ final class DictationRuntime: @unchecked Sendable {
 
         audioEngine.prepare()
         try audioEngine.start()
+        publishDebug("audio.capture.started inputRate=\(Int(inputFormat.sampleRate)) targetRate=\(Int(targetFormat.sampleRate))")
     }
 
     private func stopAudioCapture() {
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
+        publishDebug("audio.capture.stopped")
     }
 
     private func handleAudioBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) {
@@ -1159,6 +1239,7 @@ final class DictationRuntime: @unchecked Sendable {
         let latencyProfile = selectLatencyProfile(options: options, preset: preset)
         let config = ASRConfig(
             languageHint: options.language.asrHint,
+            translationMode: options.translationOutput.asrTranslationMode,
             modelID: modelFile,
             backend: .whisperCpp,
             latencyProfile: latencyProfile,
@@ -1168,12 +1249,16 @@ final class DictationRuntime: @unchecked Sendable {
         )
 
         if loadedModelPath == modelURL, loadedConfig == config {
+            publishDebug("engine.configure.reuse model=\(modelURL.lastPathComponent)")
             return
         }
 
         try whisperEngine.loadModel(at: modelURL, config: config)
         loadedModelPath = modelURL
         loadedConfig = config
+        publishDebug(
+            "engine.configure.loaded model=\(modelURL.lastPathComponent) latency=\(config.latencyProfile.rawValue) threads=\(config.threadCount) beam=\(config.beamSize) chunkMs=\(config.chunkMilliseconds)"
+        )
     }
 
     private func selectEnginePreset(options: DictationStartOptions) -> EnginePreset {
@@ -1305,7 +1390,83 @@ final class DictationRuntime: @unchecked Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private func currentAIProcessingConfiguration() -> AIProcessingConfiguration {
+        withSessionLock {
+            currentOptions?.aiProcessing ?? AIProcessingConfiguration(enabled: false, selectedModelID: nil)
+        }
+    }
+
+    private func shouldRunFinalAIProcessing() -> Bool {
+        withSessionLock {
+            guard let currentOptions else { return false }
+            return currentOptions.aiProcessing.applyToFinalResult
+        }
+    }
+
+    private func processLiveTextIfNeeded(_ text: String) -> String {
+        let request = AIProcessingRequest(
+            text: text,
+            stage: .live,
+            locale: runningLocale,
+            configuration: currentAIProcessingConfiguration()
+        )
+        let processingService = withSessionLock { aiProcessingService }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var outcome: AIProcessingOutcome = .bypassed(text: text, reason: "AI processing did not run.")
+
+        Task {
+            outcome = await processingService.process(request)
+            semaphore.signal()
+        }
+
+        semaphore.wait()
+        emitProcessingDiagnosticIfNeeded(outcome, stage: .live)
+        return outcome.text
+    }
+
+    private func emitProcessingDiagnosticIfNeeded(_ outcome: AIProcessingOutcome, stage: AIProcessingStage) {
+        switch outcome {
+        case .processed where stage == .final:
+            if let message = outcome.diagnosticMessage {
+                publishDiagnostic(message)
+            }
+        case .failedFallback:
+            if let message = outcome.diagnosticMessage {
+                publishDiagnostic(message)
+            }
+        default:
+            break
+        }
+    }
+
+    private func resolvedLanguageCode(from final: FinalTranscript) -> String {
+        let detectedLanguage = final.language?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if let detectedLanguage, !detectedLanguage.isEmpty {
+            return detectedLanguage
+        }
+
+        return withSessionLock {
+            currentOptions?.language.rawValue ?? "auto"
+        }
+    }
+
+    private func locale(for languageCode: String) -> Locale? {
+        switch languageCode {
+        case "de":
+            return Locale(identifier: "de_DE")
+        case "en":
+            return Locale(identifier: "en_US")
+        default:
+            return nil
+        }
+    }
+
     private func cleanupSession() {
+        publishDebug("dictation.cleanup.begin")
         let tasksToCancel = withSessionLock { () -> (Task<Void, Never>?, Task<Void, Never>?) in
             let startTask = self.startTask
             let pendingTask = self.pendingStreamingInsertionTask
@@ -1334,6 +1495,7 @@ final class DictationRuntime: @unchecked Sendable {
         whisperEngine.resetStreaming()
         stableCommitter.reset()
         publishSessionActivity(false)
+        publishDebug("dictation.cleanup.end")
     }
 
     private func abortSession(reason: String) {
@@ -1351,6 +1513,12 @@ final class DictationRuntime: @unchecked Sendable {
     private func publishDiagnostic(_ value: String) {
         DispatchQueue.main.async { [weak self] in
             self?.onDiagnostic?(value)
+        }
+    }
+
+    private func publishDebug(_ value: String) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onDebugEvent?(value)
         }
     }
 

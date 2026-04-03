@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import AIProcessingCore
 import Foundation
 import SwiftUI
 import SnippetCore
@@ -160,6 +161,12 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var translationOutputMode: TranslationOutputMode {
+        didSet {
+            userDefaults.set(translationOutputMode.rawValue, forKey: UserDefaultsKeys.translationOutputMode)
+        }
+    }
+
     @Published var performanceProfile: DictationPerformance {
         didSet {
             userDefaults.set(performanceProfile.rawValue, forKey: UserDefaultsKeys.performanceProfile)
@@ -218,11 +225,78 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var debugModeEnabled: Bool {
+        didSet {
+            userDefaults.set(debugModeEnabled, forKey: UserDefaultsKeys.debugModeEnabled)
+            if debugModeEnabled {
+                appendDebug("debug-mode.enabled")
+            } else {
+                appendAudit("debug-mode.disabled")
+            }
+        }
+    }
+
+    @Published var aiProcessingEnabled: Bool {
+        didSet {
+            userDefaults.set(aiProcessingEnabled, forKey: UserDefaultsKeys.aiProcessingEnabled)
+        }
+    }
+
+    @Published var selectedAIModelID: String? {
+        didSet {
+            userDefaults.set(selectedAIModelID, forKey: UserDefaultsKeys.selectedAIModelID)
+            rebuildAIProcessingStack(reason: "model-selection")
+        }
+    }
+
+    @Published var aiProcessingApplyDuringLiveInsertion: Bool {
+        didSet {
+            userDefaults.set(aiProcessingApplyDuringLiveInsertion, forKey: UserDefaultsKeys.aiProcessingApplyDuringLiveInsertion)
+        }
+    }
+
+    @Published var aiProcessingApplyToFinalResult: Bool {
+        didSet {
+            userDefaults.set(aiProcessingApplyToFinalResult, forKey: UserDefaultsKeys.aiProcessingApplyToFinalResult)
+        }
+    }
+
+    @Published var aiWritingStyle: AIWritingStyle {
+        didSet {
+            userDefaults.set(aiWritingStyle.rawValue, forKey: UserDefaultsKeys.aiWritingStyle)
+        }
+    }
+
+    @Published var aiSalutation: AISalutation {
+        didSet {
+            userDefaults.set(aiSalutation.rawValue, forKey: UserDefaultsKeys.aiSalutation)
+        }
+    }
+
+    @Published var remoteProviders: [AIRemoteProviderConfiguration] = [] {
+        didSet {
+            persistRemoteProviders()
+            rebuildAIProcessingStack(reason: "remote-providers-updated")
+        }
+    }
+
+    @Published var selectedRemoteProviderID: String? {
+        didSet {
+            userDefaults.set(selectedRemoteProviderID, forKey: UserDefaultsKeys.selectedRemoteProviderID)
+            remoteProviderAPIKeyDraft = selectedRemoteProviderID.flatMap { aiRemoteProviderSecretStore.loadAPIKey(providerID: $0) } ?? ""
+        }
+    }
+
+    @Published var remoteProviderAPIKeyDraft: String = ""
+    @Published var selectedSettingsTab: SettingsTab = .general
+
     @Published var snippetRules: [SnippetRule] = []
     @Published var transcriptHistory: [TranscriptHistoryEntry] = []
+    @Published private(set) var aiModels: [AIModelDescriptor] = []
 
     @Published var recordingStatus: String = "Idle"
     @Published var diagnosticsText: String = "Initializing ASR runtime..."
+    @Published var debugLogText: String = ""
     @Published var capabilitySummary: String = ""
     @Published var lastTranscript: String = ""
     @Published var microphonePermissionStatus: PermissionStatus = .notDetermined
@@ -370,9 +444,39 @@ final class MacAppState: ObservableObject {
         !missingPermissionTargets.isEmpty
     }
 
+    var availableQuickSettingsAIModels: [AIModelDescriptor] {
+        aiModels.filter { $0.quickSettingsEligible && $0.availability.isAvailable }
+    }
+
+    var selectedAIModel: AIModelDescriptor? {
+        guard let selectedAIModelID else { return nil }
+        return aiModels.first(where: { $0.id == selectedAIModelID })
+    }
+
+    var selectedRemoteProvider: AIRemoteProviderConfiguration? {
+        guard let selectedRemoteProviderID else { return nil }
+        return remoteProviders.first(where: { $0.id == selectedRemoteProviderID })
+    }
+
+    var effectiveAIProcessingEnabled: Bool {
+        aiProcessingEnabled && (selectedAIModel?.availability.isAvailable ?? false)
+    }
+
+    var aiProcessingConfiguration: AIProcessingConfiguration {
+        AIProcessingConfiguration(
+            enabled: effectiveAIProcessingEnabled,
+            selectedModelID: selectedAIModelID,
+            applyDuringLiveInsertion: aiProcessingApplyDuringLiveInsertion,
+            applyToFinalResult: aiProcessingApplyToFinalResult,
+            style: aiWritingStyle,
+            salutation: aiSalutation
+        )
+    }
+
     private enum UserDefaultsKeys {
         static let streamingEnabled = "wispr.settings.streamingEnabled"
         static let selectedLanguage = "wispr.settings.selectedLanguage"
+        static let translationOutputMode = "wispr.settings.translationOutputMode"
         static let performanceProfile = "wispr.settings.performanceProfile"
         static let selectedHotkey = "wispr.settings.selectedHotkey"
         static let toggleShortcutEnabled = "wispr.settings.toggleShortcutEnabled"
@@ -382,6 +486,16 @@ final class MacAppState: ObservableObject {
         static let clipboardFallbackWhenNoTarget = "wispr.settings.clipboardFallbackWhenNoTarget"
         static let liveRewriteScope = "wispr.settings.liveRewriteScope"
         static let showMenuBarShortcutHints = "wispr.settings.showMenuBarShortcutHints"
+        static let debugModeEnabled = "wispr.settings.debugModeEnabled"
+        static let aiProcessingEnabled = "wispr.settings.aiProcessingEnabled"
+        static let selectedAIModelID = "wispr.settings.selectedAIModelID"
+        static let aiProcessingApplyDuringLiveInsertion = "wispr.settings.aiProcessing.applyDuringLiveInsertion"
+        static let aiProcessingApplyToFinalResult = "wispr.settings.aiProcessing.applyToFinalResult"
+        static let legacyAIProcessingScope = "wispr.settings.aiProcessingScope"
+        static let aiWritingStyle = "wispr.settings.aiWritingStyle"
+        static let aiSalutation = "wispr.settings.aiSalutation"
+        static let remoteProviders = "wispr.settings.ai.remoteProviders"
+        static let selectedRemoteProviderID = "wispr.settings.ai.selectedRemoteProviderID"
     }
 
     private let userDefaults: UserDefaults
@@ -390,8 +504,11 @@ final class MacAppState: ObservableObject {
     private let snippetStore: SnippetStore
     private let historyStore: TranscriptHistoryStore
     private let auditLogger: AuditLogging
+    private let debugLogger: AuditLogging
     private let permissionController: PermissionControlling
     private let capabilityProfiler = CapabilityProfiler()
+    private let aiRemoteProviderSecretStore = AIRemoteProviderSecretStore()
+    private var aiProcessingService = AIProcessingService()
     private let appConfiguration: MacAppConfiguration
 
     private let licenseController: LicenseController
@@ -403,6 +520,7 @@ final class MacAppState: ObservableObject {
     private var lastExternalApplication: NSRunningApplication?
     private var openSettingsHandler: (() -> Void)?
     private var holdSessionActive = false
+    private var debugLines: [String] = []
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -420,6 +538,13 @@ final class MacAppState: ObservableObject {
             self.selectedLanguage = parsedLanguage
         } else {
             self.selectedLanguage = .german
+        }
+
+        if let rawTranslationOutputMode = userDefaults.string(forKey: UserDefaultsKeys.translationOutputMode),
+           let parsedTranslationOutputMode = TranslationOutputMode(rawValue: rawTranslationOutputMode) {
+            self.translationOutputMode = parsedTranslationOutputMode
+        } else {
+            self.translationOutputMode = .original
         }
 
         if let rawPerformance = userDefaults.string(forKey: UserDefaultsKeys.performanceProfile),
@@ -447,6 +572,7 @@ final class MacAppState: ObservableObject {
         }
 
         self.showMenuBarShortcutHints = userDefaults.object(forKey: UserDefaultsKeys.showMenuBarShortcutHints) as? Bool ?? false
+        self.debugModeEnabled = userDefaults.object(forKey: UserDefaultsKeys.debugModeEnabled) as? Bool ?? false
         if let rawDeliveryMode = userDefaults.string(forKey: UserDefaultsKeys.finalResultDeliveryMode),
            let parsedDeliveryMode = FinalResultDeliveryMode(rawValue: rawDeliveryMode) {
             self.finalResultDeliveryMode = parsedDeliveryMode
@@ -462,10 +588,58 @@ final class MacAppState: ObservableObject {
             self.liveRewriteScope = .currentSentence
         }
 
+        self.aiProcessingEnabled = userDefaults.object(forKey: UserDefaultsKeys.aiProcessingEnabled) as? Bool ?? false
+        self.selectedAIModelID = userDefaults.string(forKey: UserDefaultsKeys.selectedAIModelID)
+
+        if userDefaults.object(forKey: UserDefaultsKeys.aiProcessingApplyDuringLiveInsertion) != nil {
+            self.aiProcessingApplyDuringLiveInsertion = userDefaults.bool(forKey: UserDefaultsKeys.aiProcessingApplyDuringLiveInsertion)
+        } else if userDefaults.string(forKey: UserDefaultsKeys.legacyAIProcessingScope) == "liveAndFinal" {
+            self.aiProcessingApplyDuringLiveInsertion = true
+        } else {
+            self.aiProcessingApplyDuringLiveInsertion = false
+        }
+
+        if userDefaults.object(forKey: UserDefaultsKeys.aiProcessingApplyToFinalResult) != nil {
+            self.aiProcessingApplyToFinalResult = userDefaults.bool(forKey: UserDefaultsKeys.aiProcessingApplyToFinalResult)
+        } else {
+            self.aiProcessingApplyToFinalResult = true
+        }
+
+        if let rawAIWritingStyle = userDefaults.string(forKey: UserDefaultsKeys.aiWritingStyle),
+           let parsedAIWritingStyle = AIWritingStyle(rawValue: rawAIWritingStyle) {
+            self.aiWritingStyle = parsedAIWritingStyle
+        } else {
+            self.aiWritingStyle = .none
+        }
+
+        if let rawAISalutation = userDefaults.string(forKey: UserDefaultsKeys.aiSalutation),
+           let parsedAISalutation = AISalutation(rawValue: rawAISalutation) {
+            self.aiSalutation = parsedAISalutation
+        } else {
+            self.aiSalutation = .none
+        }
+
+        let persistedRemoteProviders: [AIRemoteProviderConfiguration]
+        if let data = userDefaults.data(forKey: UserDefaultsKeys.remoteProviders),
+           let decoded = try? JSONDecoder().decode([AIRemoteProviderConfiguration].self, from: data) {
+            persistedRemoteProviders = decoded
+        } else {
+            persistedRemoteProviders = []
+        }
+        self.remoteProviders = persistedRemoteProviders
+
+        let initialSelectedRemoteProviderID = userDefaults.string(forKey: UserDefaultsKeys.selectedRemoteProviderID)
+            ?? persistedRemoteProviders.first?.id
+        self.selectedRemoteProviderID = initialSelectedRemoteProviderID
+
         self.snippetStore = SnippetStore(fileURL: Self.snippetStorageURL())
         self.historyStore = TranscriptHistoryStore(fileURL: Self.historyStorageURL())
         self.auditLogger = AuditLogger(fileURL: Self.auditLogStorageURL())
+        self.debugLogger = AuditLogger(fileURL: Self.debugLogStorageURL())
         self.licenseController = LicenseController(configuration: configuration, cacheFileURL: Self.legacyLicenseCacheURL())
+        self.remoteProviderAPIKeyDraft = initialSelectedRemoteProviderID.flatMap {
+            aiRemoteProviderSecretStore.loadAPIKey(providerID: $0)
+        } ?? ""
 
         dictationRuntime.onStatus = { [weak self] status in
             self?.recordingStatus = status
@@ -481,6 +655,9 @@ final class MacAppState: ObservableObject {
         }
         dictationRuntime.onDiagnostic = { [weak self] diagnostic in
             self?.appendDiagnostic(diagnostic)
+        }
+        dictationRuntime.onDebugEvent = { [weak self] diagnostic in
+            self?.appendDebug(diagnostic)
         }
         dictationRuntime.onTranscript = { [weak self] transcript in
             self?.lastTranscript = transcript
@@ -503,6 +680,7 @@ final class MacAppState: ObservableObject {
         loadSnippets()
         loadHistory()
         updateCapabilitySummary()
+        rebuildAIProcessingStack(reason: "initial-load")
         updateUpdaterState()
         loadExistingLicense()
         dictationRuntime.prepareRuntime()
@@ -541,6 +719,95 @@ final class MacAppState: ObservableObject {
             openSettingsHandler()
         } else {
             NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func openHistorySettingsWindow() {
+        selectedSettingsTab = .history
+        openSettingsWindow()
+    }
+
+    func addRemoteProvider(preset: AIRemoteProviderPreset) {
+        var provider = AIRemoteProviderConfiguration.template(
+            for: preset,
+            appTitle: "WisprLocal",
+            appReferer: Bundle.main.bundleURL.absoluteString
+        )
+        if preset == .customOpenAICompatible {
+            provider.displayName = "Custom API"
+        }
+        remoteProviders.append(provider)
+        selectedRemoteProviderID = provider.id
+        if provider.requiresAPIKey {
+            appendDiagnostic("\(provider.displayName) wurde als API-Anbieter hinzugefügt. Hinterlege jetzt den API-Key und lade die Modelle.")
+        } else {
+            appendDiagnostic("\(provider.displayName) wurde als API-Anbieter hinzugefügt. Du kannst den Modellkatalog jetzt direkt laden.")
+        }
+    }
+
+    func removeSelectedRemoteProvider() {
+        guard let selectedRemoteProviderID else { return }
+        remoteProviders.removeAll { $0.id == selectedRemoteProviderID }
+        aiRemoteProviderSecretStore.removeAPIKey(providerID: selectedRemoteProviderID)
+        self.selectedRemoteProviderID = remoteProviders.first?.id
+        rebuildAIProcessingStack(reason: "remote-provider-removed")
+    }
+
+    func updateSelectedRemoteProvider(_ update: (inout AIRemoteProviderConfiguration) -> Void) {
+        guard let selectedRemoteProviderID,
+              let index = remoteProviders.firstIndex(where: { $0.id == selectedRemoteProviderID }) else {
+            return
+        }
+
+        var provider = remoteProviders[index]
+        update(&provider)
+        remoteProviders[index] = provider
+    }
+
+    func saveSelectedRemoteProviderAPIKey() {
+        guard let selectedRemoteProviderID else { return }
+        let trimmed = remoteProviderAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            aiRemoteProviderSecretStore.removeAPIKey(providerID: selectedRemoteProviderID)
+            appendDiagnostic("API-Key für den gewählten Anbieter entfernt.")
+        } else {
+            do {
+                try aiRemoteProviderSecretStore.saveAPIKey(trimmed, providerID: selectedRemoteProviderID)
+                appendDiagnostic("API-Key für den gewählten Anbieter im Keychain gespeichert.")
+            } catch {
+                appendDiagnostic("API-Key konnte nicht gespeichert werden: \(error.localizedDescription)")
+            }
+        }
+
+        rebuildAIProcessingStack(reason: "remote-provider-api-key")
+    }
+
+    func refreshSelectedRemoteProviderModels() {
+        guard let selectedRemoteProvider else { return }
+        let apiKey = aiRemoteProviderSecretStore.loadAPIKey(providerID: selectedRemoteProvider.id) ?? ""
+        if selectedRemoteProvider.requiresAPIKey,
+           apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            appendDiagnostic("Für den gewählten API-Anbieter fehlt ein API-Key.")
+            return
+        }
+
+        appendDiagnostic("Lade Modellkatalog für \(selectedRemoteProvider.displayName)...")
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let models = try await OpenAICompatibleRemoteTextProcessor.discoverModels(
+                    configuration: selectedRemoteProvider,
+                    apiKey: apiKey
+                )
+                self.updateSelectedRemoteProvider { provider in
+                    provider.discoveredModels = models
+                }
+                self.rebuildAIProcessingStack(reason: "remote-models-refreshed")
+                self.appendDiagnostic("Modellkatalog für \(selectedRemoteProvider.displayName) aktualisiert: \(models.count) Modelle.")
+            } catch {
+                self.appendDiagnostic("Modellkatalog konnte nicht geladen werden: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -615,11 +882,13 @@ final class MacAppState: ObservableObject {
         return DictationStartOptions(
             mode: mode,
             language: selectedLanguage,
+            translationOutput: translationOutputMode,
             performance: performanceProfile,
             liveRewriteScope: liveRewriteScope,
             snippetRules: snippetRules,
             finalResultDeliveryMode: finalResultDeliveryMode,
-            clipboardFallbackWhenNoTarget: clipboardFallbackWhenNoTarget
+            clipboardFallbackWhenNoTarget: clipboardFallbackWhenNoTarget,
+            aiProcessing: aiProcessingConfiguration
         )
     }
 
@@ -804,8 +1073,12 @@ final class MacAppState: ObservableObject {
             "Capability: \(capabilitySummary)",
             "Updater: \(updaterStatusText)",
             "License: \(licenseStatusText)",
+            "Debug mode: \(debugModeEnabled ? "enabled" : "disabled")",
             "",
-            diagnosticsText
+            diagnosticsText,
+            "",
+            "Debug Log",
+            debugLogText.isEmpty ? "No debug events captured." : debugLogText
         ].joined(separator: "\n")
 
         do {
@@ -831,6 +1104,23 @@ final class MacAppState: ObservableObject {
             appendAudit("audit.export path=\(url.path)")
         } catch {
             appendDiagnostic("Audit-Export fehlgeschlagen: \(error.localizedDescription)")
+        }
+    }
+
+    func exportDebugLog() {
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "wispr-debug.log"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try debugLogger.export(to: url)
+            appendDiagnostic("Debug-Log exportiert")
+            appendAudit("debug.export path=\(url.path)")
+        } catch {
+            appendDiagnostic("Debug-Log-Export fehlgeschlagen: \(error.localizedDescription)")
         }
     }
 
@@ -983,6 +1273,20 @@ final class MacAppState: ObservableObject {
         appendAudit("diag \(line)")
     }
 
+    private func appendDebug(_ line: String) {
+        guard debugModeEnabled else { return }
+
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let entry = "[\(timestamp)] \(line)"
+        debugLines.append(entry)
+        if debugLines.count > 400 {
+            debugLines = Array(debugLines.suffix(400))
+        }
+        debugLogText = debugLines.joined(separator: "\n")
+        debugLogger.append(line)
+        appendAudit("debug \(line)")
+    }
+
     private func appendAudit(_ line: String) {
         auditLogger.append(line)
     }
@@ -1028,10 +1332,52 @@ final class MacAppState: ObservableObject {
     private func refreshOperationalState(reason: String) {
         registerSelectedHotkey(force: true)
         updateCapabilitySummary()
+        rebuildAIProcessingStack(reason: reason)
         refreshPermissionStates()
         dictationRuntime.prepareRuntime()
         updateUpdaterState()
         appendAudit("lifecycle.refresh reason=\(reason)")
+    }
+
+    private func persistRemoteProviders() {
+        guard let data = try? JSONEncoder().encode(remoteProviders) else { return }
+        userDefaults.set(data, forKey: UserDefaultsKeys.remoteProviders)
+    }
+
+    private func rebuildAIProcessingStack(reason: String) {
+        aiProcessingService = AIProcessingService(providers: makeAIProviders())
+        dictationRuntime.setAIProcessingService(aiProcessingService)
+        let catalog = aiProcessingService.catalog()
+        aiModels = catalog.allModels
+
+        if selectedAIModelID == nil {
+            selectedAIModelID = catalog.availableModels.first?.id
+        }
+
+        if aiProcessingEnabled,
+           let selectedAIModel,
+           !selectedAIModel.availability.isAvailable {
+            aiProcessingEnabled = false
+            appendDiagnostic("AI-Verarbeitung wurde deaktiviert, weil das ausgewählte Modell aktuell nicht verfügbar ist.")
+        }
+
+        appendAudit("ai.catalog.refresh reason=\(reason) models=\(aiModels.count) available=\(catalog.availableModels.count)")
+    }
+
+    private func makeAIProviders() -> [any AITextProcessingProviding] {
+        var providers: [any AITextProcessingProviding] = [AppleFoundationTextProcessor()]
+
+        for provider in remoteProviders where provider.isEnabled {
+            let apiKey = aiRemoteProviderSecretStore.loadAPIKey(providerID: provider.id) ?? ""
+            if provider.requiresAPIKey,
+               apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                continue
+            }
+
+            providers.append(OpenAICompatibleRemoteTextProcessor(configuration: provider, apiKey: apiKey))
+        }
+
+        return providers
     }
 
     private func registerSelectedHotkey(force: Bool) {
@@ -1125,6 +1471,10 @@ final class MacAppState: ObservableObject {
 
     private static func auditLogStorageURL() -> URL {
         appSupportDirectory().appendingPathComponent("audit.log", isDirectory: false)
+    }
+
+    private static func debugLogStorageURL() -> URL {
+        appSupportDirectory().appendingPathComponent("debug.log", isDirectory: false)
     }
 
     private static func legacyLicenseCacheURL() -> URL {
