@@ -319,7 +319,7 @@ struct MenuBarContentView: View {
                         .disabled(!appState.aiProcessingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
                 } label: {
                     MenuActionLabel(
-                        title: text("Anwenden bei", "Apply for"),
+                        title: text("Einsatz", "Use"),
                         shortcutGlyph: nil,
                         shortcutText: nil
                     )

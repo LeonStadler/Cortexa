@@ -2,6 +2,10 @@
 
 ## Fixes
 
+- 2026-04-04: macOS-Settings für AI kompakter und verständlicher strukturiert.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`
+  - Funktionalitaet: Die AI-Settings zeigen in der kompakten Ansicht nur noch die Basis-Schalter, während Modell, Ziel, Modus, Stil und Anrede in der erweiterten Ansicht bleiben. Zusätzlich bleibt das Settings-Fenster beim Umschalten von `Im Dock anzeigen` offen.
+
 - 2026-04-03: Kompaktes Menüleisten-Design erweitert um Flyout fuer Inhaltsstreaming und AI-Einstellungen.
   - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/README.md`, `changelog.md`, `VERSION`
   - Funktionalitaet: In den Einstellungen gibt es jetzt einen eigenen Schalter fuer ein kompaktes Menüleisten-Design, das die Menüleiste schmaler und ruhiger macht, aber Verlauf, Letztes Diktat kopieren, Trennlinien und den Update-Check sichtbar laesst. Die bisherigen Direktregler fuer AI-Modell, Stil und Anrede verschwinden aus dem Popup; stattdessen gibt es einen gemeinsamen `Anwenden bei`-Flyout fuer `Inhaltsstreaming` und `Endergebnis einfügen` sowie einen Sprung zu den AI-Einstellungen. So bleibt die Menüleiste aufgeraumter, ohne wichtige Schnellaktionen zu verlieren.

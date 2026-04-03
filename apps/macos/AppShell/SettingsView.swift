@@ -1314,7 +1314,6 @@ struct SettingsView: View {
                                 "By default, AI cleans up dictated text. You can also use it specifically for tone, salutation, or formatting."
                             )
                         )
-                        }
                     }
                     .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
@@ -2010,6 +2009,7 @@ struct SettingsView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(string, forType: .string)
     }
+
 }
 
 enum SettingsTab: Hashable, CaseIterable {
