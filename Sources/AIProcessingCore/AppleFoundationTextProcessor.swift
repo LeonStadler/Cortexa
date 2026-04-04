@@ -96,23 +96,40 @@ public struct AppleFoundationTextProcessor: AITextProcessingProviding {
 
 enum AppleFoundationPromptBuilder {
     static func instructions(for configuration: AIProcessingConfiguration) -> String {
-        let relevantStyle = configuration.formattingMode.allowedWritingStyles.contains(configuration.style)
+        let relevantStyle = configuration.toneAdjustmentEnabled
+            && configuration.formattingMode.allowedWritingStyles.contains(configuration.style)
             ? configuration.style
             : .none
-        let relevantSalutation = configuration.formattingMode.supportsSalutation
+        let relevantSalutation = configuration.salutationAdjustmentEnabled
+            && configuration.formattingMode.supportsSalutation
             ? configuration.salutation
             : .none
 
-        let goalInstruction: String
-        switch configuration.revisionGoal {
-        case .cleanup:
-            goalInstruction = "Your default task is to clean up dictated text by fixing recognition artifacts, punctuation, casing, and obvious grammar while keeping the wording as close to the original as possible."
-        case .adjustTone:
-            goalInstruction = "Your main task is to keep the meaning while adapting the text to the requested tone."
-        case .adjustSalutation:
-            goalInstruction = "Your main task is to adjust the form of address while changing the surrounding wording as little as possible."
-        case .adaptFormat:
-            goalInstruction = "Your main task is to adapt the dictated text to the requested output format while preserving the meaning."
+        var goalInstructions: [String] = []
+        if configuration.cleanupEnabled {
+            goalInstructions.append(
+                "Clean up dictated text by fixing recognition artifacts, punctuation, casing, and obvious grammar while keeping the wording as close to the original as possible."
+            )
+        }
+        if configuration.toneAdjustmentEnabled {
+            goalInstructions.append(
+                "Adapt the text to the requested tone while preserving the original meaning."
+            )
+        }
+        if configuration.salutationAdjustmentEnabled {
+            goalInstructions.append(
+                "Adjust the form of address where needed while changing the surrounding wording as little as possible."
+            )
+        }
+        if configuration.formatAdaptationEnabled {
+            goalInstructions.append(
+                "Adapt the dictated text to the requested output format while preserving the meaning."
+            )
+        }
+        if goalInstructions.isEmpty {
+            goalInstructions.append(
+                "Clean up dictated text by fixing recognition artifacts, punctuation, casing, and obvious grammar while keeping the wording as close to the original as possible."
+            )
         }
 
         let formatInstruction: String
@@ -163,7 +180,7 @@ enum AppleFoundationPromptBuilder {
 
         return [
             "You revise dictated text without changing its meaning.",
-            goalInstruction,
+            goalInstructions.joined(separator: " "),
             "Preserve the input language exactly as given.",
             "Do not translate unless the text is already translated before it reaches you.",
             "If the safest way to preserve the language or meaning is unclear, return the input unchanged.",

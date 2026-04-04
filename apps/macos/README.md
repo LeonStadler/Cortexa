@@ -38,6 +38,7 @@ Operational notes:
 - The settings use a fixed source-list sidebar plus a global native search field above the detail view, so switching sections and searching across areas stays compact and predictable.
 - Settings search scans across all top-level areas and shows grouped results per section instead of restricting the search to the currently selected area.
 - Menu bar quick settings expose the AI processing toggle plus, when enabled, the eligible model choice, live/final application toggles, style, salutation, and translation output without surfacing unavailable local models or remote models whose provider is disabled or missing credentials.
+- When compact mode is disabled, the menu bar exposes direct pickers for LLM, AI mode, style, salutation, voice model, and voice quality; compact mode hides only the extra AI detail controls and keeps the core dictation actions visible.
 - A compact menu bar design option keeps history, copy last dictation, separators, and update checks visible while moving AI application details into an `Apply for` flyout and an `AI settings…` shortcut to the preferences window.
 - Search results reuse the same preference cards as the normal tabs, but without nesting full pane containers inside the search mode; this keeps the global search view flatter and closer to native macOS preferences behavior.
 - The settings window keeps a fixed width so long history entries do not stretch the preferences layout horizontally.

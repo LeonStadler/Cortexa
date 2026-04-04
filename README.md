@@ -174,11 +174,18 @@ This verifies:
 - bundled `Runtime/whisper-cli` exists in the app bundle
 - bundled ggml model files exist
 - app process launches and stays alive for a short sanity window
+- app activation and the Settings shortcut exercise the live UI path when possible
 
 If you want the app to remain running after the smoke test:
 
 ```bash
 ./scripts/smoke_test_macos_app.sh --keep-running
+```
+
+If you want to skip the automatic UI exercise and only validate build/runtime startup:
+
+```bash
+./scripts/smoke_test_macos_app.sh --no-ui
 ```
 
 For CI or headless verification without launching the app process:

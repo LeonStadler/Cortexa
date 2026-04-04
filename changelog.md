@@ -2,6 +2,18 @@
 
 ## Fixes
 
+- 2026-04-04: Menüleisten-Picker und AI-Aufgabenlogik stringenter gemacht.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `Sources/AIProcessingCore/AIProcessingTypes.swift`, `Sources/AIProcessingCore/AppleFoundationTextProcessor.swift`, `apps/macos/README.md`, `VERSION`
+  - Funktionalitaet: Die nicht-kompakte Menüleistenansicht nutzt jetzt direkte Picker statt doppelter Untermenüs fuer LLM, Modus, Stil, Anrede, Sprachmodell und Qualitaet. Sprachmodell und Anbieter werden gemeinsam unter einem Picker mit Anbietergruppen angezeigt. In den Settings lassen sich AI-Aufgaben wie Bereinigen, Stil, Anrede und Format jetzt frei kombinieren; daraus leitet die App konsistent ab, welche Regler in der Menüleiste sichtbar sind. Nicht relevante oder durch andere Einstellungen ausgeschlossene AI-Optionen erscheinen dort nicht mehr.
+
+- 2026-04-04: Menüleisten-Ansicht wieder direkt bedienbar gemacht und AI-Einstellungen im Normalmodus entfernt.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `VERSION`
+  - Funktionalitaet: Die nicht-kompakte Menüleistenansicht zeigt die AI-Optionen wieder als auswählbare Menüs fuer Modell, Stil, Anrede, Sprachmodell und Qualitaet, damit sie wie Sprache und Übersetzung direkt angepasst werden können. Der separate Sprung zu `AI-Einstellungen...` erscheint nur noch im kompakten Modus. Die zuvor getestete Sprachfilterung in den allgemeinen Einstellungen wurde wieder entfernt.
+
+- 2026-04-04: macOS-Smoke-Test um UI-Aktivierung und Settings-Shortcut erweitert.
+  - Dateien: `scripts/smoke_test_macos_app.sh`, `README.md`, `docs/macos-release-checklist.md`
+  - Funktionalitaet: Der Smoke-Test startet die App weiterhin aus dem gebauten Bundle, aktiviert sie jetzt aber zusätzlich best-effort per AppleScript und versucht den Settings-Shortcut auszulösen. Damit deckt der Lauf neben Bundle-Prüfung und Prozessstabilität auch einen realen UI-Anker ab; mit `--no-ui` bleibt nur die reine Build-/Runtime-Validierung aktiv.
+
 - 2026-04-04: macOS-Settings für AI kompakter und verständlicher strukturiert.
   - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`
   - Funktionalitaet: Die AI-Settings zeigen in der kompakten Ansicht nur noch die Basis-Schalter, während Modell, Ziel, Modus, Stil und Anrede in der erweiterten Ansicht bleiben. Zusätzlich bleibt das Settings-Fenster beim Umschalten von `Im Dock anzeigen` offen.

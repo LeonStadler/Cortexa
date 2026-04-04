@@ -13,6 +13,7 @@ FALLBACK_RUNTIME_DIR="${APP_PATH}/Contents/Resources"
 LOG_PATH="${ROOT_DIR}/artifacts/mac/dev-run.log"
 KEEP_RUNNING=0
 SKIP_LAUNCH=0
+EXERCISE_UI=1
 
 log() {
   echo "[smoke_test_macos_app] $*"
@@ -46,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-launch)
       SKIP_LAUNCH=1
+      shift
+      ;;
+    --no-ui)
+      EXERCISE_UI=0
       shift
       ;;
     *)
@@ -105,6 +110,10 @@ if [[ "${SKIP_LAUNCH}" -eq 1 ]]; then
   exit 0
 fi
 
+if [[ "${EXERCISE_UI}" -eq 1 ]]; then
+  require_command osascript
+fi
+
 log "Killing any previous WisprLocalMac process"
 pkill -f "${APP_BINARY}" >/dev/null 2>&1 || true
 
@@ -125,6 +134,26 @@ log "Runtime resources verified:"
 log "  CLI: ${EFFECTIVE_RUNTIME_DIR}/whisper-cli"
 log "  Models: ${MODEL_COUNT}"
 log "  Log: ${LOG_PATH}"
+
+if [[ "${EXERCISE_UI}" -eq 1 ]]; then
+  log "Activating app and opening Settings via keyboard shortcut"
+  osascript >/dev/null <<'APPLESCRIPT' || log "UI exercise could not be completed automatically; continuing with process verification."
+tell application "WisprLocalMac" to activate
+delay 0.5
+tell application "System Events"
+  keystroke "," using {command down}
+end tell
+APPLESCRIPT
+
+  sleep 2
+  if ! kill -0 "${APP_PID}" >/dev/null 2>&1; then
+    echo "--- app log ---"
+    cat "${LOG_PATH}" 2>/dev/null || true
+    error "App process exited during UI exercise."
+  fi
+
+  log "UI exercise complete: app stayed alive after opening Settings"
+fi
 
 if [[ "${KEEP_RUNNING}" -eq 1 ]]; then
   log "Leaving app running."

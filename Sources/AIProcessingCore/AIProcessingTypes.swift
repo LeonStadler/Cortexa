@@ -308,6 +308,10 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
     public let formattingMode: AIFormattingMode
     public let style: AIWritingStyle
     public let salutation: AISalutation
+    public let cleanupEnabled: Bool
+    public let toneAdjustmentEnabled: Bool
+    public let salutationAdjustmentEnabled: Bool
+    public let formatAdaptationEnabled: Bool
 
     public init(
         enabled: Bool,
@@ -317,7 +321,11 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
         revisionGoal: AIRevisionGoal = .cleanup,
         formattingMode: AIFormattingMode = .plainText,
         style: AIWritingStyle = .none,
-        salutation: AISalutation = .none
+        salutation: AISalutation = .none,
+        cleanupEnabled: Bool = true,
+        toneAdjustmentEnabled: Bool = false,
+        salutationAdjustmentEnabled: Bool = false,
+        formatAdaptationEnabled: Bool = false
     ) {
         self.enabled = enabled
         self.selectedModelID = selectedModelID
@@ -327,6 +335,10 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
         self.formattingMode = formattingMode
         self.style = style
         self.salutation = salutation
+        self.cleanupEnabled = cleanupEnabled
+        self.toneAdjustmentEnabled = toneAdjustmentEnabled
+        self.salutationAdjustmentEnabled = salutationAdjustmentEnabled
+        self.formatAdaptationEnabled = formatAdaptationEnabled
     }
 }
 

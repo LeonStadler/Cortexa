@@ -35,6 +35,7 @@ Erwartung:
 - App startet aus dem gebauten Bundle
 - kein dauerhaftes Dock-Icon
 - Menüleisten-Icon erscheint
+- die App wird einmal aktiviert und versucht, den Settings-Shortcut auszulösen
 
 ## 4. Berechtigungen
 
