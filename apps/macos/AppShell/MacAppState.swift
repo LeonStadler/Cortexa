@@ -269,6 +269,13 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var visibleMenuBarLanguages: [String] {
+        didSet {
+            userDefaults.set(visibleMenuBarLanguages, forKey: UserDefaultsKeys.visibleMenuBarLanguages)
+            sanitizeVisibleMenuBarLanguages()
+        }
+    }
+
     @Published var performanceProfile: DictationPerformance {
         didSet {
             userDefaults.set(performanceProfile.rawValue, forKey: UserDefaultsKeys.performanceProfile)
@@ -436,6 +443,34 @@ final class MacAppState: ObservableObject {
     @Published var aiProcessingApplyToFinalResult: Bool {
         didSet {
             userDefaults.set(aiProcessingApplyToFinalResult, forKey: UserDefaultsKeys.aiProcessingApplyToFinalResult)
+        }
+    }
+
+    @Published var aiTaskCleanupEnabled: Bool {
+        didSet {
+            userDefaults.set(aiTaskCleanupEnabled, forKey: UserDefaultsKeys.aiTaskCleanupEnabled)
+            sanitizeAIProcessingSelections()
+        }
+    }
+
+    @Published var aiTaskToneEnabled: Bool {
+        didSet {
+            userDefaults.set(aiTaskToneEnabled, forKey: UserDefaultsKeys.aiTaskToneEnabled)
+            sanitizeAIProcessingSelections()
+        }
+    }
+
+    @Published var aiTaskSalutationEnabled: Bool {
+        didSet {
+            userDefaults.set(aiTaskSalutationEnabled, forKey: UserDefaultsKeys.aiTaskSalutationEnabled)
+            sanitizeAIProcessingSelections()
+        }
+    }
+
+    @Published var aiTaskFormatEnabled: Bool {
+        didSet {
+            userDefaults.set(aiTaskFormatEnabled, forKey: UserDefaultsKeys.aiTaskFormatEnabled)
+            sanitizeAIProcessingSelections()
         }
     }
 
@@ -825,23 +860,29 @@ final class MacAppState: ObservableObject {
         aiFormattingMode.supportsSalutation
     }
 
+    var aiShowsModeControls: Bool {
+        aiTaskToneEnabled || aiTaskSalutationEnabled || aiTaskFormatEnabled
+    }
+
     var aiShowsWritingStyleControls: Bool {
-        switch aiRevisionGoal {
-        case .cleanup, .adjustSalutation:
-            return false
-        case .adjustTone, .adaptFormat:
-            return true
-        }
+        aiTaskToneEnabled
     }
 
     var aiShowsSalutationControls: Bool {
-        guard aiFormattingModeSupportsSalutation else { return false }
-        switch aiRevisionGoal {
-        case .cleanup, .adjustTone:
-            return false
-        case .adjustSalutation, .adaptFormat:
-            return true
+        aiTaskSalutationEnabled && aiFormattingModeSupportsSalutation
+    }
+
+    var aiDerivedRevisionGoal: AIRevisionGoal {
+        if aiTaskFormatEnabled {
+            return .adaptFormat
         }
+        if aiTaskToneEnabled {
+            return .adjustTone
+        }
+        if aiTaskSalutationEnabled {
+            return .adjustSalutation
+        }
+        return .cleanup
     }
 
     var aiProcessingConfiguration: AIProcessingConfiguration {
@@ -850,10 +891,14 @@ final class MacAppState: ObservableObject {
             selectedModelID: selectedAIModelID,
             applyDuringLiveInsertion: aiProcessingApplyDuringLiveInsertion,
             applyToFinalResult: aiProcessingApplyToFinalResult,
-            revisionGoal: aiRevisionGoal,
+            revisionGoal: aiDerivedRevisionGoal,
             formattingMode: aiFormattingMode,
-            style: availableAIWritingStyles.contains(aiWritingStyle) ? aiWritingStyle : .none,
-            salutation: aiFormattingModeSupportsSalutation ? aiSalutation : .none
+            style: aiTaskToneEnabled && availableAIWritingStyles.contains(aiWritingStyle) ? aiWritingStyle : .none,
+            salutation: aiTaskSalutationEnabled && aiFormattingModeSupportsSalutation ? aiSalutation : .none,
+            cleanupEnabled: aiTaskCleanupEnabled,
+            toneAdjustmentEnabled: aiTaskToneEnabled,
+            salutationAdjustmentEnabled: aiTaskSalutationEnabled,
+            formatAdaptationEnabled: aiTaskFormatEnabled
         )
     }
 
@@ -877,6 +922,7 @@ final class MacAppState: ObservableObject {
         static let streamingEnabled = "wispr.settings.streamingEnabled"
         static let selectedLanguage = "wispr.settings.selectedLanguage"
         static let translationOutputMode = "wispr.settings.translationOutputMode"
+        static let visibleMenuBarLanguages = "wispr.settings.visibleMenuBarLanguages"
         static let performanceProfile = "wispr.settings.performanceProfile"
         static let selectedVoiceProviderID = "wispr.settings.selectedVoiceProviderID"
         static let selectedVoiceModelID = "wispr.settings.selectedVoiceModelID"
@@ -902,6 +948,10 @@ final class MacAppState: ObservableObject {
         static let selectedAIModelID = "wispr.settings.selectedAIModelID"
         static let aiProcessingApplyDuringLiveInsertion = "wispr.settings.aiProcessing.applyDuringLiveInsertion"
         static let aiProcessingApplyToFinalResult = "wispr.settings.aiProcessing.applyToFinalResult"
+        static let aiTaskCleanupEnabled = "wispr.settings.aiProcessing.task.cleanup"
+        static let aiTaskToneEnabled = "wispr.settings.aiProcessing.task.tone"
+        static let aiTaskSalutationEnabled = "wispr.settings.aiProcessing.task.salutation"
+        static let aiTaskFormatEnabled = "wispr.settings.aiProcessing.task.format"
         static let legacyAIProcessingScope = "wispr.settings.aiProcessingScope"
         static let aiRevisionGoal = "wispr.settings.aiProcessing.revisionGoal"
         static let aiFormattingMode = "wispr.settings.aiProcessing.formattingMode"
@@ -971,6 +1021,13 @@ final class MacAppState: ObservableObject {
             self.translationOutputMode = parsedTranslationOutputMode
         } else {
             self.translationOutputMode = .original
+        }
+        if let storedVisibleMenuBarLanguages = userDefaults.stringArray(forKey: UserDefaultsKeys.visibleMenuBarLanguages) {
+            self.visibleMenuBarLanguages = storedVisibleMenuBarLanguages
+        } else {
+            self.visibleMenuBarLanguages = DictationLanguage.allCases
+                .filter { $0 != .auto }
+                .map(\.rawValue)
         }
 
         if let rawPerformance = userDefaults.string(forKey: UserDefaultsKeys.performanceProfile),
@@ -1066,6 +1123,33 @@ final class MacAppState: ObservableObject {
             self.aiProcessingApplyToFinalResult = true
         }
 
+        let storedAIRevisionGoal = userDefaults.string(forKey: UserDefaultsKeys.aiRevisionGoal)
+            .flatMap(AIRevisionGoal.init(rawValue:))
+
+        if userDefaults.object(forKey: UserDefaultsKeys.aiTaskCleanupEnabled) != nil {
+            self.aiTaskCleanupEnabled = userDefaults.bool(forKey: UserDefaultsKeys.aiTaskCleanupEnabled)
+        } else {
+            self.aiTaskCleanupEnabled = storedAIRevisionGoal == nil || storedAIRevisionGoal == .cleanup
+        }
+
+        if userDefaults.object(forKey: UserDefaultsKeys.aiTaskToneEnabled) != nil {
+            self.aiTaskToneEnabled = userDefaults.bool(forKey: UserDefaultsKeys.aiTaskToneEnabled)
+        } else {
+            self.aiTaskToneEnabled = storedAIRevisionGoal == .adjustTone
+        }
+
+        if userDefaults.object(forKey: UserDefaultsKeys.aiTaskSalutationEnabled) != nil {
+            self.aiTaskSalutationEnabled = userDefaults.bool(forKey: UserDefaultsKeys.aiTaskSalutationEnabled)
+        } else {
+            self.aiTaskSalutationEnabled = storedAIRevisionGoal == .adjustSalutation
+        }
+
+        if userDefaults.object(forKey: UserDefaultsKeys.aiTaskFormatEnabled) != nil {
+            self.aiTaskFormatEnabled = userDefaults.bool(forKey: UserDefaultsKeys.aiTaskFormatEnabled)
+        } else {
+            self.aiTaskFormatEnabled = storedAIRevisionGoal == .adaptFormat
+        }
+
         if let rawAIRevisionGoal = userDefaults.string(forKey: UserDefaultsKeys.aiRevisionGoal),
            let parsedAIRevisionGoal = AIRevisionGoal(rawValue: rawAIRevisionGoal) {
             self.aiRevisionGoal = parsedAIRevisionGoal
@@ -1143,6 +1227,7 @@ final class MacAppState: ObservableObject {
         refreshVoiceModelCatalog()
         sanitizeAIProcessingSelections()
         sanitizeSpeechModelSelections()
+        sanitizeVisibleMenuBarLanguages()
 
         dictationRuntime.onStatus = { [weak self] status in
             self?.recordingStatus = status
@@ -1244,6 +1329,16 @@ final class MacAppState: ObservableObject {
     func openAISettingsWindow() {
         selectedSettingsTab = .ai
         openSettingsWindow()
+    }
+
+    func toggleVisibleMenuBarLanguage(_ language: DictationLanguage) {
+        guard language != .auto else { return }
+        if visibleMenuBarLanguages.contains(language.rawValue) {
+            visibleMenuBarLanguages.removeAll { $0 == language.rawValue }
+        } else {
+            visibleMenuBarLanguages.append(language.rawValue)
+        }
+        sanitizeVisibleMenuBarLanguages()
     }
 
     func cancelTranscriptionFromUI() {
@@ -1611,6 +1706,10 @@ final class MacAppState: ObservableObject {
     }
 
     private func sanitizeAIProcessingSelections() {
+        if !aiTaskCleanupEnabled && !aiTaskToneEnabled && !aiTaskSalutationEnabled && !aiTaskFormatEnabled {
+            aiTaskCleanupEnabled = true
+        }
+
         if !aiFormattingMode.allowedWritingStyles.contains(aiWritingStyle) {
             aiWritingStyle = .none
         }
@@ -1618,6 +1717,8 @@ final class MacAppState: ObservableObject {
         if !aiFormattingMode.supportsSalutation && aiSalutation != .none {
             aiSalutation = .none
         }
+
+        aiRevisionGoal = aiDerivedRevisionGoal
     }
 
     private func sanitizeSpeechModelSelections() {
@@ -1665,6 +1766,18 @@ final class MacAppState: ObservableObject {
 
         if !speechTranslationAvailable, translationOutputMode != .original {
             translationOutputMode = .original
+        }
+    }
+
+    private func sanitizeVisibleMenuBarLanguages() {
+        let allowed = Set(DictationLanguage.allCases.filter { $0 != .auto }.map(\.rawValue))
+        var filtered = visibleMenuBarLanguages.filter { allowed.contains($0) }
+        if filtered.isEmpty {
+            filtered = DictationLanguage.allCases.filter { $0 != .auto }.map(\.rawValue)
+        }
+        if filtered != visibleMenuBarLanguages {
+            visibleMenuBarLanguages = filtered
+            userDefaults.set(filtered, forKey: UserDefaultsKeys.visibleMenuBarLanguages)
         }
     }
 

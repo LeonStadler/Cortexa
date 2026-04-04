@@ -1,4 +1,5 @@
 import AppKit
+import ASRCore
 import AIProcessingCore
 import SwiftUI
 
@@ -118,6 +119,33 @@ struct MenuBarContentView: View {
 
     private var hasQuickSettingsAIModels: Bool {
         !appState.availableQuickSettingsAIModels.isEmpty
+    }
+
+    private var visibleMenuBarLanguages: [DictationLanguage] {
+        DictationLanguage.allCases.filter { $0 != .auto }
+    }
+
+    private var selectedAIModelBinding: Binding<String> {
+        Binding(
+            get: { appState.selectedAIModelID ?? "" },
+            set: { appState.selectedAIModelID = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private var selectedVoiceModelBinding: Binding<String> {
+        Binding(
+            get: { appState.selectedVoiceModelID },
+            set: { newValue in
+                guard let descriptor = appState.voiceModels.first(where: { $0.id == newValue }) else { return }
+                appState.setSelectedVoiceModel(descriptor)
+            }
+        )
+    }
+
+    private var menuBarVoiceProviders: [VoiceProviderDescriptor] {
+        appState.voiceProviders.filter { provider in
+            appState.voiceModels.contains(where: { $0.providerID == provider.id })
+        }
     }
 
     private var menuBarPopupWidth: CGFloat {
@@ -294,7 +322,7 @@ struct MenuBarContentView: View {
                 .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
 
             Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
-                ForEach(DictationLanguage.allCases) { language in
+                ForEach(visibleMenuBarLanguages) { language in
                     Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
                 }
             }
@@ -305,35 +333,96 @@ struct MenuBarContentView: View {
                 }
             }
 
+            if !appState.compactMenuBarDesign {
+                Picker(text("Sprachmodell", "Voice model"), selection: selectedVoiceModelBinding) {
+                    ForEach(menuBarVoiceProviders) { provider in
+                        let models = appState.voiceModels.filter { $0.providerID == provider.id }
+                        if !models.isEmpty {
+                            Section(provider.displayName) {
+                                ForEach(models) { model in
+                                    Text(model.displayName).tag(model.id)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Picker(text("Qualität", "Quality"), selection: $appState.performanceProfile) {
+                    ForEach(DictationPerformance.allCases) { profile in
+                        Text(profile.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(profile)
+                    }
+                }
+            }
+
             Divider()
 
             VStack(alignment: .leading, spacing: appState.compactMenuBarDesign ? 4 : 6) {
                 Toggle(text("AI-Verarbeitung", "AI processing"), isOn: $appState.aiProcessingEnabled)
                     .disabled(!hasQuickSettingsAIModels)
 
-                Menu {
-                    Toggle(text("Inhaltsstreaming", "Content streaming"), isOn: $appState.aiProcessingApplyDuringLiveInsertion)
-                        .disabled(!appState.aiProcessingEnabled || !appState.streamingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
+                if appState.compactMenuBarDesign {
+                    Menu {
+                        Toggle(text("Inhaltsstreaming", "Content streaming"), isOn: $appState.aiProcessingApplyDuringLiveInsertion)
+                            .disabled(!appState.aiProcessingEnabled || !appState.streamingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
 
-                    Toggle(text("Endergebnis einfügen", "Insert final result"), isOn: $appState.aiProcessingApplyToFinalResult)
-                        .disabled(!appState.aiProcessingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
-                } label: {
-                    MenuActionLabel(
-                        title: text("Einsatz", "Use"),
-                        shortcutGlyph: nil,
-                        shortcutText: nil
-                    )
-                }
-                .disabled(appState.availableQuickSettingsAIModels.isEmpty)
+                        Toggle(text("Endergebnis einfügen", "Insert final result"), isOn: $appState.aiProcessingApplyToFinalResult)
+                            .disabled(!appState.aiProcessingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
+                    } label: {
+                        MenuActionLabel(
+                            title: text("Einsatz", "Use"),
+                            shortcutGlyph: nil,
+                            shortcutText: nil
+                        )
+                    }
+                    .disabled(appState.availableQuickSettingsAIModels.isEmpty)
 
-                Button {
-                    appState.openAISettingsWindow()
-                } label: {
-                    MenuActionLabel(
-                        title: text("AI-Einstellungen…", "AI settings…"),
-                        shortcutGlyph: nil,
-                        shortcutText: nil
-                    )
+                    Button {
+                        appState.openAISettingsWindow()
+                    } label: {
+                        MenuActionLabel(
+                            title: text("AI-Einstellungen…", "AI settings…"),
+                            shortcutGlyph: nil,
+                            shortcutText: nil
+                        )
+                    }
+                } else {
+                    Picker(text("LLM", "LLM"), selection: selectedAIModelBinding) {
+                        if appState.visibleAIModels.isEmpty {
+                            Text(text("Keine Modelle erkannt", "No models detected")).tag("")
+                        } else {
+                            ForEach(appState.visibleAIModels) { model in
+                                Text(model.displayName).tag(model.id)
+                            }
+                        }
+                    }
+                    .disabled(appState.visibleAIModels.isEmpty)
+
+                    if appState.aiShowsModeControls {
+                        Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
+                            ForEach(AIFormattingMode.allCases) { mode in
+                                Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
+                            }
+                        }
+                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                    }
+
+                    if appState.aiShowsWritingStyleControls {
+                        Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
+                            ForEach(appState.availableAIWritingStyles) { style in
+                                Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
+                            }
+                        }
+                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                    }
+
+                    if appState.aiShowsSalutationControls {
+                        Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                            ForEach(AISalutation.allCases) { salutation in
+                                Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
+                            }
+                        }
+                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                    }
                 }
             }
 
