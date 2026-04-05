@@ -1,5 +1,7 @@
 # WisprLocal System Design
 
+Ausführliche Zuordnung von Produktfunktionen zu Modulen: [features-and-implementation.md](features-and-implementation.md). Dokumentationsindex: [README.md](README.md).
+
 ## Scope
 
 WisprLocal is an offline-first dictation/transcription product for Apple platforms.
@@ -11,6 +13,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 ## High-level Components
 
 1. `ASRCore`
+
 - Whisper engine protocol
 - runtime backend strategy
 - model registry/checksum verification
@@ -18,41 +21,49 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - local speech-model catalog with explicit provider/model descriptors, install state, and per-language selection
 
 2. `AudioCore`
+
 - AVAudioEngine capture
 - 16k mono normalized chunk output
 - interruption and route change signals
 - optional app-level preprocessing for input level compensation, silence removal, dynamic normalization, and adjustable noise suppression
 
 3. `SessionCore`
+
 - transcription state machine
 - streaming commit stabilizer
 - deterministic insert invariant enforcement
 
 4. `TextTargetMac`
+
 - focused AX target snapshot
 - immutable target binding for session
 - AX value patching and optional paste fallback
 
 5. `SnippetCore`
+
 - phrase/word replacement rules
 - longest-match wins
 - final transcript replacement + streaming replacement ops
 
 6. `CapabilityCore`
+
 - device profile collection
 - adaptive presets (streaming/quality/fallback)
 
 7. `AIProcessingCore`
+
 - provider-agnostic text post-processing abstractions
 - Apple on-device Foundation Models integration for supported Macs
 - model catalog and quick-settings eligibility filtering
 - final-only or live-tail-plus-final processing modes
 
 8. `LicenseCore`
+
 - offline key format + verification
 - keychain storage for raw keys without plaintext disk fallback
 
 9. `AppShell`
+
 - macOS menu bar app + settings
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
@@ -63,8 +74,8 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
 - optional debug log for high-detail runtime/process tracing, including `whisper-cli` launch, exit, and timeout events
 - persistent user settings (mode/language/performance/translation/AI processing) via `UserDefaults`
- - iOS shell now includes a host app backed by app-group storage and a keyboard extension
-   that can insert the latest shared transcript and shared snippet replacements
+- iOS shell now includes a host app backed by app-group storage and a keyboard extension
+  that can insert the latest shared transcript and shared snippet replacements
 
 ## Data Flows
 
@@ -124,7 +135,6 @@ Core invariants:
 - The live rewrite scope determines how much recent text may still be reshaped before it is considered committed.
 - Auto language detection controls recognition only and never implies translation.
 - Translation is explicit and currently limited to Whisper's English translation path.
-- Auto language detection controls recognition only and never implies translation.
 - Speech-model selection is explicit and independent from the runtime quality preset.
 - Quality presets tune chunking/beam/thread behavior but no longer silently switch between bundled Whisper models.
 - Language-specific model variants may only be used when the input language matches or when the session runs in `Auto`.

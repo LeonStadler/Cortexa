@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var newSnippetTrigger: String = ""
     @State private var newSnippetReplacement: String = ""
     @State private var searchText: String = ""
+    @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
 
     private let personalWebsiteURL = URL(string: "https://leon-stadler.com")!
 
@@ -177,10 +178,6 @@ struct SettingsView: View {
         ])
     }
 
-    private var showsExpandedAIControls: Bool {
-        !appState.compactMenuBarDesign
-    }
-
     private var historyHasMatches: Bool {
         matches([
             "history", "verlauf", "transkript", "dictation", "diktat", "retention", "aufbewahrung",
@@ -190,8 +187,9 @@ struct SettingsView: View {
 
     private var aboutHasMatches: Bool {
         matches([
-            "about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource",
-            "open source", "intermedia", "design", "fotografie", "vorarlberg", "changelog",
+            "about", "über", "ueber", "leon", "stadler", "website", "webseite", "proprietär",
+            "proprietary", "lizenz", "intermedia", "design", "fotografie", "vorarlberg",
+            "changelog",
             "neuigkeiten", "release", "release notes", "änderungen", "aenderungen",
         ])
     }
@@ -225,53 +223,70 @@ struct SettingsView: View {
         return preview.isEmpty ? appState.diagnosticsText : preview
     }
 
+    /// Feste Suchzeile über der Liste (wie Systemeinstellungen): kein Überlagern durch scrollende Zeilen, kein Glass hinter der Suche.
+    private var settingsSidebarSearchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+
+            TextField(
+                "",
+                text: $searchText,
+                prompt: Text(text("Einstellungen durchsuchen", "Search settings"))
+            )
+            .textFieldStyle(.plain)
+            .font(.body)
+            .accessibilityLabel(text("Einstellungen durchsuchen", "Search settings"))
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(text("Suche löschen", "Clear search"))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .settingsSidebarSearchFieldChrome()
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
+        NavigationSplitView(columnVisibility: $splitColumnVisibility) {
+            VStack(alignment: .leading, spacing: 0) {
+                settingsSidebarSearchBar
                 List(selection: selectedTabSelection) {
                     Section {
                         ForEach(SettingsTab.allCases, id: \.self) { tab in
                             Label(tab.title(language: appLanguage), systemImage: tab.symbolName)
                                 .tag(tab)
-                                .font(.system(size: 14, weight: .medium))
                         }
                     }
                 }
                 .listStyle(.sidebar)
-                .environment(\.defaultMinListRowHeight, 32)
-                .scrollContentBackground(.hidden)
-                .safeAreaPadding(.top, 8)
-                .padding(.horizontal, 6)
+                .environment(\.defaultMinListRowHeight, 36)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(width: 260)
-            .background(.regularMaterial)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 14) {
-                Text(
-                    isSearching
-                        ? text("Suchergebnisse", "Search Results")
-                        : currentSelectedTab.title(language: appLanguage)
-                )
-                .font(.title2.weight(.semibold))
-                .frame(maxWidth: 780, alignment: .leading)
-
-                NativeSearchField(
-                    placeholder: text("Einstellungen durchsuchen", "Search settings"),
-                    text: $searchText
-                )
-                .frame(width: 360)
-                .frame(maxWidth: 780, alignment: .leading)
-
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.62))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .navigationSplitViewColumnWidth(
+                min: MacNativeDesign.SettingsSplitView.sidebarMinWidth,
+                ideal: MacNativeDesign.SettingsSplitView.sidebarIdealWidth,
+                max: MacNativeDesign.SettingsSplitView.sidebarMaxWidth
+            )
+        } detail: {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Color.clear.frame(height: 76)
                     Group {
                         if isSearching {
                             searchResultsForm
@@ -279,17 +294,52 @@ struct SettingsView: View {
                             selectedForm
                         }
                     }
-                    .padding(8)
+                    .frame(maxWidth: 760, alignment: .leading)
                 }
-                .frame(maxWidth: 780, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.horizontal, 28)
+                .padding(.bottom, 28)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(
+                        isSearching
+                            ? text("Suchergebnisse", "Search Results")
+                            : currentSelectedTab.title(language: appLanguage)
+                    )
+                    .font(.largeTitle.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 22)
+                    .padding(.bottom, 12)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .settingsDetailTitleBarChrome()
+                .allowsHitTesting(false)
+            }
+            .navigationSplitViewColumnWidth(
+                min: MacNativeDesign.SettingsSplitView.detailMinWidth,
+                ideal: 720
+            )
+        }
+        .onChange(of: splitColumnVisibility) { _, new in
+            if new == .detailOnly {
+                splitColumnVisibility = .all
+            }
         }
         .environment(\.locale, appLanguage.locale)
-        .frame(width: 1000, height: 650)
+        .frame(
+            minWidth: MacNativeDesign.SettingsSplitView.windowMinWidth,
+            idealWidth: 1020,
+            minHeight: 600,
+            idealHeight: 650
+        )
         .controlSize(.regular)
-        .background(.ultraThinMaterial)
+        .background(.windowBackground)
+        .onAppear {
+            appState.refreshPermissionStates()
+        }
     }
 
     private var generalForm: some View {
@@ -423,13 +473,11 @@ struct SettingsView: View {
             Section(text("Verarbeitung", "Processing")) {
                 aiProcessingContent
             }
-            if showsExpandedAIControls {
-                Section(text("Anbieter", "Providers")) {
-                    aiProviderContent
-                }
-                Section(text("Modelle", "Models")) {
-                    aiModelContent
-                }
+            Section(text("Anbieter", "Providers")) {
+                aiProviderContent
+            }
+            Section(text("Modelle", "Models")) {
+                aiModelContent
             }
         }
         .formStyle(.grouped)
@@ -618,7 +666,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 170)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 170)
             } label: {
                 SettingsFieldLabel(title: text("App-Sprache", "App language"))
             }
@@ -698,7 +747,7 @@ struct SettingsView: View {
                     Button(text("Ordner im Finder öffnen", "Open folder in Finder")) {
                         appState.revealAppDataFolder()
                     }
-                    .buttonStyle(.bordered)
+                    .wisprSecondaryButtonStyle()
                 }
             } label: {
                 SettingsFieldLabel(
@@ -731,7 +780,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 220)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 220)
             } label: {
                 SettingsFieldLabel(
                     title: text("Sprachmodell im Speicher halten", "Keep voice model in memory"),
@@ -752,7 +802,7 @@ struct SettingsView: View {
                     Button(text("Nach Updates suchen", "Check for updates")) {
                         appState.checkForUpdates()
                     }
-                    .buttonStyle(.bordered)
+                    .wisprSecondaryButtonStyle()
                     .disabled(!appState.updaterConfigured)
 
                     if !appState.updaterStatusText.isEmpty {
@@ -776,8 +826,8 @@ struct SettingsView: View {
     @ViewBuilder
     private var aboutProfileContent: some View {
         if matches([
-            "about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource",
-            "open source", "intermedia", "design", "fotografie", "vorarlberg",
+            "about", "über", "ueber", "leon", "stadler", "website", "webseite", "proprietär",
+            "proprietary", "lizenz", "intermedia", "design", "fotografie", "vorarlberg",
         ]) {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .center, spacing: 14) {
@@ -841,7 +891,7 @@ struct SettingsView: View {
                 Link(destination: personalWebsiteURL) {
                     Label(text("Mehr über mich", "Learn more about me"), systemImage: "globe")
                 }
-                .buttonStyle(.bordered)
+                .wisprSecondaryButtonStyle()
             }
             .padding(.vertical, 4)
         }
@@ -862,8 +912,8 @@ struct SettingsView: View {
         if matches(["support", "spenden", "donate", "website", "webseite"]) {
             Text(
                 text(
-                    "Die App bleibt offen und frei nutzbar. Wenn du das Projekt unterstützen möchtest, findest du über die Website künftig weitere Möglichkeiten dafür.",
-                    "The app stays open and free to use. If you want to support the project, the website will later be the place for additional support options."
+                    "WisprLocal ist proprietäre Software und wird nicht als Open Source veröffentlicht. Support, Lizenzierung und Hintergrund zum Projekt findest du auf der Website.",
+                    "WisprLocal is proprietary software and is not distributed as open source. Visit the website for support, licensing, and project information."
                 )
             )
             .font(.footnote)
@@ -873,7 +923,7 @@ struct SettingsView: View {
             Link(destination: personalWebsiteURL) {
                 Label(text("Projekt unterstützen", "Support the project"), systemImage: "heart")
             }
-            .buttonStyle(.borderedProminent)
+            .wisprPrimaryButtonStyle()
         }
     }
 
@@ -935,16 +985,18 @@ struct SettingsView: View {
             }
 
             LabeledContent {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .trailing, spacing: 6) {
                     Slider(value: $appState.noiseSuppressionLevel, in: 0...1, step: 0.05)
+                        .frame(maxWidth: 300)
                     Text(
                         text("Filterstärke", "Filter strength")
                             + ": \(Int((appState.noiseSuppressionLevel * 100).rounded()))%"
                     )
                     .font(.footnote.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: 300, alignment: .trailing)
                 }
-                .frame(minWidth: 240)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             } label: {
                 SettingsFieldLabel(
                     title: text("Störgeräusche filtern", "Filter background noise"),
@@ -982,13 +1034,18 @@ struct SettingsView: View {
             }
 
             LabeledContent {
-                VStack(alignment: .leading, spacing: 6) {
-                    Slider(value: $appState.soundEffectsVolume, in: 0...100, step: 1)
-                    Text("\(Int(appState.soundEffectsVolume.rounded()))%")
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 6) {
+                    Slider(value: $appState.soundEffectsVolume, in: 0...100, step: 5)
+                        .frame(maxWidth: 300)
+                    Text(
+                        text("Lautstärke", "Volume")
+                            + ": \(Int(appState.soundEffectsVolume.rounded()))%"
+                    )
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 300, alignment: .trailing)
                 }
-                .frame(minWidth: 240)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             } label: {
                 SettingsFieldLabel(
                     title: text("Lautstärke", "Volume"),
@@ -1015,7 +1072,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 240)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 240)
             } label: {
                 SettingsFieldLabel(
                     title: text("Voice-Anbieter", "Voice provider"),
@@ -1064,7 +1122,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 240)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 240)
             } label: {
                 SettingsFieldLabel(
                     title: text("Voice-Modell", "Voice model"),
@@ -1092,7 +1151,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 180)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 180)
             } label: {
                 SettingsFieldLabel(
                     title: text("Eingabesprache", "Input language"),
@@ -1139,7 +1199,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 180)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 180)
             } label: {
                 SettingsFieldLabel(
                     title: text("Qualitätsprofil", "Quality profile"),
@@ -1185,7 +1246,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 170)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 170)
                 .disabled(!appState.speechTranslationAvailable)
             } label: {
                 SettingsFieldLabel(
@@ -1235,25 +1297,31 @@ struct SettingsView: View {
                             Button(text("Als Standard verwenden", "Use as default")) {
                                 appState.setSelectedVoiceModel(model)
                             }
+                            .wisprSecondaryButtonStyle()
                             .disabled(
                                 appState.selectedVoiceModelID == model.id
                                     || appState.isVoiceModelBusy(model))
 
                             if model.installState != .bundled {
-                                Button(text("Entfernen", "Remove")) {
+                                Button(role: .destructive) {
                                     appState.removeVoiceModel(model)
+                                } label: {
+                                    Text(text("Entfernen", "Remove"))
                                 }
+                                .wisprDestructiveButtonStyle()
                                 .disabled(appState.isVoiceModelBusy(model))
                             }
                         } else {
                             Button(text("Installieren", "Install")) {
                                 appState.installVoiceModel(model)
                             }
+                            .wisprPrimaryButtonStyle()
                             .disabled(
                                 model.installState == .unavailable
                                     || appState.isVoiceModelBusy(model))
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
                     EmptyView()
                 }
@@ -1291,7 +1359,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 260)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 260)
             } label: {
                 SettingsFieldLabel(
                     title: text("Anpassungsradius", "Adjustment radius"),
@@ -1322,7 +1391,8 @@ struct SettingsView: View {
                         FinalResultDeliveryMode.clipboardOnly)
                 }
                 .labelsHidden()
-                .frame(minWidth: 220)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 220)
             } label: {
                 SettingsFieldLabel(
                     title: text("Finales Ergebnis", "Final result"),
@@ -1413,7 +1483,7 @@ struct SettingsView: View {
 
             if appState.aiProcessingEnabled {
                 LabeledContent {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .trailing, spacing: 8) {
                         Toggle(
                             text("Inhaltsstreaming", "Content streaming"),
                             isOn: $appState.aiProcessingApplyDuringLiveInsertion
@@ -1425,7 +1495,7 @@ struct SettingsView: View {
                             isOn: $appState.aiProcessingApplyToFinalResult
                         )
                     }
-                    .frame(minWidth: 220, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 } label: {
                     SettingsFieldLabel(
                         title: text("AI anwenden bei", "Apply AI for"),
@@ -1437,130 +1507,113 @@ struct SettingsView: View {
                 }
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
-                if showsExpandedAIControls {
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Toggle(
+                            text("Bereinigen", "Clean up"),
+                            isOn: $appState.aiTaskCleanupEnabled
+                        )
+                        Toggle(
+                            text("Stil / Ton", "Style / Tone"),
+                            isOn: $appState.aiTaskToneEnabled
+                        )
+                        Toggle(
+                            text("Anrede", "Salutation"),
+                            isOn: $appState.aiTaskSalutationEnabled
+                        )
+                        Toggle(
+                            text("Format / Modus", "Format / Mode"),
+                            isOn: $appState.aiTaskFormatEnabled
+                        )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("AI-Aufgaben", "AI tasks"),
+                        helpText: text(
+                            "Hier kannst du Bereinigung, Stil, Anrede und Format frei kombinieren. Die Menüleiste zeigt nur die Regler an, die aus diesen Aufgaben aktuell wirklich relevant sind.",
+                            "Here you can freely combine cleanup, style, salutation, and formatting. The menu bar only shows controls that are currently relevant for these enabled tasks."
+                        )
+                    )
+                }
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+                if appState.aiShowsModeControls {
                     LabeledContent {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Toggle(
-                                text("Bereinigen", "Clean up"),
-                                isOn: $appState.aiTaskCleanupEnabled
-                            )
-                            Toggle(
-                                text("Stil / Ton", "Style / Tone"),
-                                isOn: $appState.aiTaskToneEnabled
-                            )
-                            Toggle(
-                                text("Anrede", "Salutation"),
-                                isOn: $appState.aiTaskSalutationEnabled
-                            )
-                            Toggle(
-                                text("Format / Modus", "Format / Mode"),
-                                isOn: $appState.aiTaskFormatEnabled
-                            )
+                        Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
+                            ForEach(AIFormattingMode.allCases) { mode in
+                                Text(
+                                    mode.localizedDisplayName(
+                                        interfaceLanguageCode: appLanguage.rawValue)
+                                ).tag(mode)
+                            }
                         }
-                        .frame(minWidth: 220, alignment: .leading)
+                        .labelsHidden()
+                        .wisprSettingsPickerStyle()
+                        .settingsFormMenuPickerSlot(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
-                            title: text("AI-Aufgaben", "AI tasks"),
+                            title: text("Modus", "Mode"),
                             helpText: text(
-                                "Hier kannst du Bereinigung, Stil, Anrede und Format frei kombinieren. Die Menüleiste zeigt nur die Regler an, die aus diesen Aufgaben aktuell wirklich relevant sind.",
-                                "Here you can freely combine cleanup, style, salutation, and formatting. The menu bar only shows controls that are currently relevant for these enabled tasks."
+                                "Legt fest, für welche Art von Text die AI optimieren soll, zum Beispiel E-Mail, Nachricht, Dokumentation oder wissenschaftliche Arbeit.",
+                                "Defines which kind of text the AI should optimize for, such as email, message, documentation, or scientific writing."
                             )
                         )
                     }
                     .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-
-                    if appState.aiShowsModeControls {
-                        LabeledContent {
-                            Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
-                                ForEach(AIFormattingMode.allCases) { mode in
-                                    Text(
-                                        mode.localizedDisplayName(
-                                            interfaceLanguageCode: appLanguage.rawValue)
-                                    ).tag(mode)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(minWidth: 220)
-                        } label: {
-                            SettingsFieldLabel(
-                                title: text("Modus", "Mode"),
-                                helpText: text(
-                                    "Legt fest, für welche Art von Text die AI optimieren soll, zum Beispiel E-Mail, Nachricht, Dokumentation oder wissenschaftliche Arbeit.",
-                                    "Defines which kind of text the AI should optimize for, such as email, message, documentation, or scientific writing."
-                                )
-                            )
-                        }
-                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-                    }
-
-                    if appState.aiShowsWritingStyleControls {
-                        LabeledContent {
-                            Picker(
-                                text("Stil / Ton", "Style / Tone"),
-                                selection: $appState.aiWritingStyle
-                            ) {
-                                ForEach(appState.availableAIWritingStyles) { style in
-                                    Text(
-                                        style.localizedDisplayName(
-                                            interfaceLanguageCode: appLanguage.rawValue)
-                                    ).tag(style)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(minWidth: 220)
-                        } label: {
-                            SettingsFieldLabel(
-                                title: text("Stil / Ton", "Style / Tone"),
-                                helpText: text(
-                                    "Zeigt nur Stile an, die zum gewählten Modus passen. Für Dokumentation oder wissenschaftliche Texte bleiben zum Beispiel nur sachliche Varianten übrig.",
-                                    "Shows only styles that fit the selected mode. For documentation or scientific text, only fitting formal variants remain available."
-                                )
-                            )
-                        }
-                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-                    }
-
-                    if appState.aiShowsSalutationControls {
-                        LabeledContent {
-                            Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation)
-                            {
-                                ForEach(AISalutation.allCases) { salutation in
-                                    Text(
-                                        salutation.localizedDisplayName(
-                                            interfaceLanguageCode: appLanguage.rawValue)
-                                    ).tag(salutation)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(minWidth: 220)
-                        } label: {
-                            SettingsFieldLabel(
-                                title: text("Anrede", "Salutation"),
-                                helpText: text(
-                                    "Die Anrede wird nur dort angeboten, wo sie sinnvoll ist, etwa bei E-Mails, Nachrichten oder WhatsApp.",
-                                    "Salutation is shown only where it makes sense, such as email, messages, or WhatsApp."
-                                )
-                            )
-                        }
-                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-                    }
                 }
 
-                if !showsExpandedAIControls {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("Kompakte Ansicht", "Compact view"))
-                            .font(.subheadline.weight(.semibold))
-
-                        Text(
-                            text(
-                                "Hier bleiben nur die wichtigsten Schalter sichtbar. Aufgaben, Modus, Modell, Stil und Anrede findest du in der erweiterten Ansicht.",
-                                "Only the most important switches stay visible here. Tasks, mode, model, style, and salutation live in the expanded view."
+                if appState.aiShowsWritingStyleControls {
+                    LabeledContent {
+                        Picker(
+                            text("Stil / Ton", "Style / Tone"),
+                            selection: $appState.aiWritingStyle
+                        ) {
+                            ForEach(appState.availableAIWritingStyles) { style in
+                                Text(
+                                    style.localizedDisplayName(
+                                        interfaceLanguageCode: appLanguage.rawValue)
+                                ).tag(style)
+                            }
+                        }
+                        .labelsHidden()
+                        .wisprSettingsPickerStyle()
+                        .settingsFormMenuPickerSlot(minWidth: 220)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Stil / Ton", "Style / Tone"),
+                            helpText: text(
+                                "Zeigt nur Stile an, die zum gewählten Modus passen. Für Dokumentation oder wissenschaftliche Texte bleiben zum Beispiel nur sachliche Varianten übrig.",
+                                "Shows only styles that fit the selected mode. For documentation or scientific text, only fitting formal variants remain available."
                             )
                         )
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 2)
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
+
+                if appState.aiShowsSalutationControls {
+                    LabeledContent {
+                        Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                            ForEach(AISalutation.allCases) { salutation in
+                                Text(
+                                    salutation.localizedDisplayName(
+                                        interfaceLanguageCode: appLanguage.rawValue)
+                                ).tag(salutation)
+                            }
+                        }
+                        .labelsHidden()
+                        .wisprSettingsPickerStyle()
+                        .settingsFormMenuPickerSlot(minWidth: 220)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Anrede", "Salutation"),
+                            helpText: text(
+                                "Die Anrede wird nur dort angeboten, wo sie sinnvoll ist, etwa bei E-Mails, Nachrichten oder WhatsApp.",
+                                "Salutation is shown only where it makes sense, such as email, messages, or WhatsApp."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
                 }
             }
         }
@@ -1638,7 +1691,7 @@ struct SettingsView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.bordered)
+                    .wisprSecondaryButtonStyle()
                 }
             }
         }
@@ -1694,7 +1747,8 @@ struct SettingsView: View {
                 }
             }
             .labelsHidden()
-            .frame(minWidth: 240)
+            .wisprSettingsPickerStyle()
+            .settingsFormMenuPickerSlot(minWidth: 240)
         }
     }
 
@@ -1794,7 +1848,7 @@ struct SettingsView: View {
                     Button(text("Speichern", "Save")) {
                         appState.saveSelectedRemoteProvider()
                     }
-                    .buttonStyle(.bordered)
+                    .wisprPrimaryButtonStyle()
 
                     Spacer()
 
@@ -1803,7 +1857,7 @@ struct SettingsView: View {
                     } label: {
                         Text(text("Anbieter entfernen", "Remove provider"))
                     }
-                    .buttonStyle(.bordered)
+                    .wisprDestructiveButtonStyle()
                 }
 
                 if !provider.discoveredModels.isEmpty {
@@ -1850,7 +1904,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 220)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 220)
             } label: {
                 SettingsFieldLabel(
                     title: text("Modell", "Model"),
@@ -1905,6 +1960,7 @@ struct SettingsView: View {
                     language: appLanguage
                 )
                 .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             if let advisory = appState.hotkeyAdvisory {
@@ -1927,6 +1983,7 @@ struct SettingsView: View {
                     language: appLanguage
                 )
                 .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             } label: {
                 SettingsFieldLabel(
                     title: text("Hold-Kurzbefehl", "Hold shortcut"),
@@ -1958,6 +2015,7 @@ struct SettingsView: View {
                     language: appLanguage
                 )
                 .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .disabled(!appState.cancelShortcutEnabled)
 
@@ -1981,6 +2039,7 @@ struct SettingsView: View {
                     language: appLanguage
                 )
                 .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .disabled(!appState.modeSwitchShortcutEnabled)
 
@@ -1999,18 +2058,20 @@ struct SettingsView: View {
                 Button(text("Letztes Diktat kopieren", "Copy last dictation")) {
                     copyToClipboard(appState.latestDictationText)
                 }
-                .buttonStyle(.borderedProminent)
+                .wisprPrimaryButtonStyle()
                 .disabled(appState.latestDictationText.isEmpty)
 
                 Button(text("Verlauf exportieren", "Export history")) {
                     appState.exportHistoryAsText()
                 }
-                .buttonStyle(.bordered)
+                .wisprSecondaryButtonStyle()
 
-                Button(text("Verlauf leeren", "Clear history")) {
+                Button(role: .destructive) {
                     appState.clearHistory()
+                } label: {
+                    Text(text("Verlauf leeren", "Clear history"))
                 }
-                .buttonStyle(.bordered)
+                .wisprDestructiveButtonStyle()
             }
         }
     }
@@ -2030,7 +2091,8 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 180)
+                .wisprSettingsPickerStyle()
+                .settingsFormMenuPickerSlot(minWidth: 180)
             } label: {
                 SettingsFieldLabel(
                     title: text("Verlauf aufbewahren", "Keep history"),
@@ -2088,18 +2150,18 @@ struct SettingsView: View {
                     newSnippetTrigger = ""
                     newSnippetReplacement = ""
                 }
-                .buttonStyle(.borderedProminent)
+                .wisprPrimaryButtonStyle()
             }
 
             HStack(alignment: .center, spacing: 10) {
                 Button(text("JSON importieren", "Import JSON")) {
                     appState.importSnippetsFromJSON()
                 }
-                .buttonStyle(.bordered)
+                .wisprSecondaryButtonStyle()
                 Button(text("JSON exportieren", "Export JSON")) {
                     appState.exportSnippetsToJSON()
                 }
-                .buttonStyle(.bordered)
+                .wisprSecondaryButtonStyle()
             }
 
             if filteredSnippets.isEmpty {
@@ -2115,10 +2177,12 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button(text("Löschen", "Delete")) {
+                        Button(role: .destructive) {
                             appState.removeSnippet(ruleID: rule.id)
+                        } label: {
+                            Text(text("Löschen", "Delete"))
                         }
-                        .buttonStyle(.borderless)
+                        .wisprInlineListButtonStyle()
                         .accessibilityLabel(
                             text("Snippet löschen: ", "Delete snippet: ") + rule.trigger)
                     }
@@ -2135,6 +2199,15 @@ struct SettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
+
+                Text(
+                    text(
+                        "Smoke-Test: Log-Datei artifacts/mac/dev-run.log (Projektroot).",
+                        "Smoke test: log file artifacts/mac/dev-run.log (project root)."
+                    )
+                )
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
 
                 Toggle(isOn: $appState.debugModeEnabled) {
                     SettingsFieldLabel(
@@ -2173,12 +2246,15 @@ struct SettingsView: View {
                                             "Technical logging is active. New runtime and process events will appear here."
                                         )
                                         : appState.debugLogText.components(separatedBy: .newlines)
-                                            .suffix(3).joined(separator: "\n")
+                                            .suffix(3).joined(separator: " ")
                                 )
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                                 .textSelection(.enabled)
                             }
+                            .frame(minHeight: 38, alignment: .topLeading)
                         }
                     )
                 }
@@ -2194,31 +2270,45 @@ struct SettingsView: View {
                     label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(text("Letzte Diagnosezeilen", "Recent diagnostic lines"))
-                            Text(compressedDiagnosticsText)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
+                            Text(
+                                compressedDiagnosticsText.replacingOccurrences(of: "\n", with: " ")
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .textSelection(.enabled)
                         }
+                        .frame(minHeight: 38, alignment: .topLeading)
                     }
                 )
 
                 HStack(alignment: .center, spacing: 10) {
+                    Button(
+                        text(
+                            "Alles kopieren (Diagnose + Protokoll)",
+                            "Copy all (diagnostics + log)")
+                    ) {
+                        copyToClipboard(appState.diagnosticsAndDebugCombinedForClipboard())
+                    }
+                    .wisprSecondaryButtonStyle()
+
                     Button(text("Diagnose kopieren", "Copy diagnostics")) {
                         copyToClipboard(compressedDiagnosticsText)
                     }
-                    .buttonStyle(.bordered)
+                    .wisprSecondaryButtonStyle()
                     .disabled(compressedDiagnosticsText.isEmpty)
 
                     Button(text("Diagnose exportieren", "Export diagnostics")) {
                         appState.exportDiagnosticsReport()
                     }
-                    .buttonStyle(.bordered)
+                    .wisprSecondaryButtonStyle()
 
                     if appState.debugModeEnabled {
                         Button(text("Diagnoseprotokoll exportieren", "Export diagnostic log")) {
                             appState.exportDebugLog()
                         }
-                        .buttonStyle(.bordered)
+                        .wisprSecondaryButtonStyle()
                     }
                 }
             }
@@ -2234,14 +2324,16 @@ struct SettingsView: View {
                 Button(text("Aktivieren", "Activate")) {
                     appState.activateLicense()
                 }
-                .buttonStyle(.borderedProminent)
+                .wisprPrimaryButtonStyle()
                 .disabled(
                     appState.licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Button(text("Deaktivieren", "Deactivate")) {
+                Button(role: .destructive) {
                     appState.deactivateLicense()
+                } label: {
+                    Text(text("Deaktivieren", "Deactivate"))
                 }
-                .buttonStyle(.bordered)
+                .wisprDestructiveButtonStyle()
             }
 
             if let storedLicenseSummary = appState.storedLicenseSummary {
@@ -2318,6 +2410,48 @@ enum SettingsTab: Hashable, CaseIterable {
     }
 }
 
+/// Verzögertes Hover-Popover mit Material/Glass statt nativem `.help`-HUD.
+private struct SettingsRichTooltipAnchor: View {
+    let helpText: String
+    @State private var isPresented = false
+    @State private var hoverTask: Task<Void, Never>?
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+            .accessibilityHidden(true)
+            .onDisappear {
+                hoverTask?.cancel()
+                isPresented = false
+            }
+            .onHover { inside in
+                if inside {
+                    hoverTask?.cancel()
+                    hoverTask = Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 420_000_000)
+                        guard !Task.isCancelled else { return }
+                        isPresented = true
+                    }
+                } else {
+                    hoverTask?.cancel()
+                    hoverTask = nil
+                    isPresented = false
+                }
+            }
+            .popover(isPresented: $isPresented) {
+                Text(helpText)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .padding(14)
+                    .frame(maxWidth: 300)
+                    .settingsTooltipPanelBackground()
+            }
+    }
+}
+
 private struct AboutFactRow: View {
     let title: String
     let detail: String
@@ -2340,59 +2474,18 @@ private struct SettingsFieldLabel: View {
     var helpText: String? = nil
 
     var body: some View {
-        HStack(spacing: 6) {
+        let accessibilityCombined: String = {
+            guard let helpText, !helpText.isEmpty else { return title }
+            return "\(title). \(helpText)"
+        }()
+        return HStack(spacing: 6) {
             Text(title)
             if let helpText, !helpText.isEmpty {
-                SettingsHelpIcon(text: helpText)
+                SettingsRichTooltipAnchor(helpText: helpText)
             }
         }
-    }
-}
-
-private struct SettingsHelpIcon: View {
-    let text: String
-    @State private var isHovering = false
-    @State private var showPopover = false
-    @State private var hoverTask: Task<Void, Never>?
-
-    var body: some View {
-        Image(systemName: "info.circle")
-            .font(.caption)
-            .foregroundStyle(showPopover ? .primary : .secondary)
-            .onHover { hovering in
-                isHovering = hovering
-                hoverTask?.cancel()
-                hoverTask = Task { @MainActor in
-                    if hovering {
-                        try? await Task.sleep(nanoseconds: 350_000_000)
-                        if isHovering {
-                            showPopover = true
-                        }
-                    } else {
-                        try? await Task.sleep(nanoseconds: 120_000_000)
-                        if !isHovering {
-                            showPopover = false
-                        }
-                    }
-                }
-            }
-            .popover(isPresented: $showPopover, attachmentAnchor: .point(.bottom), arrowEdge: .top)
-        {
-            ScrollView {
-                Text(text)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(12)
-            }
-            .frame(width: 320)
-            .frame(maxHeight: 220)
-        }
-            .accessibilityLabel(text)
-            .onDisappear {
-                hoverTask?.cancel()
-            }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityCombined)
     }
 }
 
@@ -2425,12 +2518,14 @@ private struct HistoryEntryRow: View {
                 Button(text("Kopieren", "Copy")) {
                     onCopy()
                 }
-                .buttonStyle(.borderless)
+                .wisprInlineListButtonStyle()
                 .accessibilityLabel(text("Diktat kopieren vom ", "Copy dictation from ") + dateText)
-                Button(text("Löschen", "Delete")) {
+                Button(role: .destructive) {
                     onDelete()
+                } label: {
+                    Text(text("Löschen", "Delete"))
                 }
-                .buttonStyle(.borderless)
+                .wisprInlineListButtonStyle()
                 .accessibilityLabel(
                     text("Diktat löschen vom ", "Delete dictation from ") + dateText)
             }
@@ -2501,51 +2596,14 @@ private struct HotkeyAdvisoryBox: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(accentColor.opacity(0.12))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(accentColor.opacity(0.3), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
-    }
-}
-
-private struct NativeSearchField: NSViewRepresentable {
-    let placeholder: String
-    @Binding var text: String
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
-    }
-
-    func makeNSView(context: Context) -> NSSearchField {
-        let field = NSSearchField(frame: .zero)
-        field.delegate = context.coordinator
-        field.placeholderString = placeholder
-        field.sendsSearchStringImmediately = true
-        return field
-    }
-
-    func updateNSView(_ nsView: NSSearchField, context: Context) {
-        if nsView.stringValue != text {
-            nsView.stringValue = text
-        }
-        nsView.placeholderString = placeholder
-    }
-
-    final class Coordinator: NSObject, NSSearchFieldDelegate {
-        @Binding var text: String
-
-        init(text: Binding<String>) {
-            _text = text
-        }
-
-        func controlTextDidChange(_ obj: Notification) {
-            guard let field = obj.object as? NSSearchField else { return }
-            text = field.stringValue
-        }
     }
 }
 
@@ -2664,8 +2722,11 @@ private struct PermissionStatusRow: View {
 
                 if let actionTitle, let action {
                     Button(actionTitle, action: action)
-                        .buttonStyle(.bordered)
-                        .help(actionHint ?? actionTitle)
+                        .wisprSecondaryButtonStyle()
+                        .controlSize(.small)
+                        .accessibilityLabel(
+                            actionHint.map { "\(actionTitle). \($0)" } ?? actionTitle
+                        )
                 }
             }
         }

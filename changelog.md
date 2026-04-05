@@ -2,6 +2,10 @@
 
 ## Fixes
 
+- 2026-04-04: Dokumentation und README auf vollen Funktionsumfang ausgerichtet; proprietärer Status klargestellt.
+  - Dateien: `README.md`, `docs/README.md`, `docs/features-and-implementation.md`, `docs/licensing.md`, `docs/system-design.md`, `apps/macos/README.md`, `apps/macos/AppShell/SettingsView.swift`, `Tests/DocsContractTests/DocsContractTests.swift`
+  - Funktionalitaet: Neuer Dokumentationsindex und eine Feature-Matrix mit Modul- und AppShell-Bezug. Root-README strukturiert neu mit klarer proprietärer Kennzeichnung und Verweis auf `docs/licensing.md`. Lizenz-Doku um Weitergabe-/OSS-Hinweis ergänzt. About-Supporttext in den macOS-Settings von „frei/offen“ auf proprietäre Formulierung umgestellt. DocsContractTests prüfen die VERSION-Datei nur noch auf semantisches Format statt auf eine feste Versionsnummer.
+
 - 2026-04-04: Menüleisten-Picker und AI-Aufgabenlogik stringenter gemacht.
   - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `Sources/AIProcessingCore/AIProcessingTypes.swift`, `Sources/AIProcessingCore/AppleFoundationTextProcessor.swift`, `apps/macos/README.md`, `VERSION`
   - Funktionalitaet: Die nicht-kompakte Menüleistenansicht nutzt jetzt direkte Picker statt doppelter Untermenüs fuer LLM, Modus, Stil, Anrede, Sprachmodell und Qualitaet. Sprachmodell und Anbieter werden gemeinsam unter einem Picker mit Anbietergruppen angezeigt. In den Settings lassen sich AI-Aufgaben wie Bereinigen, Stil, Anrede und Format jetzt frei kombinieren; daraus leitet die App konsistent ab, welche Regler in der Menüleiste sichtbar sind. Nicht relevante oder durch andere Einstellungen ausgeschlossene AI-Optionen erscheinen dort nicht mehr.

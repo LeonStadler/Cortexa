@@ -60,3 +60,12 @@
 
 - inject `WISPR_LICENSE_PUBLIC_KEY_BASE64` before generating the macOS Xcode project so `WLMLicensePublicKeyBase64` is present in the app bundle.
 - without injecting this key, activation UI works technically but real production keys cannot validate.
+
+<a id="proprietary"></a>
+
+## Proprietäre Software und Weitergabe
+
+- **WisprLocal** (Quellcode, Marken, gebündelte Produktassets) ist **keine Open-Source-Software** und ist für eine **öffentliche OSS-Veröffentlichung nicht vorgesehen**.
+- Das **Repository und diese Dokumentation** beschreiben interne Entwicklung, Builds und Releases. Sie begründen **keine** Lizenz zur Weitergabe, Bearbeitung oder Weiterveröffentlichung des Codes durch Dritte.
+- **Drittkomponenten** (z. B. whisper.cpp, Sparkle) unterliegen **eigenen Lizenzen** des jeweiligen Upstream-Projekts; die Pflicht zur Einhaltung dieser Lizenzen bleibt bei der Distribution der Binärprodukte bestehen.
+- Für **Kunden- oder Team-Zugang** gelten separate Vereinbarungen (Support, Lizenzschlüssel, NDA) unabhängig von diesem Repo.

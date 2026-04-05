@@ -1,7 +1,17 @@
-import AppKit
-import ASRCore
 import AIProcessingCore
+import ASRCore
+import AppKit
 import SwiftUI
+
+/// Smoke-/Automatisierungspfad: Einstellungen ohne System-Events-Tastatur öffnen (kein Bedienungshilfen-Zugriff für Terminal nötig).
+private enum WisprSmokeLaunch {
+    static var shouldOpenSettingsAfterLaunch: Bool {
+        if ProcessInfo.processInfo.environment["WISPR_SMOKE_OPEN_SETTINGS"] == "1" {
+            return true
+        }
+        return ProcessInfo.processInfo.arguments.contains("--wispr-smoke-open-settings")
+    }
+}
 
 @main
 struct WisprLocalMacApp: App {
@@ -21,6 +31,23 @@ struct WisprLocalMacApp: App {
         _updaterController = StateObject(wrappedValue: updaterController)
         _appState = StateObject(wrappedValue: appState)
         self.settingsWindowPresenter = settingsWindowPresenter
+
+        if WisprSmokeLaunch.shouldOpenSettingsAfterLaunch {
+            var launchObserver: NSObjectProtocol?
+            launchObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didFinishLaunchingNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                if let launchObserver {
+                    NotificationCenter.default.removeObserver(launchObserver)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    appState.openSettingsWindow()
+                }
+            }
+        }
     }
 
     var body: some Scene {
@@ -62,15 +89,22 @@ private final class SettingsWindowPresenter {
     }
 
     private func makeWindow() -> NSWindow {
-        let hostingController = NSHostingController(rootView: SettingsView().environmentObject(appState))
+        let hostingController = NSHostingController(
+            rootView: SettingsView().environmentObject(appState))
         let window = NSWindow(contentViewController: hostingController)
         window.title = "WisprLocal"
         window.toolbarStyle = .preference
         window.titleVisibility = .visible
+        // Standard-Titelzeile: mit fullSizeContentView + transparenter Bar sitzt der Titel optisch falsch
+        // und überlappt leicht mit dem SwiftUI-Inhalt.
         window.titlebarAppearsTransparent = false
+        window.backgroundColor = .windowBackgroundColor
         window.styleMask = [.titled, .closable, .resizable]
-        window.setContentSize(NSSize(width: 980, height: 640))
-        window.contentMinSize = NSSize(width: 940, height: 620)
+        window.setContentSize(NSSize(width: 1000, height: 640))
+        window.contentMinSize = NSSize(
+            width: MacNativeDesign.SettingsSplitView.windowMinWidth,
+            height: 620
+        )
         window.contentMaxSize = NSSize(width: 1_180, height: 1_080)
         window.center()
         window.isReleasedWhenClosed = false
@@ -108,7 +142,8 @@ struct MenuBarContentView: View {
     }
 
     private var showsStatusHeader: Bool {
-        appState.isSessionActive || appState.hasPermissionProblems || appState.recordingStatus == "Error"
+        appState.isSessionActive || appState.hasPermissionProblems
+            || appState.recordingStatus == "Error"
     }
 
     private var primaryActionTitle: String {
@@ -136,7 +171,8 @@ struct MenuBarContentView: View {
         Binding(
             get: { appState.selectedVoiceModelID },
             set: { newValue in
-                guard let descriptor = appState.voiceModels.first(where: { $0.id == newValue }) else { return }
+                guard let descriptor = appState.voiceModels.first(where: { $0.id == newValue })
+                else { return }
                 appState.setSelectedVoiceModel(descriptor)
             }
         )
@@ -156,7 +192,8 @@ struct MenuBarContentView: View {
         if appState.finalResultDeliveryMode == .clipboardOnly {
             return text("Zwischenablage", "Clipboard")
         }
-        return appState.streamingEnabled ? text("Live", "Live") : text("Am Ende einfügen", "Insert on Stop")
+        return appState.streamingEnabled
+            ? text("Live", "Live") : text("Am Ende einfügen", "Insert on Stop")
     }
 
     private var statusLine: String {
@@ -192,13 +229,14 @@ struct MenuBarContentView: View {
 
     private var secondaryLine: String? {
         if appState.isSessionActive {
-            return "\(appState.selectedLanguage.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)) • \(insertionModeLabel)"
+            return
+                "\(appState.selectedLanguage.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)) • \(insertionModeLabel)"
         }
         if appState.recordingStatus == "Error" {
             return appState.statusHintText
         }
         if appState.hasPermissionProblems {
-            return appState.permissionSummary
+            return appState.menuBarCompactPermissionHint
         }
         return nil
     }
@@ -222,6 +260,8 @@ struct MenuBarContentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                        .truncationMode(.tail)
+                        .multilineTextAlignment(.leading)
                 }
             }
             .padding(.horizontal, 2)
@@ -232,7 +272,8 @@ struct MenuBarContentView: View {
     @ViewBuilder
     private var startDictationButton: some View {
         if appState.showMenuBarShortcutHints,
-           let keyEquivalent = appState.selectedHotkey.swiftUIKeyEquivalent {
+            let keyEquivalent = appState.selectedHotkey.swiftUIKeyEquivalent
+        {
             Button {
                 appState.toggleTranscriptionFromMenuBar()
             } label: {
@@ -242,7 +283,8 @@ struct MenuBarContentView: View {
                     shortcutText: appState.selectedHotkey.displayName
                 )
             }
-            .keyboardShortcut(keyEquivalent, modifiers: appState.selectedHotkey.swiftUIEventModifiers)
+            .keyboardShortcut(
+                keyEquivalent, modifiers: appState.selectedHotkey.swiftUIEventModifiers)
         } else {
             Button {
                 appState.toggleTranscriptionFromMenuBar()
@@ -323,13 +365,15 @@ struct MenuBarContentView: View {
 
             Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
                 ForEach(visibleMenuBarLanguages) { language in
-                    Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
+                    Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
+                        .tag(language)
                 }
             }
 
             Picker(text("Übersetzung", "Translation"), selection: $appState.translationOutputMode) {
                 ForEach(TranslationOutputMode.allCases) { mode in
-                    Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
+                    Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
+                        .tag(mode)
                 }
             }
 
@@ -349,7 +393,10 @@ struct MenuBarContentView: View {
 
                 Picker(text("Qualität", "Quality"), selection: $appState.performanceProfile) {
                     ForEach(DictationPerformance.allCases) { profile in
-                        Text(profile.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(profile)
+                        Text(
+                            profile.localizedDisplayName(
+                                interfaceLanguageCode: appLanguage.rawValue)
+                        ).tag(profile)
                     }
                 }
             }
@@ -357,16 +404,28 @@ struct MenuBarContentView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: appState.compactMenuBarDesign ? 4 : 6) {
-                Toggle(text("AI-Verarbeitung", "AI processing"), isOn: $appState.aiProcessingEnabled)
-                    .disabled(!hasQuickSettingsAIModels)
+                Toggle(
+                    text("AI-Verarbeitung", "AI processing"), isOn: $appState.aiProcessingEnabled
+                )
+                .disabled(!hasQuickSettingsAIModels)
 
                 if appState.compactMenuBarDesign {
                     Menu {
-                        Toggle(text("Inhaltsstreaming", "Content streaming"), isOn: $appState.aiProcessingApplyDuringLiveInsertion)
-                            .disabled(!appState.aiProcessingEnabled || !appState.streamingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
+                        Toggle(
+                            text("Inhaltsstreaming", "Content streaming"),
+                            isOn: $appState.aiProcessingApplyDuringLiveInsertion
+                        )
+                        .disabled(
+                            !appState.aiProcessingEnabled || !appState.streamingEnabled
+                                || appState.availableQuickSettingsAIModels.isEmpty)
 
-                        Toggle(text("Endergebnis einfügen", "Insert final result"), isOn: $appState.aiProcessingApplyToFinalResult)
-                            .disabled(!appState.aiProcessingEnabled || appState.availableQuickSettingsAIModels.isEmpty)
+                        Toggle(
+                            text("Endergebnis einfügen", "Insert final result"),
+                            isOn: $appState.aiProcessingApplyToFinalResult
+                        )
+                        .disabled(
+                            !appState.aiProcessingEnabled
+                                || appState.availableQuickSettingsAIModels.isEmpty)
                     } label: {
                         MenuActionLabel(
                             title: text("Einsatz", "Use"),
@@ -400,7 +459,10 @@ struct MenuBarContentView: View {
                     if appState.aiShowsModeControls {
                         Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
                             ForEach(AIFormattingMode.allCases) { mode in
-                                Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
+                                Text(
+                                    mode.localizedDisplayName(
+                                        interfaceLanguageCode: appLanguage.rawValue)
+                                ).tag(mode)
                             }
                         }
                         .disabled(appState.selectedAIModel?.availability.isAvailable != true)
@@ -409,7 +471,10 @@ struct MenuBarContentView: View {
                     if appState.aiShowsWritingStyleControls {
                         Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
                             ForEach(appState.availableAIWritingStyles) { style in
-                                Text(style.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(style)
+                                Text(
+                                    style.localizedDisplayName(
+                                        interfaceLanguageCode: appLanguage.rawValue)
+                                ).tag(style)
                             }
                         }
                         .disabled(appState.selectedAIModel?.availability.isAvailable != true)
@@ -418,7 +483,10 @@ struct MenuBarContentView: View {
                     if appState.aiShowsSalutationControls {
                         Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
                             ForEach(AISalutation.allCases) { salutation in
-                                Text(salutation.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(salutation)
+                                Text(
+                                    salutation.localizedDisplayName(
+                                        interfaceLanguageCode: appLanguage.rawValue)
+                                ).tag(salutation)
                             }
                         }
                         .disabled(appState.selectedAIModel?.availability.isAvailable != true)
@@ -461,7 +529,7 @@ struct MenuBarContentView: View {
                 Button(text("Nach Updates suchen", "Check for updates")) {
                     appState.checkForUpdates()
                 }
-                .buttonStyle(.borderless)
+                .wisprInlineListButtonStyle()
             }
 
             Divider()
@@ -478,8 +546,12 @@ struct MenuBarContentView: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .frame(width: menuBarPopupWidth)
+        .frame(width: menuBarPopupWidth, alignment: .leading)
+        .clipped()
         .controlSize(.small)
+        .onAppear {
+            appState.refreshPermissionStates()
+        }
     }
 
     private func copyToClipboard(_ string: String) {
@@ -531,14 +603,7 @@ private struct PrimaryMenuActionLabel: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(.separator.opacity(0.08), lineWidth: 1)
-        )
+        .menuBarPrimaryActionChrome(cornerRadius: 12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(shortcutText.map { "\(title), \($0)" } ?? title)
     }

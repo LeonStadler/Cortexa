@@ -1,5 +1,7 @@
 # API Design (Swift Protocols)
 
+Funktionsübersicht mit Produktbezug: [features-and-implementation.md](features-and-implementation.md).
+
 ## ASR
 
 ```swift
@@ -66,6 +68,7 @@ public func loadBundledModel(
 This installs `Runtime/whisper-cli` + `Runtime/models/*.bin` from app resources into local app-support and loads the requested model.
 
 Current local speech-model surface:
+
 - bundled default: `Standard` -> `ggml-base.bin`
 - additional whisper.cpp-backed local models are installable on demand via a catalog layer
 - `Translate` support always means Whisper translation to English only
@@ -205,6 +208,7 @@ public struct AIProcessingConfiguration {
 ```
 
 Current provider surface:
+
 - Apple on-device processing is exposed as a single runtime-discovered model entry (`Apple On-Device`) when the platform supports the Foundation Models runtime.
 - Remote API providers are configured dynamically and are not backed by a hardcoded model list. The current macOS shell ships presets for OpenRouter, OpenAI, Groq, Mistral, DeepSeek, Together AI, Fireworks AI, xAI, Ollama and LM Studio, plus a generic OpenAI-compatible provider editor (`baseURL`, `modelsPath`, `chatCompletionsPath`).
 - Remote models are discovered from the provider's `/models` endpoint and mapped into the shared model catalog via a provider-qualified selection ID (`providerID::modelID`), while the transport uses the provider's raw `requestModelID`.
@@ -245,6 +249,7 @@ struct AudioProcessingConfiguration {
 ```
 
 The macOS app shell uses these options to:
+
 - resolve the effective local speech model before session start, including optional per-language overrides
 - select model/config dynamically before session start
 - pass explicit Whisper auto-detect (`auto`) instead of silently mapping auto language selection to English
@@ -262,6 +267,7 @@ The macOS app shell uses these options to:
 - expose clipboard fallback as an explicit privacy tradeoff rather than a silent background path
 
 Runtime pipeline order:
+
 1. raw Whisper transcript
 2. snippet replacement
 3. optional translation

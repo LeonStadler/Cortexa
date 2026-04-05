@@ -1,50 +1,64 @@
 # WisprLocal
 
-Offline-first dictation and transcription stack for Apple platforms with a macOS-first UX.
+Offline-first Diktat und Transkription für **macOS** (Schwerpunkt) und **iOS/iPadOS** (Tastatur-Extension-Workflow). Technische Ziele und Modulgrenzen unten; **vollständige Funktions-/Implementierungsmatrix:** [`docs/features-and-implementation.md`](docs/features-and-implementation.md).
 
-## Goals
+## Status: proprietär
 
-- 100% local/offline transcription (no cloud ASR, no telemetry)
-- Apple Silicon optimized runtime presets
-- Deterministic insertion behavior on macOS (AX-first, optional paste fallback)
-- Shared core for macOS + iOS/iPadOS (keyboard extension workflow on iOS)
-- Offline license key verification (Ed25519)
+Dieses Repository und die gebündelte **Dokumentation dienen der internen Entwicklung und dem Release** — **keine Open-Source-Veröffentlichung**. Weitergabe von Quellcode oder Binärprodukten nur nach eigenen Vereinbarungen. Details und Lizenzschlüssel-Design: [`docs/licensing.md`](docs/licensing.md#proprietary).
 
-## Repository Layout
+## Dokumentation (Index)
 
-- `Package.swift`: Swift package workspace for core modules
-- `Sources/ASRCore`: Whisper engine, model registry, runtime installer, ASR types
-- `Sources/AudioCore`: AVAudioEngine capture pipeline
-- `Sources/SessionCore`: session state machine + streaming stabilizer
-- `Sources/SnippetCore`: snippet matching + persistence
-- `Sources/TextTargetMac`: macOS Accessibility target capture/insertion
-- `Sources/CapabilityCore`: capability profiling and adaptive presets
-- `Sources/AIProcessingCore`: provider-agnostic AI post-processing, model catalog, Apple on-device integration, dynamic remote API providers
-- `Sources/LicenseCore`: offline license key codec, verifier, secure storage
-- `apps/macos`: macOS app shell blueprint
-- `apps/ios`: iOS app + keyboard extension blueprint
-- `docs`: architecture, permissions, licensing, build/distribution docs
-- `scripts`: whisper.cpp bootstrap/build/package helpers
+| Ressource                                                                    | Zweck                                           |
+| ---------------------------------------------------------------------------- | ----------------------------------------------- |
+| [`docs/README.md`](docs/README.md)                                           | Alle Docs im Überblick                          |
+| [`docs/features-and-implementation.md`](docs/features-and-implementation.md) | Funktionen ↔ Module ↔ AppShell                  |
+| [`docs/system-design.md`](docs/system-design.md)                             | Architektur, Datenflüsse, State Machine         |
+| [`docs/api-design.md`](docs/api-design.md)                                   | Swift-Protokolle, Konfiguration, Pipeline       |
+| [`docs/permissions-macos.md`](docs/permissions-macos.md)                     | Mikrofon, Bedienungshilfen                      |
+| [`docs/build-xcframework.md`](docs/build-xcframework.md)                     | whisper.cpp / Runtime-Bundle                    |
+| [`docs/distribution.md`](docs/distribution.md)                               | Archive, Notarisierung, DMG, Sparkle, iOS       |
+| [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md)         | Release-Abnahme                                 |
+| [`apps/macos/README.md`](apps/macos/README.md)                               | Menüleiste, Settings, Betrieb                   |
+| [`apps/ios/README.md`](apps/ios/README.md)                                   | Host-App, Keyboard, App Group                   |
+| [`changelog.md`](changelog.md)                                               | Release Notes (auch in der macOS-About-Ansicht) |
 
-## End-user install model
+## Ziele (Produkt)
 
-Users only install the app.
+- **100 % lokale** Spracherkennung per whisper.cpp — **kein Cloud-ASR**, keine Telemetrie für die Kernfunktion
+- **Apple-Silicon**-orientierte Laufzeit-Presets (`CapabilityCore`)
+- **Deterministisches Einfügen** auf macOS: Accessibility zuerst, optional Paste-Fallback
+- **Gemeinsame Swift-Pakete** für macOS und iOS (`Package.swift`)
+- **Optionale** KI-Nachbearbeitung: Apple On-Device und/oder **OpenAI-kompatible** APIs (Netz nur bei aktivem API-Betrieb)
+- **Offline-Lizenzprüfung** (Ed25519), Schlüssel im **Keychain** — **Keychain-only secret persistence with legacy cache cleanup**
 
-- runtime (`whisper-cli`) and models are bundled inside app resources
-- app installs runtime assets locally on first use
-- no Homebrew/CMake dependency on user machines
+## Repository-Layout
 
-## Build
+- `Package.swift` — Swift Package (Libraries)
+- `Sources/ASRCore` — Whisper, Modell-Registry, Runtime-Installer
+- `Sources/AudioCore` — AVAudioEngine, Preprocessing-Hooks
+- `Sources/SessionCore` — Session-State-Machine, Streaming-Stabilisator
+- `Sources/SnippetCore` — Snippets, Persistenz
+- `Sources/TextTargetMac` — AX-Ziel, Einfügen (macOS)
+- `Sources/CapabilityCore` — Geräteprofil, adaptive Presets
+- `Sources/AIProcessingCore` — KI-Nachbearbeitung, Provider, Apple Foundation Models
+- `Sources/LicenseCore` — Lizenzformat, Verifikation, sichere Ablage
+- `apps/macos` — WisprLocalMac (MenuBarExtra)
+- `apps/ios` — Host-App + Keyboard Extension
+- `docs/` — Architektur, Build, Distribution, Permissions
+- `scripts/` — whisper.cpp, XcodeGen, Release-Helfer
+
+## Build & Tests (Swift Package)
 
 ```bash
 swift build
-```
-
-```bash
 swift test
 ```
 
-## Runtime packaging flow (developer)
+## Endnutzer-Modell
+
+Nutzer installieren nur die **App**. Runtime (`whisper-cli`) und Modelle liegen **im App-Bundle**; beim ersten Gebrauch werden sie ins Application Support installiert — **kein Homebrew/CMake** auf dem Zielrechner nötig.
+
+## Runtime einmalig bauen (Entwickler)
 
 ```bash
 ./scripts/bootstrap_whisper_submodule.sh
@@ -53,164 +67,82 @@ swift test
 ./scripts/prepare_runtime_bundle.sh
 ```
 
-Then include `apps/macos/AppShell/Resources/Runtime` in app resources.
+Anschließend `apps/macos/AppShell/Resources/Runtime` ins Xcode-Target einbinden. Details: [`docs/build-xcframework.md`](docs/build-xcframework.md).
 
-Details: `docs/build-xcframework.md`.
+## macOS: lokal starten
 
-## macOS App Run (Menu Bar + Hotkey)
+1. Runtime wie oben vorbereiten, dann:
+   ```bash
+   ./scripts/generate_macos_xcodeproj.sh
+   ```
+2. Projekt öffnen: `apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj`
+3. Target **WisprLocalMac** starten
+4. **Berechtigungen:** Mikrofon, Bedienungshilfen (für direktes Einfügen)
+5. **Diktat:** Menüleisten-Button oder globaler Hotkey (Standard **⌥ Space**)
+6. **Agent-App:** `LSUIElement` — standardmäßig keine Dock-Ikone (optional in den Settings aktivierbar)
 
-1. Build runtime assets once:
-```bash
-./scripts/build_whisper_xcframework.sh
-./scripts/download_models.sh
-./scripts/prepare_runtime_bundle.sh
-./scripts/generate_macos_xcodeproj.sh
-```
-2. Open:
-- `apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj`
-3. Run target `WisprLocalMac`.
-4. In app settings grant:
-- Microphone
-- Accessibility for direct text insertion
-5. Start/stop dictation:
-- Menu bar button
-- Global hotkey `Option + Space`
-6. Verhalten:
-- Die App läuft als reine Menüleisten-App (`LSUIElement`) und erscheint nicht dauerhaft im Dock.
+### macOS — implementierte Funktionen (Kurzliste)
 
-Features implemented in macOS app shell:
-- Finalize Insert at locked original cursor target
-- Streaming Insert with immutable target binding
-- Snippet replacement + snippet import/export (JSON)
-- Transkript-History mit Copy/Delete/Clear + Export (TXT), lokal persistent
-- Language switch (`de`, `en`, `auto`) and profile presets (`auto`, `fast`, `balanced`, `accurate`)
-- Explizite Translation-Ausgabe (`Keine Übersetzung` oder `Nach Englisch`), getrennt von der Sprachwahl
-- Optionales AI Processing mit Apple-On-Device- und API-Modellkatalog, Stil/Ton, Anrede sowie getrennten Aktivierungen für Live-Einfügen und finales Ergebnis
-- Dynamische API-Anbieter fuer Text-Postprocessing ohne fest verdrahtete Modellliste; OpenRouter und weitere Presets wie OpenAI, Groq, Mistral, DeepSeek, Together AI, Fireworks AI, xAI, Ollama und LM Studio lassen sich ueber dieselbe OpenAI-kompatible Surface anbinden, Modelle werden per `/models` geladen und API-Keys landen im Keychain
-- App-internes Audio-Preprocessing mit Eingangsverstärkung, Stille-Entfernung und dynamischer Normalisierung sowie optionalem Soundfeedback fuer Start/Stop/Fehler mit einstellbarer Lautstärke
-- Die macOS-Einstellungen sind jetzt semantisch in `Sound`, App-Verhalten, Texteingabe, Shortcuts, AI-Modelle und Verlauf gegliedert; neue Schalter fuer Dock-Sichtbarkeit, Login-Start, Update-Pruefung, Audio-Preprocessing, Soundeffekte, Auto-Send, Clipboard-Restore, History-Aufbewahrung und die Sprachmodell-Laufzeit unter `Erweitert` sind direkt in der UI sichtbar
-- Offline licensing UI (key input, local verification, Keychain-only secret persistence with legacy cache cleanup)
-- Lokales Audit-Log mit Rotation (`~/Library/Application Support/WisprLocal/audit.log`)
-- Optionale technische Diagnoseprotokollierung mit detaillierten Runtime-/Subprozess-Logs (`~/Library/Application Support/WisprLocal/debug.log`) inklusive `whisper-cli`-Starts, Exit-Codes und Timeouts
-- macOS-Lifecycle-Settings fuer Dock-Sichtbarkeit, Login-Start und automatische Update-Pruefung sowie lokale History-Aufbewahrung und den aktuellen App-Datenordner
-- Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI
-- Sparkle-kompatibler Auto-Updater mit permanent sichtbarem manuellen Check im Menü und in den Settings
-- Lifecycle-Refresh nach App-Aktivierung und System-Wake für Berechtigungen, Runtime und Hotkey-Registrierung
-- Eingeschränkter Transkriptionsmodus ohne Bedienungshilfen; direktes Einfügen bleibt dann deaktiviert, Verlauf und Zwischenablage bleiben nutzbar
-- Interner Speicher für Snippets, Verlauf und Audit-Dateien wird lokal gehärtet; Zwischenablage-Fallback bleibt absichtlich optional und ist als weniger privater Zustellpfad gekennzeichnet
-- Auto-Spracherkennung steuert nur noch die Transkription; Ubersetzung nach Englisch wird ausschliesslich ueber die separate Translation-Option aktiviert
+Ausführlich mit Modulbezug: [`docs/features-and-implementation.md`](docs/features-and-implementation.md).
 
-## macOS Release Archive
+- Finalize- und Streaming-Modus mit **festem Textziel** pro Session; Snippets + Verlauf (Export TXT)
+- Sprache, Qualität, **explizite Übersetzung** (getrennt von Auto-Sprache)
+- AI-Nachbearbeitung (Apple / Remote), dynamische Provider & Modelle, Keys in Keychain
+- Audio-Preprocessing, Sound-Feedback, **Sparkle**-Updates mit **permanent sichtbarem manuellen Check** im Menü und in den Settings
+- Dock, Login-Item, Diagnose-Export, Audit-Log, optional Debug-Log
+- Eingeschränkter Modus ohne Bedienungshilfen (Transkription/Verlauf weiter nutzbar)
+- Lizenz-UI steuerbar über Bundle-Key (`WLMEnableInternalLicenseUI`)
+
+## macOS: Release
+
+Archiv:
 
 ```bash
 ./scripts/archive_macos_release.sh
 ```
 
-Optional for explicit signing on CI or another machine:
+Optional mit Signatur:
 
 ```bash
 DEVELOPMENT_TEAM=YOURTEAMID CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 ./scripts/archive_macos_release.sh
 ```
 
-The archive is written to:
-- `artifacts/mac/WisprLocalMac.xcarchive`
+Ausgabe: `artifacts/mac/WisprLocalMac.xcarchive`
 
-## macOS Release Export / DMG / Appcast
+**Build-Secrets** (in Xcode-Projekt injiziert): `WISPR_LICENSE_PUBLIC_KEY_BASE64`, `SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`. Vor Release: `./scripts/preflight_macos_release.sh`. Checkliste: [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
 
-Die Release-Konfiguration wird über Build-Umgebungsvariablen in das generierte Xcode-Projekt injiziert:
-
-- `WISPR_LICENSE_PUBLIC_KEY_BASE64`: echter Ed25519-Public-Key für Offline-Lizenzen
-- `SPARKLE_FEED_URL`: HTTPS-Appcast-Feed für den Updater
-- `SPARKLE_PUBLIC_ED_KEY`: Sparkle Public EdDSA Key
-
-Vor dem eigentlichen Release-Lauf:
-
-```bash
-./scripts/preflight_macos_release.sh
-```
-
-Die vollständige manuelle Abnahme-Checkliste liegt in:
-- `docs/macos-release-checklist.md`
-
-Archiv exportieren:
+Export / DMG / Appcast:
 
 ```bash
 DEVELOPMENT_TEAM=YOURTEAMID ./scripts/export_macos_release.sh
+CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/create_macos_dmg.sh
+SPARKLE_PRIVATE_KEY_FILE=/path/to/sparkle_private_key SPARKLE_BIN_DIR=/path/to/generate_appcast \
+  ./scripts/generate_sparkle_appcast.sh
 ```
 
-DMG erzeugen:
-
-```bash
-CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-./scripts/create_macos_dmg.sh
-```
-
-Sparkle-Appcast generieren:
-
-```bash
-SPARKLE_PRIVATE_KEY_FILE=/path/to/sparkle_private_key \
-SPARKLE_BIN_DIR=/path/to/generate_appcast \
-./scripts/generate_sparkle_appcast.sh
-```
-
-After export/notarization validate the resulting bundle with:
+Bundle prüfen:
 
 ```bash
 ./scripts/verify_macos_release_bundle.sh artifacts/mac/release/WisprLocalMac.app
 ```
 
-## macOS Smoke Test
-
-For a local end-to-end development smoke test of the macOS app bundle:
+## macOS: Smoke-Test
 
 ```bash
 ./scripts/smoke_test_macos_app.sh
 ```
 
-This verifies:
-- debug app build succeeds
-- `WisprLocalMac.app` exists
-- bundled `Runtime/whisper-cli` exists in the app bundle
-- bundled ggml model files exist
-- app process launches and stays alive for a short sanity window
-- app activation and the Settings shortcut exercise the live UI path when possible
+Prüft u. a. Debug-Build, Bundle, `whisper-cli`, Modelle, kurzer Lauf; optional UI-Aktivierung. Varianten: `--keep-running`, `--no-ui`, `--skip-launch`.
 
-If you want the app to remain running after the smoke test:
+## iOS / iPadOS
 
-```bash
-./scripts/smoke_test_macos_app.sh --keep-running
-```
-
-If you want to skip the automatic UI exercise and only validate build/runtime startup:
-
-```bash
-./scripts/smoke_test_macos_app.sh --no-ui
-```
-
-For CI or headless verification without launching the app process:
-
-```bash
-./scripts/smoke_test_macos_app.sh --skip-launch
-```
-
-## iOS / iPadOS Project Run
-
-1. Generate the iOS project:
 ```bash
 bash ./scripts/generate_ios_xcodeproj.sh
 ```
-2. Open:
-- `apps/ios/WisprLocaliOS/WisprLocaliOS.xcodeproj`
-3. Configure your Apple account/team for:
-- `WisprLocaliOS`
-- `WisprLocalKeyboard`
-4. Enable the shared app group:
-- `group.com.wisprlocal.shared`
-5. Build the app and extension on a real iPhone/iPad or iOS 17+ simulator.
 
-Features implemented in iOS shell:
-- Host app with shared snippets, transcript history and offline license UI
-- Keyboard extension with latest approved transcript insert and shared snippet quick insert
-- Shared App Group persistence is required; there is no silent local fallback when the group is unavailable
-- Shared App Group files are written with platform file protection; raw license keys remain in Keychain instead of plaintext shared cache files, and iOS transcript history stays local to the host app
+Projekt: `apps/ios/WisprLocaliOS/WisprLocaliOS.xcodeproj` — Targets **WisprLocaliOS** und **WisprLocalKeyboard**, App Group `group.com.wisprlocal.shared`. Details: [`apps/ios/README.md`](apps/ios/README.md).
+
+---
+
+**English summary:** WisprLocal is a local-first dictation stack for Apple platforms. The repo is **proprietary** (not open source); use [`docs/README.md`](docs/README.md) and [`docs/features-and-implementation.md`](docs/features-and-implementation.md) for full technical coverage.

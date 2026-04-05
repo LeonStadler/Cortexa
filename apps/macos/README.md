@@ -44,7 +44,7 @@ Operational notes:
 - The settings window keeps a fixed width so long history entries do not stretch the preferences layout horizontally.
 - The settings window now leans more heavily on native macOS structures such as toolbar search, `Form`-based content flow, and restrained `GroupBox` grouping instead of a heavily custom header/search/card shell.
 - The history tab shows compact transcript cards with short previews first; longer dictations can be expanded inline for the full text without destabilizing the window layout.
-- The `About` tab introduces the open-source project, includes a short profile of Leon Stadler based on his website, and links out to his personal site for more background.
+- The `About` tab introduces the product and author, includes a short profile of Leon Stadler based on his website, and links out to his personal site for more background; WisprLocal is proprietary software (see `docs/licensing.md`).
 - The `About` tab also renders the bundled release notes from `changelog.md` in a styled changelog section, with a development fallback to the source tree when the bundle resource is temporarily unavailable.
 - Advanced options contain updates and diagnostics; the diagnostics preview can be expanded and copied.
 - The search results view announces grouped matches and uses clearer accessibility labels for the search field, result grouping, and transcript history previews.
