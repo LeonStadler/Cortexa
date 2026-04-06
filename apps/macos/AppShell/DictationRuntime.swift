@@ -512,9 +512,9 @@ final class DictationRuntime: @unchecked Sendable {
                     "permissions.accessibility granted=\(accessibilityGranted) requiresDirectInsertion=\(requiresDirectInsertion)"
                 )
                 accessibilityPermissionGranted = accessibilityGranted
-                try configureEngine(for: options)
 
                 let effectiveMode: DictationMode = accessibilityGranted ? options.mode : .finalize
+                try configureEngine(for: options, runtimeMode: effectiveMode)
 
                 if accessibilityGranted {
                     let lockedTarget = try? await captureFocusedTextTargetWithRetry(
@@ -554,7 +554,8 @@ final class DictationRuntime: @unchecked Sendable {
                     self.speechChunkStreak = 0
                     self.maxObservedRMS = 0
                     self.audioPreprocessor.reset()
-                    self.stableCommitter = self.makeStreamingCommitStabilizer(for: options)
+                    self.stableCommitter = self.makeStreamingCommitStabilizer(
+                        for: options, runtimeMode: effectiveMode)
                     self.snippetMatcher = DefaultSnippetMatcher(rules: options.snippetRules)
                 }
 
@@ -852,12 +853,53 @@ final class DictationRuntime: @unchecked Sendable {
             let focusedResult = AXUIElementCopyAttributeValue(
                 systemWide, kAXFocusedUIElementAttribute as CFString, &focused)
 
+            let frontBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil"
             guard focusedResult == .success, let focusedElement = focused else {
+                // #region agent log
+                AgentSessionDebugLog.append(
+                    hypothesisId: "H3",
+                    location: "DictationRuntime.captureFocusedTextTarget",
+                    message: "ax_focused_unavailable",
+                    data: [
+                        "axResult": "\(focusedResult.rawValue)",
+                        "frontmostBundle": frontBundle,
+                    ]
+                )
+                // #endregion
                 throw DictationRuntimeError.focusedElementUnavailable
             }
 
             let element = focusedElement as! AXUIElement
-            try validateEditableTextTarget(element)
+            var role = "?"
+            var roleRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
+                == .success,
+                let r = roleRef as? String
+            {
+                role = r
+            }
+            do {
+                try validateEditableTextTarget(element)
+            } catch {
+                var isValueSettable = DarwinBoolean(false)
+                let settableResult = AXUIElementIsAttributeSettable(
+                    element, kAXValueAttribute as CFString, &isValueSettable)
+                // #region agent log
+                AgentSessionDebugLog.append(
+                    hypothesisId: "H4",
+                    location: "DictationRuntime.captureFocusedTextTarget",
+                    message: "validate_editable_failed",
+                    data: [
+                        "role": role,
+                        "settableCheckResult": "\(settableResult.rawValue)",
+                        "valueSettable": "\(isValueSettable.boolValue)",
+                        "frontmostBundle": frontBundle,
+                        "error": "\(error)",
+                    ]
+                )
+                // #endregion
+                throw error
+            }
 
             var valueRef: CFTypeRef?
             _ = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef)
@@ -1641,15 +1683,18 @@ final class DictationRuntime: @unchecked Sendable {
         pasteboard.setString(text, forType: .string)
     }
 
-    private func configureEngine(for options: DictationStartOptions) throws {
+    private func configureEngine(for options: DictationStartOptions, runtimeMode: DictationMode)
+        throws
+    {
         let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(
             bundle: .main, appName: "WisprLocal")
-        let preset = selectEnginePreset(options: options)
+        let preset = selectEnginePreset(options: options, runtimeMode: runtimeMode)
         let modelDescriptor = selectedVoiceModelDescriptor(for: options, runtime: runtime)
         let modelFile = modelDescriptor.localFileName ?? runtime.defaultModelFileName
         let modelURL = runtime.modelsDirectoryURL.appendingPathComponent(modelFile)
 
-        let latencyProfile = selectLatencyProfile(options: options, preset: preset)
+        let latencyProfile = selectLatencyProfile(
+            options: options, preset: preset, runtimeMode: runtimeMode)
         let translationMode: ASRTranslationMode =
             modelDescriptor.supportsTranslationToEnglish
             ? options.translationOutput.asrTranslationMode
@@ -1680,7 +1725,9 @@ final class DictationRuntime: @unchecked Sendable {
         )
     }
 
-    private func selectEnginePreset(options: DictationStartOptions) -> EnginePreset {
+    private func selectEnginePreset(
+        options: DictationStartOptions, runtimeMode: DictationMode
+    ) -> EnginePreset {
         let profile = capabilityProfiler.profile()
         let override: QualityOverride
         switch options.performance {
@@ -1694,16 +1741,16 @@ final class DictationRuntime: @unchecked Sendable {
             override = .accurate
         }
 
-        if options.mode == .streaming {
+        if runtimeMode == .streaming {
             return capabilityProfiler.streamingPreset(for: profile, override: override)
         }
         return capabilityProfiler.qualityPreset(for: profile, override: override)
     }
 
-    private func selectLatencyProfile(options: DictationStartOptions, preset: EnginePreset)
-        -> LatencyProfile
-    {
-        guard options.mode == .streaming else {
+    private func selectLatencyProfile(
+        options: DictationStartOptions, preset: EnginePreset, runtimeMode: DictationMode
+    ) -> LatencyProfile {
+        guard runtimeMode == .streaming else {
             return .quality
         }
 
@@ -1717,9 +1764,9 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
-    private func makeStreamingCommitStabilizer(for options: DictationStartOptions)
-        -> StreamingCommitStabilizer
-    {
+    private func makeStreamingCommitStabilizer(
+        for options: DictationStartOptions, runtimeMode: DictationMode
+    ) -> StreamingCommitStabilizer {
         let rewriteScope: StreamingRewriteScope
         switch options.liveRewriteScope {
         case .currentSentence:
@@ -1752,7 +1799,7 @@ final class DictationRuntime: @unchecked Sendable {
                 rewriteScope: rewriteScope
             )
         case .auto:
-            let preset = selectEnginePreset(options: options)
+            let preset = selectEnginePreset(options: options, runtimeMode: runtimeMode)
             if preset.beamSize > 1 {
                 return StreamingCommitStabilizer(
                     stabilityThreshold: 3,

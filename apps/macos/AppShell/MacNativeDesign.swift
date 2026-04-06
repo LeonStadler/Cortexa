@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Design-Helfer für macOS 26+ Liquid Glass mit Fallback für ältere Systeme (vgl. [Applying Liquid Glass](https://developer.apple.com/documentation/SwiftUI/Applying-Liquid-Glass-to-custom-views)).
+/// Layout- und Material-Helfer ausgerichtet an Apples [Liquid Glass](https://developer.apple.com/documentation/TechnologyOverviews/liquid-glass),
+/// [Applying Liquid Glass to custom views](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)
+/// sowie dem Überblick [LiquidGlassReference](https://github.com/conorluddy/LiquidGlassReference).
 enum MacNativeDesign {
-    static let settingsFormCornerRadius: CGFloat = 14
     static let menuBarPrimaryCornerRadius: CGFloat = 12
     static let settingsTooltipCornerRadius: CGFloat = 12
 
@@ -18,13 +19,12 @@ enum MacNativeDesign {
 }
 
 extension View {
-    /// Primäre Menüleisten-Aktion: Liquid Glass auf macOS 26+, sonst Material.
+    /// Menüleisten-Hauptaktion: „floating“-Kontrolle — `glassEffect(.regular.interactive())` auf macOS 26+,
+    /// sonst `Material` ([`glassEffect(_:in:)`](https://developer.apple.com/documentation/swiftui/view/glasseffect(_:in:))).
     @ViewBuilder
-    func menuBarPrimaryActionChrome(
+    func menuBarPrimaryActionSurface(
         cornerRadius: CGFloat = MacNativeDesign.menuBarPrimaryCornerRadius
-    )
-        -> some View
-    {
+    ) -> some View {
         if #available(macOS 26.0, *) {
             self.glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
         } else {
@@ -39,78 +39,7 @@ extension View {
         }
     }
 
-    /// Kartenhintergrund für Einstellungsformulare.
-    @ViewBuilder
-    func settingsFormSurface(cornerRadius: CGFloat = MacNativeDesign.settingsFormCornerRadius)
-        -> some View
-    {
-        if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
-        } else {
-            self.background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.thinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-            )
-        }
-    }
-
-    /// Einheitliche `Picker`-Darstellung in Einstellungsformularen: macOS 26+ nutzt System-`.menu`-Chrome.
-    @ViewBuilder
-    func wisprSettingsPickerStyle() -> some View {
-        if #available(macOS 26.0, *) {
-            self.pickerStyle(.menu)
-        } else {
-            self
-        }
-    }
-
-    /// Primäre Aktion (Aktivieren, Installieren, Hinzufügen, hervorgehobene Links).
-    @ViewBuilder
-    func wisprPrimaryButtonStyle() -> some View {
-        if #available(macOS 26.0, *) {
-            self.buttonStyle(.glassProminent)
-        } else {
-            self.buttonStyle(.borderedProminent)
-        }
-    }
-
-    /// Standard-Aktionen in Formularen und Karten.
-    @ViewBuilder
-    func wisprSecondaryButtonStyle() -> some View {
-        if #available(macOS 26.0, *) {
-            self.buttonStyle(.glass)
-        } else {
-            self.buttonStyle(.bordered)
-        }
-    }
-
-    /// Zerstörerisch / Entfernen — immer mit `Button(role: .destructive)` kombinieren.
-    @ViewBuilder
-    func wisprDestructiveButtonStyle() -> some View {
-        if #available(macOS 26.0, *) {
-            self.buttonStyle(.glass)
-        } else {
-            self.buttonStyle(.bordered)
-        }
-    }
-
-    /// Kompakte Zeilenaktionen (Listen, Tabellen).
-    @ViewBuilder
-    func wisprInlineListButtonStyle() -> some View {
-        self.buttonStyle(.borderless)
-    }
-
-    /// Wertespalte in `Form`/`LabeledContent`: Menüs/Picker wie in den Systemeinstellungen rechts ausrichten.
-    func settingsFormValueTrailing(minWidth: CGFloat) -> some View {
-        self.frame(minWidth: minWidth)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    /// `.menu`-Picker: volle Wertespalte nutzen, Menü-Button wirklich rechts (nicht nur `frame` am Control).
+    /// `.menu`-Picker in Einstellungsformularen: volle Wertespalte, Auswahl rechts (`LabeledContent`).
     func settingsFormMenuPickerSlot(minWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
@@ -120,7 +49,17 @@ extension View {
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
-    /// Inhalt von Hilfe-Popovers (Einstellungen).
+    /// Sidebar neben dem Detail: Rand-Effekt wie in Apples Split-View-Hinweisen ([`backgroundExtensionEffect()`](https://developer.apple.com/documentation/swiftui/view/backgroundextensioneffect())).
+    @ViewBuilder
+    func settingsSidebarBackgroundExtensionEffect() -> some View {
+        if #available(macOS 26.0, *) {
+            self.backgroundExtensionEffect()
+        } else {
+            self
+        }
+    }
+
+    /// Kompaktes Hilfe-Popover (schwebende Kontrolle, kein scrollender Flächeninhalt).
     @ViewBuilder
     func settingsTooltipPanelBackground(
         cornerRadius: CGFloat = MacNativeDesign.settingsTooltipCornerRadius
@@ -143,20 +82,33 @@ extension View {
             )
         }
     }
-}
 
-/// Mehrere `.glass`-Buttons in einem Raster: ein gemeinsamer Container (Apple-Empfehlung zu Performance/Morphing).
-struct WisprGroupedGlassEffectContainer<Content: View>: View {
-    var spacing: CGFloat = 10
-    @ViewBuilder let content: () -> Content
+    // MARK: - Liquid Glass Button Styles (`.glass` / `.glassProminent` auf macOS 26+)
 
-    var body: some View {
+    @ViewBuilder
+    func liquidGlassPrimaryButtonStyle() -> some View {
         if #available(macOS 26.0, *) {
-            GlassEffectContainer(spacing: spacing) {
-                content()
-            }
+            self.buttonStyle(.glassProminent)
         } else {
-            content()
+            self.buttonStyle(.borderedProminent)
+        }
+    }
+
+    @ViewBuilder
+    func liquidGlassSecondaryButtonStyle() -> some View {
+        if #available(macOS 26.0, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.bordered)
+        }
+    }
+
+    @ViewBuilder
+    func liquidGlassDestructiveButtonStyle() -> some View {
+        if #available(macOS 26.0, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.bordered)
         }
     }
 }

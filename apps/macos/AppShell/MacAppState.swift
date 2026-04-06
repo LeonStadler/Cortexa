@@ -408,8 +408,10 @@ final class MacAppState: ObservableObject {
     @Published var showInDock: Bool {
         didSet {
             userDefaults.set(showInDock, forKey: UserDefaultsKeys.showInDock)
-            applyActivationPolicy()
-            reopenSettingsWindowAfterDockPolicyChange()
+            let policyApplied = applyActivationPolicy()
+            if policyApplied {
+                scheduleSettingsReopenAfterDockPolicyChange()
+            }
         }
     }
 
@@ -1068,6 +1070,7 @@ final class MacAppState: ObservableObject {
     private var didWakeObserver: NSObjectProtocol?
     private var permissionPollTask: Task<Void, Never>?
     private var accessibilityStatusDebounceTask: Task<Void, Never>?
+    private var dockPolicySettingsReopenWorkItem: DispatchWorkItem?
     private var hasAppliedAccessibilityStatusOnce = false
     private var diagnosticLines: [String] = []
     private var checkForUpdatesHandler: (() -> Void)?
@@ -1441,6 +1444,7 @@ final class MacAppState: ObservableObject {
     }
 
     deinit {
+        dockPolicySettingsReopenWorkItem?.cancel()
         permissionPollTask?.cancel()
         accessibilityStatusDebounceTask?.cancel()
         if let didActivateApplicationObserver {
@@ -1685,6 +1689,21 @@ final class MacAppState: ObservableObject {
         appendAudit(
             "session.toggle.menuBar start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)"
         )
+
+        // #region agent log
+        AgentSessionDebugLog.append(
+            hypothesisId: "H5",
+            location: "MacAppState.toggleTranscriptionFromMenuBar",
+            message: "menu_bar_toggle_before_restore_guard",
+            data: [
+                "allowsDirectInsertion": "\(dictationCapability.allowsDirectInsertion)",
+                "capability": "\(dictationCapability)",
+                "lastExternalBundle": lastExternalApplication?.bundleIdentifier ?? "nil",
+                "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                    ?? "nil",
+            ]
+        )
+        // #endregion
 
         guard dictationCapability.allowsDirectInsertion else {
             dictationRuntime.start(options: options)
@@ -2019,14 +2038,64 @@ final class MacAppState: ObservableObject {
             guard let self else { return }
 
             let targetApplication = preferredApplication ?? self.lastExternalApplication
+            // #region agent log
+            AgentSessionDebugLog.append(
+                hypothesisId: "H1",
+                location: "MacAppState.restorePreviousApplicationAndStart",
+                message: "restore_begin",
+                data: [
+                    "source": source,
+                    "preferredBundle": preferredApplication?.bundleIdentifier ?? "nil",
+                    "lastExternalBundle": lastExternalApplication?.bundleIdentifier ?? "nil",
+                    "targetChosenBundle": targetApplication?.bundleIdentifier ?? "nil",
+                ]
+            )
+            // #endregion
             if let targetApplication, let bundleIdentifier = targetApplication.bundleIdentifier {
                 self.appendDiagnostic(
                     "Aktiviere die letzte App erneut, damit das Ziel-Textfeld fokussiert bleibt.")
                 targetApplication.activate(options: [.activateAllWindows])
-                _ = await self.waitForFrontmostApplication(bundleIdentifier: bundleIdentifier)
+                let waitOk = await self.waitForFrontmostApplication(
+                    bundleIdentifier: bundleIdentifier)
+                // #region agent log
+                AgentSessionDebugLog.append(
+                    hypothesisId: "H2",
+                    location: "MacAppState.restorePreviousApplicationAndStart",
+                    message: "after_activate_target_app",
+                    data: [
+                        "expectedBundle": bundleIdentifier,
+                        "waitOk": "\(waitOk)",
+                        "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                            ?? "nil",
+                    ]
+                )
+                // #endregion
             } else {
                 _ = await self.waitForMenuBarToClose()
+                // #region agent log
+                AgentSessionDebugLog.append(
+                    hypothesisId: "H1",
+                    location: "MacAppState.restorePreviousApplicationAndStart",
+                    message: "no_target_app_short_delay_only",
+                    data: [
+                        "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                            ?? "nil"
+                    ]
+                )
+                // #endregion
             }
+
+            // #region agent log
+            AgentSessionDebugLog.append(
+                hypothesisId: "H4",
+                location: "MacAppState.restorePreviousApplicationAndStart",
+                message: "about_to_start_dictation",
+                data: [
+                    "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                        ?? "nil"
+                ]
+            )
+            // #endregion
 
             self.appendAudit("session.restore_start source=\(source)")
             self.dictationRuntime.start(options: options)
@@ -2694,19 +2763,33 @@ final class MacAppState: ObservableObject {
         }
     }
 
-    private func applyActivationPolicy() {
+    /// - Returns: `true` if activation policy was changed successfully (caller may refresh UI such as the settings window).
+    @discardableResult
+    private func applyActivationPolicy() -> Bool {
         let targetPolicy: NSApplication.ActivationPolicy = showInDock ? .regular : .accessory
-        if NSApplication.shared.activationPolicy() != targetPolicy {
-            NSApplication.shared.setActivationPolicy(targetPolicy)
+        let app = NSApplication.shared
+        guard app.activationPolicy() != targetPolicy else {
+            return false
         }
+        let ok = app.setActivationPolicy(targetPolicy)
+        if !ok {
+            appendDiagnostic(
+                "Die Aktivierungsrichtlinie konnte nicht auf \(showInDock ? "Dock" : "nur Menüleiste") umgestellt werden."
+            )
+        }
+        return ok
     }
 
-    private func reopenSettingsWindowAfterDockPolicyChange() {
+    private func scheduleSettingsReopenAfterDockPolicyChange() {
         guard openSettingsHandler != nil else { return }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.openSettingsHandler?()
+        dockPolicySettingsReopenWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.dockPolicySettingsReopenWorkItem = nil
+            self.openSettingsHandler?()
         }
+        dockPolicySettingsReopenWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.065, execute: work)
     }
 
     private func syncLaunchOnLogin() {

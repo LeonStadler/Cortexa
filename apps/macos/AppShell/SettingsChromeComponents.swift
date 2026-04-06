@@ -242,7 +242,7 @@ struct PermissionStatusRow: View {
 
                 if let actionTitle, let action {
                     Button(actionTitle, action: action)
-                        .wisprSecondaryButtonStyle()
+                        .liquidGlassSecondaryButtonStyle()
                         .controlSize(.small)
                         .accessibilityLabel(
                             actionHint.map { "\(actionTitle). \($0)" } ?? actionTitle

@@ -97,6 +97,13 @@ struct SettingsView: View {
         !searchQuery.isEmpty
     }
 
+    /// Live rewrite / adjustment radius affects streaming partials only.
+    private var isLiveRewriteScopeApplicable: Bool {
+        appState.streamingEnabled
+            && appState.finalResultDeliveryMode != .clipboardOnly
+            && appState.dictationCapability.allowsDirectInsertion
+    }
+
     private func matches(_ keywords: [String]) -> Bool {
         guard isSearching else { return true }
         return keywords.contains { $0.lowercased().contains(searchQuery) }
@@ -302,6 +309,7 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
+            .settingsSidebarBackgroundExtensionEffect()
             .environment(\.defaultMinListRowHeight, 36)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .navigationSplitViewColumnWidth(
@@ -334,6 +342,8 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationTitle(settingsNavigationTitle)
             }
+            // Nur Detail-Spalte: globales `.controlSize` am SplitView würde auch die Fenster-Toolbar verkleinern.
+            .controlSize(.regular)
             .navigationSplitViewColumnWidth(
                 min: MacNativeDesign.SettingsSplitView.detailMinWidth,
                 ideal: 720
@@ -395,7 +405,6 @@ struct SettingsView: View {
             minHeight: 600,
             idealHeight: 650
         )
-        .controlSize(.regular)
         .background(.windowBackground)
         .onAppear {
             appState.refreshPermissionStates()
@@ -753,7 +762,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 170)
             } label: {
                 SettingsFieldLabel(title: text("App-Sprache", "App language"))
@@ -837,7 +846,7 @@ struct SettingsView: View {
                     Button(text("Ordner im Finder öffnen", "Open folder in Finder")) {
                         appState.revealAppDataFolder()
                     }
-                    .wisprSecondaryButtonStyle()
+                    .liquidGlassSecondaryButtonStyle()
                 }
             } label: {
                 SettingsFieldLabel(
@@ -870,7 +879,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 220)
             } label: {
                 SettingsFieldLabel(
@@ -892,7 +901,7 @@ struct SettingsView: View {
                     Button(text("Nach Updates suchen", "Check for updates")) {
                         appState.checkForUpdates()
                     }
-                    .wisprSecondaryButtonStyle()
+                    .liquidGlassSecondaryButtonStyle()
                     .disabled(!appState.updaterConfigured)
 
                     if !appState.updaterStatusText.isEmpty {
@@ -957,7 +966,7 @@ struct SettingsView: View {
             Link(destination: personalWebsiteURL) {
                 Text(text("Website besuchen", "Visit website"))
             }
-            .buttonStyle(.borderedProminent)
+            .liquidGlassPrimaryButtonStyle()
         }
     }
 
@@ -988,7 +997,7 @@ struct SettingsView: View {
             Link(destination: personalWebsiteURL) {
                 Label(text("Projekt unterstützen", "Support the project"), systemImage: "heart")
             }
-            .wisprPrimaryButtonStyle()
+            .liquidGlassPrimaryButtonStyle()
         }
     }
 
@@ -1137,7 +1146,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 240)
             } label: {
                 SettingsFieldLabel(
@@ -1187,7 +1196,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 240)
             } label: {
                 SettingsFieldLabel(
@@ -1216,7 +1225,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 180)
             } label: {
                 SettingsFieldLabel(
@@ -1267,7 +1276,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 180)
             } label: {
                 SettingsFieldLabel(
@@ -1317,7 +1326,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 170)
                 .disabled(!appState.speechTranslationAvailable)
             } label: {
@@ -1368,7 +1377,7 @@ struct SettingsView: View {
                             Button(text("Als Standard verwenden", "Use as default")) {
                                 appState.setSelectedVoiceModel(model)
                             }
-                            .wisprSecondaryButtonStyle()
+                            .liquidGlassSecondaryButtonStyle()
                             .disabled(
                                 appState.selectedVoiceModelID == model.id
                                     || appState.isVoiceModelBusy(model))
@@ -1379,14 +1388,14 @@ struct SettingsView: View {
                                 } label: {
                                     Text(text("Entfernen", "Remove"))
                                 }
-                                .wisprDestructiveButtonStyle()
+                                .liquidGlassDestructiveButtonStyle()
                                 .disabled(appState.isVoiceModelBusy(model))
                             }
                         } else {
                             Button(text("Installieren", "Install")) {
                                 appState.installVoiceModel(model)
                             }
-                            .wisprPrimaryButtonStyle()
+                            .liquidGlassPrimaryButtonStyle()
                             .disabled(
                                 model.installState == .unavailable
                                     || appState.isVoiceModelBusy(model))
@@ -1431,14 +1440,15 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 260)
+                .disabled(!isLiveRewriteScopeApplicable)
             } label: {
                 SettingsFieldLabel(
                     title: text("Anpassungsradius", "Adjustment radius"),
                     helpText: text(
-                        "Kleinere Bereiche sind stabiler. Größere Bereiche glätten stärker, dürfen aber weiter zurückliegende Wörter noch einmal anfassen.",
-                        "Smaller scopes are more stable. Larger scopes smooth more aggressively but may revisit words further back."
+                        "Wirkt nur, wenn „Live-Text einfügen“ aktiv ist und nicht „Nur Zwischenablage“ gewählt ist. Kleinere Bereiche sind stabiler. Größere Bereiche glätten stärker, dürfen aber weiter zurückliegende Wörter noch einmal anfassen.",
+                        "Only applies when Insert live text is on and delivery is not clipboard-only. Smaller scopes are more stable. Larger scopes smooth more aggressively but may revisit words further back."
                     )
                 )
             }
@@ -1463,7 +1473,7 @@ struct SettingsView: View {
                         FinalResultDeliveryMode.clipboardOnly)
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 220)
             } label: {
                 SettingsFieldLabel(
@@ -1505,8 +1515,8 @@ struct SettingsView: View {
                 SettingsFieldLabel(
                     title: text("Nach dem Einfügen automatisch senden", "Auto-send after paste"),
                     helpText: text(
-                        "Nützlich in Chats oder Formularen, wenn das eingefügte Ergebnis direkt abgeschickt werden soll.",
-                        "Useful in chats or forms when the inserted result should be sent immediately."
+                        "Sendet nach dem finalen Einfügen eine Eingabetaste (Return), auch wenn der Text direkt ins Feld geschrieben wurde – nicht nur bei Einfügen über die Zwischenablage. Nützlich in Chats oder Formularen.",
+                        "Sends Return after final text is inserted, including when text is written directly into the field—not only when pasting from the clipboard. Useful in chats or forms."
                     )
                 )
             }
@@ -1525,8 +1535,8 @@ struct SettingsView: View {
                 SettingsFieldLabel(
                     title: text("Tastatureingaben simulieren", "Simulate keypresses"),
                     helpText: text(
-                        "Verwendet simulierte Tastenanschläge für finales Einfügen und Fallbacks, wenn der direkte Einfügepfad nicht ausreicht.",
-                        "Uses simulated keypresses for final insertion and fallbacks when the direct insertion path is not enough."
+                        "Gilt nur für das finale Einfügen am Ende der Aufnahme und für Einfüge-Fallbacks per Tastatur. Laufende Live-Zwischenergebnisse werden weiterhin direkt im Zieltextfeld aktualisiert.",
+                        "Applies only to final insertion at the end of recording and to keyboard-based fallbacks. Live streaming updates still go directly into the target field."
                     )
                 )
             }
@@ -1637,7 +1647,7 @@ struct SettingsView: View {
                             }
                         }
                         .labelsHidden()
-                        .wisprSettingsPickerStyle()
+                        .pickerStyle(.menu)
                         .settingsFormMenuPickerSlot(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
@@ -1663,7 +1673,7 @@ struct SettingsView: View {
                             }
                         }
                         .labelsHidden()
-                        .wisprSettingsPickerStyle()
+                        .pickerStyle(.menu)
                         .settingsFormMenuPickerSlot(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
@@ -1689,7 +1699,7 @@ struct SettingsView: View {
                             }
                         }
                         .labelsHidden()
-                        .wisprSettingsPickerStyle()
+                        .pickerStyle(.menu)
                         .settingsFormMenuPickerSlot(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
@@ -1787,12 +1797,12 @@ struct SettingsView: View {
                     Button(text("Abbrechen", "Cancel")) {
                         selectedRemoteProviderPreset = nil
                     }
-                    .buttonStyle(.bordered)
+                    .liquidGlassSecondaryButtonStyle()
                     Button(text("Hinzufügen", "Add")) {
                         appState.addRemoteProvider(preset: preset)
                         selectedRemoteProviderPreset = nil
                     }
-                    .buttonStyle(.borderedProminent)
+                    .liquidGlassPrimaryButtonStyle()
                 }
             }
             .padding(.top, 6)
@@ -1830,48 +1840,46 @@ struct SettingsView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            WisprGroupedGlassEffectContainer(spacing: 10) {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)],
-                    alignment: .leading,
-                    spacing: 10
-                ) {
-                    ForEach(presets) { preset in
-                        let isSelected = selectedRemoteProviderPreset == preset
-                        Button {
-                            selectedRemoteProviderPreset = preset
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(
-                                    preset.localizedDisplayName(
-                                        interfaceLanguageCode: effectiveLanguage
-                                            .embeddedInterfaceCode)
-                                )
-                                .font(.body.weight(.semibold))
-                                Text(providerPresetDescription(for: preset))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(
-                                        Color(nsColor: .controlBackgroundColor).opacity(
-                                            isSelected ? 0.55 : 0.2))
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(presets) { preset in
+                    let isSelected = selectedRemoteProviderPreset == preset
+                    Button {
+                        selectedRemoteProviderPreset = preset
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(
+                                preset.localizedDisplayName(
+                                    interfaceLanguageCode: effectiveLanguage
+                                        .embeddedInterfaceCode)
                             )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(
-                                        isSelected
-                                            ? Color.accentColor : Color.primary.opacity(0.08),
-                                        lineWidth: isSelected ? 2 : 1
-                                    )
-                            )
+                            .font(.body.weight(.semibold))
+                            Text(providerPresetDescription(for: preset))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
-                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(
+                                    Color(nsColor: .controlBackgroundColor).opacity(
+                                        isSelected ? 0.55 : 0.2))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(
+                                    isSelected
+                                        ? Color.accentColor : Color.primary.opacity(0.08),
+                                    lineWidth: isSelected ? 2 : 1
+                                )
+                        )
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -1927,7 +1935,7 @@ struct SettingsView: View {
                 }
             }
             .labelsHidden()
-            .wisprSettingsPickerStyle()
+            .pickerStyle(.menu)
             .settingsFormMenuPickerSlot(minWidth: 240)
         }
     }
@@ -2028,7 +2036,7 @@ struct SettingsView: View {
                     Button(text("Speichern", "Save")) {
                         appState.saveSelectedRemoteProvider()
                     }
-                    .wisprPrimaryButtonStyle()
+                    .liquidGlassPrimaryButtonStyle()
 
                     Spacer()
 
@@ -2037,7 +2045,7 @@ struct SettingsView: View {
                     } label: {
                         Text(text("Anbieter entfernen", "Remove provider"))
                     }
-                    .wisprDestructiveButtonStyle()
+                    .liquidGlassDestructiveButtonStyle()
                 }
 
                 if !provider.discoveredModels.isEmpty {
@@ -2084,7 +2092,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 220)
             } label: {
                 SettingsFieldLabel(
@@ -2238,20 +2246,20 @@ struct SettingsView: View {
                 Button(text("Letztes Diktat kopieren", "Copy last dictation")) {
                     copyToClipboard(appState.latestDictationText)
                 }
-                .wisprPrimaryButtonStyle()
+                .liquidGlassPrimaryButtonStyle()
                 .disabled(appState.latestDictationText.isEmpty)
 
                 Button(text("Verlauf exportieren", "Export history")) {
                     appState.exportHistoryAsText()
                 }
-                .wisprSecondaryButtonStyle()
+                .liquidGlassSecondaryButtonStyle()
 
                 Button(role: .destructive) {
                     appState.clearHistory()
                 } label: {
                     Text(text("Verlauf leeren", "Clear history"))
                 }
-                .wisprDestructiveButtonStyle()
+                .liquidGlassDestructiveButtonStyle()
             }
         }
     }
@@ -2272,7 +2280,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .wisprSettingsPickerStyle()
+                .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 180)
             } label: {
                 SettingsFieldLabel(
@@ -2381,7 +2389,7 @@ struct SettingsView: View {
             Button(text("Hinzufügen", "Add")) {
                 commitNewSnippet()
             }
-            .buttonStyle(.borderedProminent)
+            .liquidGlassPrimaryButtonStyle()
             .disabled(!canCommitNewSnippet)
             .keyboardShortcut(.defaultAction)
         }
@@ -2397,11 +2405,11 @@ struct SettingsView: View {
                 Button(text("JSON importieren", "Import JSON")) {
                     appState.importSnippetsFromJSON()
                 }
-                .buttonStyle(.bordered)
+                .liquidGlassSecondaryButtonStyle()
                 Button(text("JSON exportieren", "Export JSON")) {
                     appState.exportSnippetsToJSON()
                 }
-                .buttonStyle(.bordered)
+                .liquidGlassSecondaryButtonStyle()
             }
         }
     }
@@ -2542,24 +2550,24 @@ struct SettingsView: View {
                     ) {
                         copyToClipboard(appState.diagnosticsAndDebugCombinedForClipboard())
                     }
-                    .wisprSecondaryButtonStyle()
+                    .liquidGlassSecondaryButtonStyle()
 
                     Button(text("Diagnose kopieren", "Copy diagnostics")) {
                         copyToClipboard(compressedDiagnosticsText)
                     }
-                    .wisprSecondaryButtonStyle()
+                    .liquidGlassSecondaryButtonStyle()
                     .disabled(compressedDiagnosticsText.isEmpty)
 
                     Button(text("Diagnose exportieren", "Export diagnostics")) {
                         appState.exportDiagnosticsReport()
                     }
-                    .wisprSecondaryButtonStyle()
+                    .liquidGlassSecondaryButtonStyle()
 
                     if appState.debugModeEnabled {
                         Button(text("Diagnoseprotokoll exportieren", "Export diagnostic log")) {
                             appState.exportDebugLog()
                         }
-                        .wisprSecondaryButtonStyle()
+                        .liquidGlassSecondaryButtonStyle()
                     }
                 }
             }
@@ -2575,7 +2583,7 @@ struct SettingsView: View {
                 Button(text("Aktivieren", "Activate")) {
                     appState.activateLicense()
                 }
-                .wisprPrimaryButtonStyle()
+                .liquidGlassPrimaryButtonStyle()
                 .disabled(
                     appState.licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
@@ -2584,7 +2592,7 @@ struct SettingsView: View {
                 } label: {
                     Text(text("Deaktivieren", "Deactivate"))
                 }
-                .wisprDestructiveButtonStyle()
+                .liquidGlassDestructiveButtonStyle()
             }
 
             if let storedLicenseSummary = appState.storedLicenseSummary {

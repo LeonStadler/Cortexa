@@ -96,8 +96,15 @@ private final class SettingsWindowPresenter {
 
     func show() {
         let window = existingWindow ?? makeWindow()
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        let app = NSApplication.shared
+        if !app.isActive {
+            app.activate(ignoringOtherApps: true)
+        }
+        if window.isKeyWindow && window.isVisible {
+            window.orderFront(nil)
+        } else {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     private var existingWindow: NSWindow? {
@@ -710,7 +717,7 @@ struct MenuBarContentView: View {
                 Button(text("Nach Updates suchen", "Check for updates")) {
                     appState.checkForUpdates()
                 }
-                .wisprInlineListButtonStyle()
+                .buttonStyle(.borderless)
             }
 
             Divider()
@@ -784,7 +791,7 @@ private struct PrimaryMenuActionLabel: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .menuBarPrimaryActionChrome(cornerRadius: 12)
+        .menuBarPrimaryActionSurface(cornerRadius: 12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(shortcutText.map { "\(title), \($0)" } ?? title)
     }
