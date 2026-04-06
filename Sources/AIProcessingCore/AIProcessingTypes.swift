@@ -20,7 +20,7 @@ public enum AIModelAvailability: Codable, Equatable, Sendable {
     }
 
     public var reason: String? {
-        if case let .unavailable(reason) = self {
+        if case .unavailable(let reason) = self {
             return reason
         }
         return nil
@@ -221,7 +221,8 @@ public struct AIRemoteModel: Codable, Equatable, Identifiable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         displayName = try container.decode(String.self, forKey: .displayName)
-        quickSettingsEligible = try container.decodeIfPresent(Bool.self, forKey: .quickSettingsEligible) ?? true
+        quickSettingsEligible =
+            try container.decodeIfPresent(Bool.self, forKey: .quickSettingsEligible) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -263,6 +264,10 @@ public enum AIRevisionGoal: String, Codable, CaseIterable, Identifiable, Sendabl
 }
 
 public enum AIFormattingMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// Dictation fidelity: no imposed document structure (paired with format task, this skips structural formatting).
+    case asSpoken
+    /// Infer lists, paragraphs, and light structure from spoken content.
+    case automaticFromContent
     case plainText
     case email
     case message
@@ -272,9 +277,20 @@ public enum AIFormattingMode: String, Codable, CaseIterable, Identifiable, Senda
 
     public var id: String { rawValue }
 
+    /// When the format task is enabled, modes with `true` may ask the model to reshape structure (lists, templates, prose shape).
+    public var appliesStructuralFormatting: Bool {
+        switch self {
+        case .asSpoken:
+            return false
+        case .automaticFromContent, .plainText, .email, .message, .whatsapp, .documentation,
+            .scientificPaper:
+            return true
+        }
+    }
+
     public var supportsSalutation: Bool {
         switch self {
-        case .plainText, .email, .message, .whatsapp:
+        case .asSpoken, .automaticFromContent, .plainText, .email, .message, .whatsapp:
             return true
         case .documentation, .scientificPaper:
             return false
@@ -283,7 +299,7 @@ public enum AIFormattingMode: String, Codable, CaseIterable, Identifiable, Senda
 
     public var allowedWritingStyles: [AIWritingStyle] {
         switch self {
-        case .plainText:
+        case .asSpoken, .automaticFromContent, .plainText:
             return AIWritingStyle.allCases
         case .email:
             return [.none, .simple, .business, .friendlyConfident, .diplomatic]
@@ -309,6 +325,8 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
     public let style: AIWritingStyle
     public let salutation: AISalutation
     public let cleanupEnabled: Bool
+    /// 0...1; interpreted together with `cleanupEnabled`. 0 means no cleanup work (and enables bypass when cleanup is the only task).
+    public let cleanupIntensity: Double
     public let toneAdjustmentEnabled: Bool
     public let salutationAdjustmentEnabled: Bool
     public let formatAdaptationEnabled: Bool
@@ -319,10 +337,11 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
         applyDuringLiveInsertion: Bool = false,
         applyToFinalResult: Bool = true,
         revisionGoal: AIRevisionGoal = .cleanup,
-        formattingMode: AIFormattingMode = .plainText,
+        formattingMode: AIFormattingMode = .asSpoken,
         style: AIWritingStyle = .none,
         salutation: AISalutation = .none,
         cleanupEnabled: Bool = true,
+        cleanupIntensity: Double = 0.5,
         toneAdjustmentEnabled: Bool = false,
         salutationAdjustmentEnabled: Bool = false,
         formatAdaptationEnabled: Bool = false
@@ -336,9 +355,87 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
         self.style = style
         self.salutation = salutation
         self.cleanupEnabled = cleanupEnabled
+        self.cleanupIntensity = min(1, max(0, cleanupIntensity))
         self.toneAdjustmentEnabled = toneAdjustmentEnabled
         self.salutationAdjustmentEnabled = salutationAdjustmentEnabled
         self.formatAdaptationEnabled = formatAdaptationEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case selectedModelID
+        case applyDuringLiveInsertion
+        case applyToFinalResult
+        case revisionGoal
+        case formattingMode
+        case style
+        case salutation
+        case cleanupEnabled
+        case cleanupIntensity
+        case toneAdjustmentEnabled
+        case salutationAdjustmentEnabled
+        case formatAdaptationEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        selectedModelID = try container.decodeIfPresent(String.self, forKey: .selectedModelID)
+        applyDuringLiveInsertion =
+            try container.decodeIfPresent(Bool.self, forKey: .applyDuringLiveInsertion) ?? false
+        applyToFinalResult =
+            try container.decodeIfPresent(Bool.self, forKey: .applyToFinalResult) ?? true
+        revisionGoal =
+            try container.decodeIfPresent(AIRevisionGoal.self, forKey: .revisionGoal) ?? .cleanup
+        formattingMode =
+            try container.decodeIfPresent(AIFormattingMode.self, forKey: .formattingMode)
+            ?? .asSpoken
+        style = try container.decodeIfPresent(AIWritingStyle.self, forKey: .style) ?? .none
+        salutation = try container.decodeIfPresent(AISalutation.self, forKey: .salutation) ?? .none
+        cleanupEnabled = try container.decodeIfPresent(Bool.self, forKey: .cleanupEnabled) ?? true
+        let rawIntensity =
+            try container.decodeIfPresent(Double.self, forKey: .cleanupIntensity) ?? 0.5
+        cleanupIntensity = min(1, max(0, rawIntensity))
+        toneAdjustmentEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .toneAdjustmentEnabled) ?? false
+        salutationAdjustmentEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .salutationAdjustmentEnabled) ?? false
+        formatAdaptationEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .formatAdaptationEnabled) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(enabled, forKey: .enabled)
+        try container.encodeIfPresent(selectedModelID, forKey: .selectedModelID)
+        try container.encode(applyDuringLiveInsertion, forKey: .applyDuringLiveInsertion)
+        try container.encode(applyToFinalResult, forKey: .applyToFinalResult)
+        try container.encode(revisionGoal, forKey: .revisionGoal)
+        try container.encode(formattingMode, forKey: .formattingMode)
+        try container.encode(style, forKey: .style)
+        try container.encode(salutation, forKey: .salutation)
+        try container.encode(cleanupEnabled, forKey: .cleanupEnabled)
+        try container.encode(cleanupIntensity, forKey: .cleanupIntensity)
+        try container.encode(toneAdjustmentEnabled, forKey: .toneAdjustmentEnabled)
+        try container.encode(salutationAdjustmentEnabled, forKey: .salutationAdjustmentEnabled)
+        try container.encode(formatAdaptationEnabled, forKey: .formatAdaptationEnabled)
+    }
+}
+
+extension AIProcessingConfiguration {
+    /// Whether any enabled task still needs a model call (all “as spoken” / off combinations bypass).
+    public var requiresAIModelInvocation: Bool {
+        let effectiveCleanup = cleanupEnabled && cleanupIntensity > 0.001
+        let tone =
+            toneAdjustmentEnabled
+            && formattingMode.allowedWritingStyles.contains(style)
+            && style != .none
+        let salutation =
+            salutationAdjustmentEnabled
+            && formattingMode.supportsSalutation
+            && salutation != .none
+        let format = formatAdaptationEnabled && formattingMode.appliesStructuralFormatting
+        return effectiveCleanup || tone || salutation || format
     }
 }
 
@@ -373,18 +470,18 @@ public enum AIProcessingOutcome: Sendable, Equatable {
 
     public var text: String {
         switch self {
-        case let .bypassed(text, _), let .processed(text, _), let .failedFallback(text, _, _):
+        case .bypassed(let text, _), .processed(let text, _), .failedFallback(let text, _, _):
             return text
         }
     }
 
     public var diagnosticMessage: String? {
         switch self {
-        case let .bypassed(_, reason):
+        case .bypassed(_, let reason):
             return reason
-        case let .processed(_, modelID):
+        case .processed(_, let modelID):
             return "AI processing applied with model \(modelID)."
-        case let .failedFallback(_, _, reason):
+        case .failedFallback(_, _, let reason):
             return reason
         }
     }

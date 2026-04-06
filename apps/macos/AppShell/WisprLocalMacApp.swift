@@ -13,6 +13,38 @@ private enum WisprSmokeLaunch {
     }
 }
 
+/// Hält den einmaligen `didFinishLaunching`-Observer, ohne `var`-Capture in einer `@Sendable`-Closure.
+private final class SmokeOpenSettingsLaunchObserver {
+    private var notificationToken: NSObjectProtocol?
+    private static var retained: SmokeOpenSettingsLaunchObserver?
+
+    static func start(appState: MacAppState) {
+        retained = SmokeOpenSettingsLaunchObserver(appState: appState)
+    }
+
+    private init(appState: MacAppState) {
+        notificationToken = NotificationCenter.default.addObserver(
+            forName: NSApplication.didFinishLaunchingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else {
+                Self.retained = nil
+                return
+            }
+            if let token = notificationToken {
+                NotificationCenter.default.removeObserver(token)
+                notificationToken = nil
+            }
+            Self.retained = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                appState.openSettingsWindow()
+            }
+        }
+    }
+}
+
 @main
 struct WisprLocalMacApp: App {
     @StateObject private var updaterController: SparkleUpdaterController
@@ -33,20 +65,7 @@ struct WisprLocalMacApp: App {
         self.settingsWindowPresenter = settingsWindowPresenter
 
         if WisprSmokeLaunch.shouldOpenSettingsAfterLaunch {
-            var launchObserver: NSObjectProtocol?
-            launchObserver = NotificationCenter.default.addObserver(
-                forName: NSApplication.didFinishLaunchingNotification,
-                object: nil,
-                queue: .main
-            ) { _ in
-                if let launchObserver {
-                    NotificationCenter.default.removeObserver(launchObserver)
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                    appState.openSettingsWindow()
-                }
-            }
+            SmokeOpenSettingsLaunchObserver.start(appState: appState)
         }
     }
 
@@ -93,7 +112,7 @@ private final class SettingsWindowPresenter {
             rootView: SettingsView().environmentObject(appState))
         let window = NSWindow(contentViewController: hostingController)
         window.title = "WisprLocal"
-        window.toolbarStyle = .preference
+        window.toolbarStyle = .unified
         window.titleVisibility = .visible
         // Standard-Titelzeile: mit fullSizeContentView + transparenter Bar sitzt der Titel optisch falsch
         // und überlappt leicht mit dem SwiftUI-Inhalt.
@@ -105,7 +124,7 @@ private final class SettingsWindowPresenter {
             width: MacNativeDesign.SettingsSplitView.windowMinWidth,
             height: 620
         )
-        window.contentMaxSize = NSSize(width: 1_180, height: 1_080)
+        window.contentMaxSize = NSSize(width: 4_000, height: 1_200)
         window.center()
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("WisprLocalSettingsWindow")
@@ -117,14 +136,18 @@ private final class SettingsWindowPresenter {
 struct MenuBarContentView: View {
     @EnvironmentObject private var appState: MacAppState
     @EnvironmentObject private var updaterController: SparkleUpdaterController
-    @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.german.rawValue
+    @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.system.rawValue
 
-    private var appLanguage: AppLanguage {
-        AppLanguage(rawValue: uiLanguageRaw) ?? .german
+    private var storedLanguage: AppLanguage {
+        AppLanguage(rawValue: uiLanguageRaw) ?? .system
+    }
+
+    private var effectiveLanguage: AppLanguage {
+        storedLanguage.contentLanguage
     }
 
     private func text(_ german: String, _ english: String) -> String {
-        appLanguage.text(german, english)
+        storedLanguage.text(german, english)
     }
 
     private var latestDictationPreview: String {
@@ -230,7 +253,7 @@ struct MenuBarContentView: View {
     private var secondaryLine: String? {
         if appState.isSessionActive {
             return
-                "\(appState.selectedLanguage.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)) • \(insertionModeLabel)"
+                "\(appState.selectedLanguage.localizedDisplayName(interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)) • \(insertionModeLabel)"
         }
         if appState.recordingStatus == "Error" {
             return appState.statusHintText
@@ -350,9 +373,254 @@ struct MenuBarContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var menuBarPermissionSection: some View {
+        if appState.hasPermissionProblems {
+            if !appState.compactMenuBarDesign {
+                Text(text("Berechtigungen", "Permissions"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if appState.microphonePermissionStatus != .granted {
+                Button(text("Mikrofonzugriff öffnen", "Open microphone access")) {
+                    appState.openMicrophoneSettings()
+                }
+            }
+            if appState.accessibilityPermissionStatus != .granted {
+                Button(text("Bedienungshilfen öffnen", "Open accessibility access")) {
+                    appState.openAccessibilitySettings()
+                }
+            }
+            Divider()
+        }
+    }
+
+    @ViewBuilder
+    private var menuBarAISettingsButton: some View {
+        Button {
+            appState.openAISettingsWindow()
+        } label: {
+            MenuActionLabel(
+                title: text("AI-Einstellungen…", "AI settings…"),
+                shortcutGlyph: nil,
+                shortcutText: nil
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var menuBarNonCompactAIWhenEnabled: some View {
+        Picker(text("LLM", "LLM"), selection: selectedAIModelBinding) {
+            if appState.visibleAIModels.isEmpty {
+                Text(text("Keine Modelle erkannt", "No models detected")).tag("")
+            } else {
+                ForEach(appState.visibleAIModels) { model in
+                    Text(model.displayName).tag(model.id)
+                }
+            }
+        }
+        .disabled(appState.visibleAIModels.isEmpty)
+
+        Menu {
+            Toggle(
+                text("Inhaltsstreaming", "Content streaming"),
+                isOn: $appState.aiProcessingApplyDuringLiveInsertion
+            )
+            .disabled(!appState.streamingEnabled || appState.visibleAIModels.isEmpty)
+
+            Toggle(
+                text("Endergebnis einfügen", "Insert final result"),
+                isOn: $appState.aiProcessingApplyToFinalResult
+            )
+            .disabled(appState.visibleAIModels.isEmpty)
+        } label: {
+            MenuActionLabel(
+                title: text("AI anwenden bei", "Apply AI for"),
+                shortcutGlyph: nil,
+                shortcutText: nil
+            )
+        }
+
+        Menu {
+            Toggle(text("Stil / Ton", "Style / Tone"), isOn: $appState.aiTaskToneEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+            Toggle(text("Anrede", "Salutation"), isOn: $appState.aiTaskSalutationEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+            Toggle(text("Format / Modus", "Format / Mode"), isOn: $appState.aiTaskFormatEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+            Toggle(text("Bereinigen", "Clean up"), isOn: $appState.aiTaskCleanupEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+        } label: {
+            MenuActionLabel(
+                title: text("AI-Aufgaben", "AI tasks"),
+                shortcutGlyph: nil,
+                shortcutText: nil
+            )
+        }
+
+        if appState.aiShowsWritingStyleControls {
+            Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
+                ForEach(appState.availableAIWritingStyles) { style in
+                    Text(
+                        style.localizedDisplayName(
+                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                    )
+                    .tag(style)
+                }
+            }
+            .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+        }
+
+        if appState.aiShowsSalutationControls {
+            Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                ForEach(AISalutation.allCases) { salutation in
+                    Text(
+                        salutation.localizedDisplayName(
+                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                    )
+                    .tag(salutation)
+                }
+            }
+            .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+        }
+
+        if appState.aiShowsModeControls {
+            Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
+                ForEach(AIFormattingMode.allCases) { mode in
+                    Text(
+                        mode.localizedDisplayName(
+                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                    )
+                    .tag(mode)
+                }
+            }
+            .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+        }
+    }
+
+    @ViewBuilder
+    private var menuBarCompactAIWhenEnabled: some View {
+        Menu {
+            ForEach(appState.visibleAIModels) { model in
+                Button(model.displayName) {
+                    appState.selectedAIModelID = model.id
+                }
+            }
+        } label: {
+            MenuActionLabel(
+                title: text("LLM-Modell", "LLM model"),
+                shortcutGlyph: nil,
+                shortcutText: nil
+            )
+        }
+        .disabled(appState.visibleAIModels.isEmpty)
+
+        Menu {
+            Toggle(
+                text("Inhaltsstreaming", "Content streaming"),
+                isOn: $appState.aiProcessingApplyDuringLiveInsertion
+            )
+            .disabled(!appState.streamingEnabled || appState.visibleAIModels.isEmpty)
+
+            Toggle(
+                text("Endergebnis einfügen", "Insert final result"),
+                isOn: $appState.aiProcessingApplyToFinalResult
+            )
+            .disabled(appState.visibleAIModels.isEmpty)
+        } label: {
+            MenuActionLabel(
+                title: text("AI anwenden bei", "Apply AI for"),
+                shortcutGlyph: nil,
+                shortcutText: nil
+            )
+        }
+
+        Menu {
+            Toggle(text("Stil / Ton", "Style / Tone"), isOn: $appState.aiTaskToneEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+            Toggle(text("Anrede", "Salutation"), isOn: $appState.aiTaskSalutationEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+            Toggle(text("Format / Modus", "Format / Mode"), isOn: $appState.aiTaskFormatEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+            Toggle(text("Bereinigen", "Clean up"), isOn: $appState.aiTaskCleanupEnabled)
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+        } label: {
+            MenuActionLabel(
+                title: text("AI-Aufgaben", "AI tasks"),
+                shortcutGlyph: nil,
+                shortcutText: nil
+            )
+        }
+
+        if appState.aiShowsWritingStyleControls {
+            Menu {
+                ForEach(appState.availableAIWritingStyles) { style in
+                    Button {
+                        appState.aiWritingStyle = style
+                    } label: {
+                        Text(
+                            style.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                    }
+                }
+            } label: {
+                MenuActionLabel(
+                    title: text("Stil", "Style"),
+                    shortcutGlyph: nil,
+                    shortcutText: nil
+                )
+            }
+        }
+
+        if appState.aiShowsSalutationControls {
+            Menu {
+                ForEach(AISalutation.allCases) { salutation in
+                    Button {
+                        appState.aiSalutation = salutation
+                    } label: {
+                        Text(
+                            salutation.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                    }
+                }
+            } label: {
+                MenuActionLabel(
+                    title: text("Anrede", "Salutation"),
+                    shortcutGlyph: nil,
+                    shortcutText: nil
+                )
+            }
+        }
+
+        if appState.aiShowsModeControls {
+            Menu {
+                ForEach(AIFormattingMode.allCases) { mode in
+                    Button {
+                        appState.aiFormattingMode = mode
+                    } label: {
+                        Text(
+                            mode.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                    }
+                }
+            } label: {
+                MenuActionLabel(
+                    title: text("Modus", "Mode"),
+                    shortcutGlyph: nil,
+                    shortcutText: nil
+                )
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: appState.compactMenuBarDesign ? 6 : 8) {
             startDictationButton
+
+            menuBarPermissionSection
 
             statusHeader
 
@@ -365,15 +633,21 @@ struct MenuBarContentView: View {
 
             Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
                 ForEach(visibleMenuBarLanguages) { language in
-                    Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
-                        .tag(language)
+                    Text(
+                        language.localizedDisplayName(
+                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                    )
+                    .tag(language)
                 }
             }
 
             Picker(text("Übersetzung", "Translation"), selection: $appState.translationOutputMode) {
                 ForEach(TranslationOutputMode.allCases) { mode in
-                    Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
-                        .tag(mode)
+                    Text(
+                        mode.localizedDisplayName(
+                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                    )
+                    .tag(mode)
                 }
             }
 
@@ -395,7 +669,7 @@ struct MenuBarContentView: View {
                     ForEach(DictationPerformance.allCases) { profile in
                         Text(
                             profile.localizedDisplayName(
-                                interfaceLanguageCode: appLanguage.rawValue)
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
                         ).tag(profile)
                     }
                 }
@@ -409,108 +683,15 @@ struct MenuBarContentView: View {
                 )
                 .disabled(!hasQuickSettingsAIModels)
 
-                if appState.compactMenuBarDesign {
-                    Menu {
-                        Toggle(
-                            text("Inhaltsstreaming", "Content streaming"),
-                            isOn: $appState.aiProcessingApplyDuringLiveInsertion
-                        )
-                        .disabled(
-                            !appState.aiProcessingEnabled || !appState.streamingEnabled
-                                || appState.availableQuickSettingsAIModels.isEmpty)
-
-                        Toggle(
-                            text("Endergebnis einfügen", "Insert final result"),
-                            isOn: $appState.aiProcessingApplyToFinalResult
-                        )
-                        .disabled(
-                            !appState.aiProcessingEnabled
-                                || appState.availableQuickSettingsAIModels.isEmpty)
-                    } label: {
-                        MenuActionLabel(
-                            title: text("Einsatz", "Use"),
-                            shortcutGlyph: nil,
-                            shortcutText: nil
-                        )
-                    }
-                    .disabled(appState.availableQuickSettingsAIModels.isEmpty)
-
-                    Button {
-                        appState.openAISettingsWindow()
-                    } label: {
-                        MenuActionLabel(
-                            title: text("AI-Einstellungen…", "AI settings…"),
-                            shortcutGlyph: nil,
-                            shortcutText: nil
-                        )
-                    }
-                } else {
-                    Picker(text("LLM", "LLM"), selection: selectedAIModelBinding) {
-                        if appState.visibleAIModels.isEmpty {
-                            Text(text("Keine Modelle erkannt", "No models detected")).tag("")
-                        } else {
-                            ForEach(appState.visibleAIModels) { model in
-                                Text(model.displayName).tag(model.id)
-                            }
-                        }
-                    }
-                    .disabled(appState.visibleAIModels.isEmpty)
-
-                    if appState.aiShowsModeControls {
-                        Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
-                            ForEach(AIFormattingMode.allCases) { mode in
-                                Text(
-                                    mode.localizedDisplayName(
-                                        interfaceLanguageCode: appLanguage.rawValue)
-                                ).tag(mode)
-                            }
-                        }
-                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-                    }
-
-                    if appState.aiShowsWritingStyleControls {
-                        Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
-                            ForEach(appState.availableAIWritingStyles) { style in
-                                Text(
-                                    style.localizedDisplayName(
-                                        interfaceLanguageCode: appLanguage.rawValue)
-                                ).tag(style)
-                            }
-                        }
-                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-                    }
-
-                    if appState.aiShowsSalutationControls {
-                        Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
-                            ForEach(AISalutation.allCases) { salutation in
-                                Text(
-                                    salutation.localizedDisplayName(
-                                        interfaceLanguageCode: appLanguage.rawValue)
-                                ).tag(salutation)
-                            }
-                        }
-                        .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                if appState.aiProcessingEnabled {
+                    if appState.compactMenuBarDesign {
+                        menuBarCompactAIWhenEnabled
+                    } else {
+                        menuBarNonCompactAIWhenEnabled
                     }
                 }
-            }
 
-            if appState.hasPermissionProblems {
-                Divider()
-                if !appState.compactMenuBarDesign {
-                    Text(text("Berechtigungen", "Permissions"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if appState.microphonePermissionStatus != .granted {
-                    Button(text("Mikrofonzugriff öffnen", "Open microphone access")) {
-                        appState.openMicrophoneSettings()
-                    }
-                }
-                if appState.accessibilityPermissionStatus != .granted {
-                    Button(text("Bedienungshilfen öffnen", "Open accessibility access")) {
-                        appState.openAccessibilitySettings()
-                    }
-                }
+                menuBarAISettingsButton
             }
 
             if !appState.latestDictationText.isEmpty {

@@ -1,35 +1,92 @@
 import AIProcessingCore
 import ASRCore
 import AppKit
-import Carbon
 import SnippetCore
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: MacAppState
-    @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.german.rawValue
+    @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.system.rawValue
 
     @State private var diagnosticsExpanded = false
     @State private var newSnippetTrigger: String = ""
     @State private var newSnippetReplacement: String = ""
     @State private var searchText: String = ""
     @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
+    @State private var showsTabInfoPopover = false
+    @State private var selectedRemoteProviderPreset: AIRemoteProviderPreset?
+    @State private var addProviderDisclosureExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     private let personalWebsiteURL = URL(string: "https://leon-stadler.com")!
 
-    private static let historyDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .medium
-        return formatter
-    }()
+    private var appMarketingVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
 
-    private var appLanguage: AppLanguage {
-        AppLanguage(rawValue: uiLanguageRaw) ?? .german
+    private var appBuildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+    }
+
+    /// Suchergebnisse: App-Metadaten nur bei passenden Suchbegriffen, damit die Liste nicht aufgebläht wird.
+    private var aboutAppMetadataMatchesSearch: Bool {
+        matches([
+            "version", "build", "app", "wispr", "wisprlocal", "bundle", "cfbundle",
+        ])
+    }
+
+    private var trimmedNewSnippetTrigger: String {
+        newSnippetTrigger.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedNewSnippetReplacement: String {
+        newSnippetReplacement.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var newSnippetTriggerIsDuplicate: Bool {
+        let trigger = trimmedNewSnippetTrigger
+        guard !trigger.isEmpty else { return false }
+        return appState.snippetRules.contains { rule in
+            rule.caseSensitive
+                ? rule.trigger == trigger
+                : rule.trigger.lowercased() == trigger.lowercased()
+        }
+    }
+
+    private var canCommitNewSnippet: Bool {
+        !trimmedNewSnippetTrigger.isEmpty
+            && !trimmedNewSnippetReplacement.isEmpty
+            && !newSnippetTriggerIsDuplicate
+    }
+
+    private func commitNewSnippet() {
+        guard canCommitNewSnippet else { return }
+        appState.addSnippet(
+            trigger: trimmedNewSnippetTrigger,
+            replacement: trimmedNewSnippetReplacement
+        )
+        newSnippetTrigger = ""
+        newSnippetReplacement = ""
+    }
+
+    private var storedLanguage: AppLanguage {
+        AppLanguage(rawValue: uiLanguageRaw) ?? .system
+    }
+
+    private var effectiveLanguage: AppLanguage {
+        storedLanguage.contentLanguage
     }
 
     private func text(_ german: String, _ english: String) -> String {
-        appLanguage.text(german, english)
+        storedLanguage.text(german, english)
+    }
+
+    private func formattedHistoryDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = storedLanguage.localeForFormatting
+        formatter.dateStyle = .short
+        formatter.timeStyle = .medium
+        return formatter.string(from: date)
     }
 
     private var searchQuery: String {
@@ -195,7 +252,10 @@ struct SettingsView: View {
     }
 
     private var snippetsHasMatches: Bool {
-        matches(["snippet", "textbaustein", "replacement", "trigger"]) || !filteredSnippets.isEmpty
+        matches([
+            "snippet", "textbaustein", "replacement", "trigger", "json", "import", "export",
+            "importieren", "exportieren",
+        ]) || !filteredSnippets.isEmpty
     }
 
     private var advancedHasMatches: Bool {
@@ -203,6 +263,7 @@ struct SettingsView: View {
             "update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit",
             "storage", "folder", "app support", "logs", "protokolle", "voice", "modell", "model",
             "warm", "dauer", "duration", "laufzeit", "speicher halten", "runtime",
+            "version", "build", "app", "wispr", "wisprlocal", "bundle", "cfbundle",
         ]) || appState.diagnosticsText.lowercased().contains(searchQuery)
             || appState.capabilitySummary.lowercased().contains(searchQuery)
             || appState.updaterStatusText.lowercased().contains(searchQuery)
@@ -223,60 +284,25 @@ struct SettingsView: View {
         return preview.isEmpty ? appState.diagnosticsText : preview
     }
 
-    /// Feste Suchzeile über der Liste (wie Systemeinstellungen): kein Überlagern durch scrollende Zeilen, kein Glass hinter der Suche.
-    private var settingsSidebarSearchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
-            TextField(
-                "",
-                text: $searchText,
-                prompt: Text(text("Einstellungen durchsuchen", "Search settings"))
-            )
-            .textFieldStyle(.plain)
-            .font(.body)
-            .accessibilityLabel(text("Einstellungen durchsuchen", "Search settings"))
-
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(text("Suche löschen", "Clear search"))
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .settingsSidebarSearchFieldChrome()
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
+    private var settingsNavigationTitle: String {
+        isSearching
+            ? text("Suchergebnisse", "Search Results")
+            : currentSelectedTab.title(language: storedLanguage)
     }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $splitColumnVisibility) {
-            VStack(alignment: .leading, spacing: 0) {
-                settingsSidebarSearchBar
-                List(selection: selectedTabSelection) {
-                    Section {
-                        ForEach(SettingsTab.allCases, id: \.self) { tab in
-                            Label(tab.title(language: appLanguage), systemImage: tab.symbolName)
-                                .tag(tab)
-                        }
+            List(selection: selectedTabSelection) {
+                Section {
+                    ForEach(SettingsTab.allCases, id: \.self) { tab in
+                        Label(tab.title(language: storedLanguage), systemImage: tab.symbolName)
+                            .tag(tab)
+                            .imageScale(.medium)
                     }
                 }
-                .listStyle(.sidebar)
-                .environment(\.defaultMinListRowHeight, 36)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .listStyle(.sidebar)
+            .environment(\.defaultMinListRowHeight, 36)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .navigationSplitViewColumnWidth(
                 min: MacNativeDesign.SettingsSplitView.sidebarMinWidth,
@@ -284,51 +310,85 @@ struct SettingsView: View {
                 max: MacNativeDesign.SettingsSplitView.sidebarMaxWidth
             )
         } detail: {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Color.clear.frame(height: 76)
-                    Group {
-                        if isSearching {
-                            searchResultsForm
-                        } else {
-                            selectedForm
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Group {
+                            if isSearching {
+                                searchResultsForm
+                            } else {
+                                selectedForm
+                            }
                         }
+                        .frame(maxWidth: 760, alignment: .leading)
+                        .transition(.opacity)
+                        .animation(
+                            accessibilityReduceMotion ? .none : .easeInOut(duration: 0.12),
+                            value: isSearching
+                        )
                     }
-                    .frame(maxWidth: 760, alignment: .leading)
-                }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 28)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(
-                        isSearching
-                            ? text("Suchergebnisse", "Search Results")
-                            : currentSelectedTab.title(language: appLanguage)
-                    )
-                    .font(.largeTitle.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: 760, alignment: .leading)
                     .padding(.horizontal, 28)
-                    .padding(.top, 22)
-                    .padding(.bottom, 12)
+                    .padding(.top, 20)
+                    .padding(.bottom, 28)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .settingsDetailTitleBarChrome()
-                .allowsHitTesting(false)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle(settingsNavigationTitle)
             }
             .navigationSplitViewColumnWidth(
                 min: MacNativeDesign.SettingsSplitView.detailMinWidth,
                 ideal: 720
             )
         }
-        .onChange(of: splitColumnVisibility) { _, new in
-            if new == .detailOnly {
-                splitColumnVisibility = .all
+        .searchable(
+            text: $searchText,
+            placement: .automatic,
+            prompt: text("Einstellungen durchsuchen", "Search settings")
+        )
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    let next: NavigationSplitViewVisibility =
+                        splitColumnVisibility == .detailOnly ? .all : .detailOnly
+                    if accessibilityReduceMotion {
+                        splitColumnVisibility = next
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            splitColumnVisibility = next
+                        }
+                    }
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .accessibilityLabel(
+                    text("Seitenleiste ein- oder ausblenden", "Show or hide sidebar")
+                )
+                .help(text("Seitenleiste ein- oder ausblenden", "Show or hide sidebar"))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showsTabInfoPopover.toggle()
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .accessibilityLabel(
+                    text("Informationen zu diesem Bereich", "Information about this section")
+                )
+                // Kein `.help`: vermeidet den nativen Tooltip neben dem Klick-Popover.
+                .popover(isPresented: $showsTabInfoPopover, arrowEdge: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(currentSelectedTab.title(language: storedLanguage))
+                            .font(.headline)
+                        Text(currentSelectedTab.details(language: storedLanguage))
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .frame(minWidth: 280, maxWidth: 320, alignment: .leading)
+                }
             }
         }
-        .environment(\.locale, appLanguage.locale)
+        .environment(\.locale, storedLanguage.localeForFormatting)
         .frame(
             minWidth: MacNativeDesign.SettingsSplitView.windowMinWidth,
             idealWidth: 1020,
@@ -387,7 +447,13 @@ struct SettingsView: View {
     private var selectedTabSelection: Binding<SettingsTab> {
         Binding(
             get: { appState.selectedSettingsTab },
-            set: { appState.selectedSettingsTab = $0 }
+            set: { newValue in
+                // List(selection:) schreibt während View-Updates; @Published sofort zu setzen löst
+                // „Publishing changes from within view updates“ aus.
+                DispatchQueue.main.async {
+                    appState.selectedSettingsTab = newValue
+                }
+            }
         )
     }
 
@@ -503,7 +569,7 @@ struct SettingsView: View {
     private var aboutForm: some View {
         Form {
             Section(text("Über mich", "About me")) {
-                aboutProfileContent
+                aboutDeveloperRows
             }
             Section(text("Changelog", "Changelog")) {
                 aboutChangelogContent
@@ -520,8 +586,14 @@ struct SettingsView: View {
 
     private var snippetsForm: some View {
         Form {
-            Section(text("Snippets", "Snippets")) {
-                snippetsContent
+            Section(text("Neues Snippet", "New snippet")) {
+                snippetNewEntryRows
+            }
+            Section(text("Import und Export", "Import and export")) {
+                snippetImportExportRows
+            }
+            Section(text("Gespeicherte Snippets", "Saved snippets")) {
+                snippetSavedRows
             }
         }
         .formStyle(.grouped)
@@ -532,6 +604,9 @@ struct SettingsView: View {
         Form {
             Section {
                 advancedOverviewContent
+            }
+            Section(text("App", "App")) {
+                aboutAppInfoRows
             }
             Section(text("Modelllaufzeit", "Model runtime")) {
                 voiceModelRuntimeContent
@@ -574,8 +649,11 @@ struct SettingsView: View {
 
             if speechHasMatches {
                 Section(text("Speech", "Speech")) {
+                    speechOverviewContent
                     speechProviderContent
                     speechModelSelectionContent
+                    speechLanguageContent
+                    speechQualityContent
                     translationContent
                     installedSpeechModelsContent
                 }
@@ -592,6 +670,8 @@ struct SettingsView: View {
                 Section(text("Kurzbefehle", "Shortcuts")) {
                     startStopShortcutContent
                     holdShortcutContent
+                    cancelShortcutContent
+                    modeSwitchShortcutContent
                 }
             }
 
@@ -606,13 +686,14 @@ struct SettingsView: View {
             if historyHasMatches {
                 Section(text("Verlauf", "History")) {
                     historyActionContent
+                    historyRetentionContent
                     historyEntriesContent
                 }
             }
 
             if aboutHasMatches {
                 Section(text("About", "About")) {
-                    aboutProfileContent
+                    aboutDeveloperRows
                     aboutChangelogContent
                     if appState.isLicenseUIEnabledForDevelopment {
                         aboutSupportContent
@@ -622,12 +703,17 @@ struct SettingsView: View {
 
             if snippetsHasMatches {
                 Section(text("Snippets", "Snippets")) {
-                    snippetsContent
+                    snippetNewEntryRows
+                    snippetImportExportRows
+                    snippetSavedRows
                 }
             }
 
             if advancedHasMatches {
                 Section(text("Erweitert", "Advanced")) {
+                    if aboutAppMetadataMatchesSearch {
+                        aboutAppInfoRows
+                    }
                     advancedOverviewContent
                     voiceModelRuntimeContent
                     updatesContent
@@ -662,7 +748,8 @@ struct SettingsView: View {
             LabeledContent {
                 Picker(text("App-Sprache", "App Language"), selection: $uiLanguageRaw) {
                     ForEach(AppLanguage.allCases) { language in
-                        Text(language.displayName).tag(language.rawValue)
+                        Text(language.pickerDisplayName(uiContentLanguage: effectiveLanguage)).tag(
+                            language.rawValue)
                     }
                 }
                 .labelsHidden()
@@ -722,13 +809,16 @@ struct SettingsView: View {
         }
     }
 
-    @ViewBuilder
     private var advancedOverviewContent: some View {
-        if matches([
-            "update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit",
-        ]) {
-            EmptyView()
-        }
+        Text(
+            text(
+                "Hier liegen Laufzeitoptionen, Speicherort, Updates und technische Diagnose. Nur ändern, wenn du weißt, warum du es brauchst.",
+                "Model runtime, storage location, updates, and technical diagnostics live here. Change these only when you know why you need them."
+            )
+        )
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -775,7 +865,7 @@ struct SettingsView: View {
                     ForEach(VoiceModelActiveDuration.allCases) { duration in
                         Text(
                             duration.localizedDisplayName(
-                                interfaceLanguageCode: appLanguage.rawValue)
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
                         ).tag(duration)
                     }
                 }
@@ -824,76 +914,50 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var aboutProfileContent: some View {
+    private var aboutAppInfoRows: some View {
+        LabeledContent(text("App", "App")) {
+            Text("WisprLocal")
+        }
+        LabeledContent(text("Version", "Version")) {
+            Text("\(appMarketingVersion) (\(appBuildNumber))")
+                .monospacedDigit()
+                .textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private var aboutDeveloperRows: some View {
         if matches([
             "about", "über", "ueber", "leon", "stadler", "website", "webseite", "proprietär",
             "proprietary", "lizenz", "intermedia", "design", "fotografie", "vorarlberg",
         ]) {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .center, spacing: 14) {
-                    ZStack {
-                        Circle()
-                            .fill(.quaternary.opacity(0.55))
-                            .frame(width: 52, height: 52)
-
-                        Text("LS")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                    }
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Leon Stadler")
-                            .font(.title3.weight(.semibold))
-
-                        Text(
-                            text(
-                                "Kommunikationsdesigner, Entwickler und Intermedia-Student",
-                                "Communication designer, developer, and Intermedia student"
-                            )
-                        )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                Text(
-                    text(
-                        "Ich bin in München aufgewachsen, lebe heute am Bodensee und arbeite an zeitgemäßen digitalen Produkten zwischen Design, Technik und kreativer Problemlösung. WisprLocal ist aus genau diesem Zusammenspiel entstanden: eine lokale Offline-Diktierlösung für den Mac, die ruhig, nativ und alltagstauglich wirkt.",
-                        "I grew up in Munich, now live near Lake Constance, and work on contemporary digital products across design, technology, and creative problem-solving. WisprLocal grew out of exactly that intersection: a local offline dictation tool for the Mac that aims to feel calm, native, and genuinely useful in everyday work."
-                    )
-                )
-                .fixedSize(horizontal: false, vertical: true)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 10) {
-                    AboutFactRow(
-                        title: text("Schwerpunkte", "Focus"),
-                        detail: text(
-                            "Webdesign, UX/UI, Prototyping, Fotografie und kreative technische Systeme",
-                            "Web design, UX/UI, prototyping, photography, and creative technical systems"
-                        )
-                    )
-                    AboutFactRow(
-                        title: text("Standort", "Location"),
-                        detail: text(
-                            "Bodensee / Dornbirn, Vorarlberg",
-                            "Lake Constance / Dornbirn, Vorarlberg")
-                    )
-                    AboutFactRow(
-                        title: text("Projektgedanke", "Project intent"),
-                        detail: text(
-                            "Lokale, datensparsame Tools mit klarer nativer Benutzerführung",
-                            "Local, privacy-conscious tools with clear native user experience")
-                    )
-                }
-
-                Link(destination: personalWebsiteURL) {
-                    Label(text("Mehr über mich", "Learn more about me"), systemImage: "globe")
-                }
-                .wisprSecondaryButtonStyle()
+            LabeledContent(text("Entwickler", "Developer")) {
+                Text("Leon Stadler")
             }
-            .padding(.vertical, 4)
+            Text(
+                text(
+                    "Ich bin in München aufgewachsen, lebe heute am Bodensee und arbeite an digitalen Produkten, die Design, Technik und Alltag sinnvoll verbinden. Schwerpunkte sind Webdesign, UX/UI, Prototyping und kreative technische Systeme — mit einem starken Blick auf ruhige, native Oberflächen.",
+                    "I grew up in Munich and now live near Lake Constance, building digital products that connect design, technology, and everyday work. My focus is web design, UX/UI, prototyping, and creative technical systems — with a strong preference for calm, native-feeling interfaces."
+                )
+            )
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Text(
+                text(
+                    "WisprLocal ist daraus entstanden: eine lokale, datensparsame Diktierlösung für den Mac, die sich nicht aufdrängt, sondern zuverlässig im Hintergrund mitarbeitet.",
+                    "WisprLocal grew out of that mindset: a local, privacy-conscious dictation tool for the Mac that stays out of the way while remaining dependable."
+                )
+            )
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Link(destination: personalWebsiteURL) {
+                Text(text("Website besuchen", "Visit website"))
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -903,7 +967,8 @@ struct SettingsView: View {
             "changelog", "neuigkeiten", "release", "release notes", "änderungen", "aenderungen",
             "features", "fixes",
         ]) {
-            ChangelogSectionView(entries: AppChangelogCatalog.latestEntries, language: appLanguage)
+            ChangelogSectionView(
+                entries: AppChangelogCatalog.latestEntries, language: effectiveLanguage)
         }
     }
 
@@ -1146,7 +1211,7 @@ struct SettingsView: View {
                     ForEach(appState.selectedVoiceModelLanguageOptions) { language in
                         Text(
                             language.localizedDisplayName(
-                                interfaceLanguageCode: appLanguage.rawValue)
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
                         ).tag(language)
                     }
                 }
@@ -1194,8 +1259,11 @@ struct SettingsView: View {
                     selection: $appState.performanceProfile
                 ) {
                     ForEach(DictationPerformance.allCases) { mode in
-                        Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
-                            .tag(mode)
+                        Text(
+                            mode.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                        .tag(mode)
                     }
                 }
                 .labelsHidden()
@@ -1241,8 +1309,11 @@ struct SettingsView: View {
                     selection: $appState.translationOutputMode
                 ) {
                     ForEach(TranslationOutputMode.allCases) { mode in
-                        Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
-                            .tag(mode)
+                        Text(
+                            mode.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                        .tag(mode)
                     }
                 }
                 .labelsHidden()
@@ -1354,7 +1425,8 @@ struct SettingsView: View {
                 ) {
                     ForEach(LiveRewriteScope.allCases) { scope in
                         Text(
-                            scope.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)
+                            scope.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
                         ).tag(scope)
                     }
                 }
@@ -1481,6 +1553,18 @@ struct SettingsView: View {
             )
             .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
+            if !appState.aiProcessingEnabled {
+                Text(
+                    text(
+                        "Richte weiter unten Anbieter und Modell ein, dann aktiviere die Verarbeitung. In der Menüleiste erscheinen LLM und Feinsteuerung erst nach Aktivierung.",
+                        "Configure a provider and model below, then enable processing. The menu bar shows the LLM and fine controls only after processing is enabled."
+                    )
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
             if appState.aiProcessingEnabled {
                 LabeledContent {
                     VStack(alignment: .trailing, spacing: 8) {
@@ -1510,10 +1594,6 @@ struct SettingsView: View {
                 LabeledContent {
                     VStack(alignment: .trailing, spacing: 8) {
                         Toggle(
-                            text("Bereinigen", "Clean up"),
-                            isOn: $appState.aiTaskCleanupEnabled
-                        )
-                        Toggle(
                             text("Stil / Ton", "Style / Tone"),
                             isOn: $appState.aiTaskToneEnabled
                         )
@@ -1525,43 +1605,22 @@ struct SettingsView: View {
                             text("Format / Modus", "Format / Mode"),
                             isOn: $appState.aiTaskFormatEnabled
                         )
+                        Toggle(
+                            text("Bereinigen", "Clean up"),
+                            isOn: $appState.aiTaskCleanupEnabled
+                        )
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 } label: {
                     SettingsFieldLabel(
                         title: text("AI-Aufgaben", "AI tasks"),
                         helpText: text(
-                            "Hier kannst du Bereinigung, Stil, Anrede und Format frei kombinieren. Die Menüleiste zeigt nur die Regler an, die aus diesen Aufgaben aktuell wirklich relevant sind.",
-                            "Here you can freely combine cleanup, style, salutation, and formatting. The menu bar only shows controls that are currently relevant for these enabled tasks."
+                            "Reihenfolge wie in der Menüleiste: Stil, Anrede, Format, Bereinigung. Kombinierbar; „Wie gesprochen“ bei Format oder Stil/Anrede bedeutet: kein Zusatzaufwand in dieser Dimension.",
+                            "Same order as the menu bar: style, salutation, format, cleanup. “As spoken” for format or style/salutation means no extra work in that dimension."
                         )
                     )
                 }
                 .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-
-                if appState.aiShowsModeControls {
-                    LabeledContent {
-                        Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
-                            ForEach(AIFormattingMode.allCases) { mode in
-                                Text(
-                                    mode.localizedDisplayName(
-                                        interfaceLanguageCode: appLanguage.rawValue)
-                                ).tag(mode)
-                            }
-                        }
-                        .labelsHidden()
-                        .wisprSettingsPickerStyle()
-                        .settingsFormMenuPickerSlot(minWidth: 220)
-                    } label: {
-                        SettingsFieldLabel(
-                            title: text("Modus", "Mode"),
-                            helpText: text(
-                                "Legt fest, für welche Art von Text die AI optimieren soll, zum Beispiel E-Mail, Nachricht, Dokumentation oder wissenschaftliche Arbeit.",
-                                "Defines which kind of text the AI should optimize for, such as email, message, documentation, or scientific writing."
-                            )
-                        )
-                    }
-                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-                }
 
                 if appState.aiShowsWritingStyleControls {
                     LabeledContent {
@@ -1572,7 +1631,8 @@ struct SettingsView: View {
                             ForEach(appState.availableAIWritingStyles) { style in
                                 Text(
                                     style.localizedDisplayName(
-                                        interfaceLanguageCode: appLanguage.rawValue)
+                                        interfaceLanguageCode: effectiveLanguage
+                                            .embeddedInterfaceCode)
                                 ).tag(style)
                             }
                         }
@@ -1597,7 +1657,8 @@ struct SettingsView: View {
                             ForEach(AISalutation.allCases) { salutation in
                                 Text(
                                     salutation.localizedDisplayName(
-                                        interfaceLanguageCode: appLanguage.rawValue)
+                                        interfaceLanguageCode: effectiveLanguage
+                                            .embeddedInterfaceCode)
                                 ).tag(salutation)
                             }
                         }
@@ -1615,6 +1676,67 @@ struct SettingsView: View {
                     }
                     .disabled(appState.selectedAIModel?.availability.isAvailable != true)
                 }
+
+                if appState.aiShowsModeControls {
+                    LabeledContent {
+                        Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
+                            ForEach(AIFormattingMode.allCases) { mode in
+                                Text(
+                                    mode.localizedDisplayName(
+                                        interfaceLanguageCode: effectiveLanguage
+                                            .embeddedInterfaceCode)
+                                ).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .wisprSettingsPickerStyle()
+                        .settingsFormMenuPickerSlot(minWidth: 220)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Modus", "Mode"),
+                            helpText: text(
+                                "„Wie gesprochen“: keine aufgezwungene Struktur. „Automatische Formatierung“: aus dem Gesprochenen Listen und Absätze ableiten. Weitere Modi richten Text an E-Mail, Chat usw. aus.",
+                                "“As spoken”: no imposed structure. “Automatic formatting” infers lists and paragraphs from speech. Other modes target email, chat, and similar shapes."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
+
+                if appState.aiTaskCleanupEnabled {
+                    LabeledContent {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            Slider(
+                                value: $appState.aiCleanupIntensity,
+                                in: 0...1,
+                                label: {
+                                    Text(text("Bereinigungsstärke", "Cleanup strength"))
+                                }
+                            )
+                            .frame(maxWidth: 280)
+                            Text(
+                                text(
+                                    "Ganz links: praktisch keine Bereinigung (kein Modellaufruf, wenn sonst nichts aktiv ist). Rechts: kräftigere Korrektur.",
+                                    "Far left: almost no cleanup (and no model call if nothing else is active). Right: stronger cleanup."
+                                )
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 280, alignment: .trailing)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Bereinigung", "Cleanup"),
+                            helpText: text(
+                                "Nur in den Einstellungen; steuert, wie aggressiv erkannt wird und korrigiert wird.",
+                                "Settings only; controls how aggressively recognition issues are fixed."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
             }
         }
     }
@@ -1623,18 +1745,57 @@ struct SettingsView: View {
     private var aiProviderContent: some View {
         if aiHasMatches {
             VStack(alignment: .leading, spacing: 14) {
-                Text(text("Anbieter hinzufügen", "Add provider"))
-                    .font(.headline)
+                DisclosureGroup(
+                    isExpanded: $addProviderDisclosureExpanded,
+                    content: {
+                        providerPresetGrid
+                        providerPresetAddConfirmationRow
+                    },
+                    label: {
+                        Text(text("Anbieter hinzufügen", "Add provider"))
+                            .font(.headline)
+                    }
+                )
 
-                providerPresetGrid
-
-                if appState.remoteProviders.isEmpty {
-                    EmptyView()
-                } else {
+                if !appState.remoteProviders.isEmpty {
+                    Text(text("Aktiver Anbieter", "Active provider"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
                     providerSelectionRow
                     providerEditorCard
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var providerPresetAddConfirmationRow: some View {
+        if let preset = selectedRemoteProviderPreset {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(
+                    text(
+                        "Ausgewählt: \(preset.localizedDisplayName(interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)). Mit „Hinzufügen“ in die Liste übernehmen.",
+                        "Selected: \(preset.localizedDisplayName(interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)). Use “Add” to add it to the list."
+                    )
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    Button(text("Abbrechen", "Cancel")) {
+                        selectedRemoteProviderPreset = nil
+                    }
+                    .buttonStyle(.bordered)
+                    Button(text("Hinzufügen", "Add")) {
+                        appState.addRemoteProvider(preset: preset)
+                        selectedRemoteProviderPreset = nil
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(.top, 6)
         }
     }
 
@@ -1669,29 +1830,48 @@ struct SettingsView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)],
-                alignment: .leading,
-                spacing: 10
-            ) {
-                ForEach(presets) { preset in
-                    Button {
-                        appState.addRemoteProvider(preset: preset)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(
-                                preset.localizedDisplayName(
-                                    interfaceLanguageCode: appLanguage.rawValue)
+            WisprGroupedGlassEffectContainer(spacing: 10) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 10
+                ) {
+                    ForEach(presets) { preset in
+                        let isSelected = selectedRemoteProviderPreset == preset
+                        Button {
+                            selectedRemoteProviderPreset = preset
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(
+                                    preset.localizedDisplayName(
+                                        interfaceLanguageCode: effectiveLanguage
+                                            .embeddedInterfaceCode)
+                                )
+                                .font(.body.weight(.semibold))
+                                Text(providerPresetDescription(for: preset))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(
+                                        Color(nsColor: .controlBackgroundColor).opacity(
+                                            isSelected ? 0.55 : 0.2))
                             )
-                            .font(.body.weight(.semibold))
-                            Text(providerPresetDescription(for: preset))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(
+                                        isSelected
+                                            ? Color.accentColor : Color.primary.opacity(0.08),
+                                        lineWidth: isSelected ? 2 : 1
+                                    )
+                            )
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .buttonStyle(.plain)
                     }
-                    .wisprSecondaryButtonStyle()
                 }
             }
         }
@@ -1762,7 +1942,7 @@ struct SettingsView: View {
                             .font(.headline)
                         Text(
                             provider.preset.localizedDisplayName(
-                                interfaceLanguageCode: appLanguage.rawValue)
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1934,7 +2114,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                         Text(
                             model.availability.localizedDisplayName(
-                                interfaceLanguageCode: appLanguage.rawValue)
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
                         )
                         .font(.footnote)
                         .foregroundStyle(
@@ -1957,7 +2137,7 @@ struct SettingsView: View {
                 HotkeyRecorderField(
                     hotkey: $appState.selectedHotkey,
                     label: text("Diktier-Kurzbefehl", "Dictation shortcut"),
-                    language: appLanguage
+                    language: effectiveLanguage
                 )
                 .frame(width: 260)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -1980,7 +2160,7 @@ struct SettingsView: View {
                 HotkeyRecorderField(
                     hotkey: $appState.holdShortcut,
                     label: text("Halten-zum-Diktieren-Kurzbefehl", "Hold-to-dictate shortcut"),
-                    language: appLanguage
+                    language: effectiveLanguage
                 )
                 .frame(width: 260)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -2012,7 +2192,7 @@ struct SettingsView: View {
                 HotkeyRecorderField(
                     hotkey: $appState.cancelShortcut,
                     label: text("Abbrechen-Kurzbefehl", "Cancel shortcut"),
-                    language: appLanguage
+                    language: effectiveLanguage
                 )
                 .frame(width: 260)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -2036,7 +2216,7 @@ struct SettingsView: View {
                 HotkeyRecorderField(
                     hotkey: $appState.modeSwitchShortcut,
                     label: text("Moduswechsel-Kurzbefehl", "Mode switch shortcut"),
-                    language: appLanguage
+                    language: effectiveLanguage
                 )
                 .frame(width: 260)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -2086,7 +2266,8 @@ struct SettingsView: View {
                 ) {
                     ForEach(HistoryRetentionPolicy.allCases) { policy in
                         Text(
-                            policy.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)
+                            policy.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
                         ).tag(policy)
                     }
                 }
@@ -2111,15 +2292,50 @@ struct SettingsView: View {
             Text(text("Keine Transkripte gefunden.", "No transcripts found."))
                 .foregroundStyle(.secondary)
         } else {
-            ForEach(compactHistoryEntries) { entry in
-                HistoryEntryRow(
-                    entry: entry,
-                    dateText: Self.historyDateFormatter.string(from: entry.createdAt),
-                    language: appLanguage,
-                    onCopy: { appState.copyHistoryEntry(entry) },
-                    onDelete: { appState.removeHistoryEntry(entry.id) }
-                )
+            Table(compactHistoryEntries) {
+                TableColumn(text("Datum", "Date")) { entry in
+                    Text(formattedHistoryDate(entry.createdAt))
+                        .textSelection(.enabled)
+                }
+                .width(min: 118, ideal: 140)
+                TableColumn(text("Modus", "Mode")) { entry in
+                    Text("[\(entry.mode) • \(entry.languageCode)]")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                .width(min: 100, ideal: 120)
+                TableColumn(text("Vorschau", "Preview")) { entry in
+                    Text(entry.text)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .textSelection(.enabled)
+                }
+                TableColumn("") { entry in
+                    HStack(spacing: 6) {
+                        Button {
+                            appState.copyHistoryEntry(entry)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(
+                            text("Diktat kopieren", "Copy dictation")
+                        )
+                        Button(role: .destructive) {
+                            appState.removeHistoryEntry(entry.id)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(
+                            text("Diktat löschen: ", "Delete dictation: ")
+                                + formattedHistoryDate(entry.createdAt))
+                    }
+                }
+                .width(ideal: 72)
             }
+            .frame(minHeight: 200)
 
             if !isSearching, filteredHistory.count > compactHistoryEntries.count {
                 Text(
@@ -2135,58 +2351,93 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var snippetsContent: some View {
+    private var snippetNewEntryRows: some View {
         if matches(["snippet", "textbaustein", "replacement", "trigger"]) {
-            HStack(alignment: .center, spacing: 10) {
+            LabeledContent(text("Trigger", "Trigger")) {
                 TextField(text("Trigger", "Trigger"), text: $newSnippetTrigger)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 200)
                     .accessibilityLabel(text("Snippet-Trigger", "Snippet trigger"))
-                TextField(text("Ersetzung", "Replacement"), text: $newSnippetReplacement)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel(text("Snippet-Ersetzung", "Snippet replacement"))
-                Button(text("Hinzufügen", "Add")) {
-                    appState.addSnippet(
-                        trigger: newSnippetTrigger, replacement: newSnippetReplacement)
-                    newSnippetTrigger = ""
-                    newSnippetReplacement = ""
-                }
-                .wisprPrimaryButtonStyle()
+                    .onSubmit { commitNewSnippet() }
             }
+            LabeledContent(text("Ersetzung", "Replacement")) {
+                TextField(
+                    text("Ersetzung", "Replacement"),
+                    text: $newSnippetReplacement,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .lineLimit(3, reservesSpace: true)
+                .accessibilityLabel(text("Snippet-Ersetzung", "Snippet replacement"))
+                .onSubmit { commitNewSnippet() }
+            }
+            if newSnippetTriggerIsDuplicate, !trimmedNewSnippetTrigger.isEmpty {
+                Text(
+                    text("Dieser Trigger ist bereits vergeben.", "This trigger is already in use.")
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            Button(text("Hinzufügen", "Add")) {
+                commitNewSnippet()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canCommitNewSnippet)
+            .keyboardShortcut(.defaultAction)
+        }
+    }
 
+    @ViewBuilder
+    private var snippetImportExportRows: some View {
+        if matches([
+            "snippet", "textbaustein", "replacement", "trigger", "json", "import", "export",
+            "importieren", "exportieren",
+        ]) {
             HStack(alignment: .center, spacing: 10) {
                 Button(text("JSON importieren", "Import JSON")) {
                     appState.importSnippetsFromJSON()
                 }
-                .wisprSecondaryButtonStyle()
+                .buttonStyle(.bordered)
                 Button(text("JSON exportieren", "Export JSON")) {
                     appState.exportSnippetsToJSON()
                 }
-                .wisprSecondaryButtonStyle()
+                .buttonStyle(.bordered)
             }
+        }
+    }
 
+    @ViewBuilder
+    private var snippetSavedRows: some View {
+        if matches(["snippet", "textbaustein", "replacement", "trigger"])
+            || !filteredSnippets.isEmpty
+        {
             if filteredSnippets.isEmpty {
                 Text(text("Keine Snippets gespeichert.", "No snippets saved."))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(filteredSnippets) { rule in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rule.trigger)
-                            Text(rule.replacement)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
+                Table(filteredSnippets) {
+                    TableColumn(text("Trigger", "Trigger")) { rule in
+                        Text(rule.trigger)
+                            .textSelection(.enabled)
+                    }
+                    TableColumn(text("Ersetzung", "Replacement")) { rule in
+                        Text(rule.replacement)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    TableColumn("") { rule in
                         Button(role: .destructive) {
                             appState.removeSnippet(ruleID: rule.id)
                         } label: {
-                            Text(text("Löschen", "Delete"))
+                            Image(systemName: "trash")
                         }
-                        .wisprInlineListButtonStyle()
+                        .buttonStyle(.borderless)
                         .accessibilityLabel(
                             text("Snippet löschen: ", "Delete snippet: ") + rule.trigger)
                     }
+                    .width(ideal: 44)
                 }
+                .frame(minHeight: 200)
             }
         }
     }
@@ -2355,381 +2606,4 @@ struct SettingsView: View {
         NSPasteboard.general.setString(string, forType: .string)
     }
 
-}
-
-enum SettingsTab: Hashable, CaseIterable {
-    case general
-    case speech
-    case dictation
-    case sound
-    case shortcuts
-    case ai
-    case history
-    case about
-    case snippets
-    case advanced
-
-    var symbolName: String {
-        switch self {
-        case .general: return "gearshape"
-        case .speech: return "waveform.badge.mic"
-        case .dictation: return "mic"
-        case .sound: return "speaker.wave.2"
-        case .shortcuts: return "command"
-        case .ai: return "sparkles"
-        case .history: return "clock.arrow.circlepath"
-        case .about: return "person.crop.circle"
-        case .snippets: return "text.badge.plus"
-        case .advanced: return "wrench.and.screwdriver"
-        }
-    }
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .general:
-            return language.text("Allgemein", "General")
-        case .speech:
-            return language.text("Speech", "Speech")
-        case .dictation:
-            return language.text("Diktat", "Dictation")
-        case .sound:
-            return language.text("Sound", "Sound")
-        case .shortcuts:
-            return language.text("Kurzbefehle", "Shortcuts")
-        case .ai:
-            return "AI"
-        case .history:
-            return language.text("Verlauf", "History")
-        case .about:
-            return language.text("About", "About")
-        case .snippets:
-            return language.text("Snippets", "Snippets")
-        case .advanced:
-            return language.text("Erweitert", "Advanced")
-        }
-    }
-}
-
-/// Verzögertes Hover-Popover mit Material/Glass statt nativem `.help`-HUD.
-private struct SettingsRichTooltipAnchor: View {
-    let helpText: String
-    @State private var isPresented = false
-    @State private var hoverTask: Task<Void, Never>?
-
-    var body: some View {
-        Image(systemName: "info.circle")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .contentShape(Rectangle())
-            .accessibilityHidden(true)
-            .onDisappear {
-                hoverTask?.cancel()
-                isPresented = false
-            }
-            .onHover { inside in
-                if inside {
-                    hoverTask?.cancel()
-                    hoverTask = Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 420_000_000)
-                        guard !Task.isCancelled else { return }
-                        isPresented = true
-                    }
-                } else {
-                    hoverTask?.cancel()
-                    hoverTask = nil
-                    isPresented = false
-                }
-            }
-            .popover(isPresented: $isPresented) {
-                Text(helpText)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.leading)
-                    .padding(14)
-                    .frame(maxWidth: 300)
-                    .settingsTooltipPanelBackground()
-            }
-    }
-}
-
-private struct AboutFactRow: View {
-    let title: String
-    let detail: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 110, alignment: .leading)
-            Text(detail)
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-private struct SettingsFieldLabel: View {
-    let title: String
-    var helpText: String? = nil
-
-    var body: some View {
-        let accessibilityCombined: String = {
-            guard let helpText, !helpText.isEmpty else { return title }
-            return "\(title). \(helpText)"
-        }()
-        return HStack(spacing: 6) {
-            Text(title)
-            if let helpText, !helpText.isEmpty {
-                SettingsRichTooltipAnchor(helpText: helpText)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityCombined)
-    }
-}
-
-private struct HistoryEntryRow: View {
-    let entry: TranscriptHistoryEntry
-    let dateText: String
-    let language: AppLanguage
-    let onCopy: () -> Void
-    let onDelete: () -> Void
-    @State private var isExpanded = false
-
-    private func text(_ german: String, _ english: String) -> String {
-        language.text(german, english)
-    }
-
-    private var requiresExpansion: Bool {
-        entry.text.count > 180 || entry.text.split(separator: "\n").count > 3
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(dateText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("[\(entry.mode) • \(entry.languageCode)]")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(text("Kopieren", "Copy")) {
-                    onCopy()
-                }
-                .wisprInlineListButtonStyle()
-                .accessibilityLabel(text("Diktat kopieren vom ", "Copy dictation from ") + dateText)
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Text(text("Löschen", "Delete"))
-                }
-                .wisprInlineListButtonStyle()
-                .accessibilityLabel(
-                    text("Diktat löschen vom ", "Delete dictation from ") + dateText)
-            }
-
-            Text(entry.text)
-                .lineLimit(3)
-                .truncationMode(.tail)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-
-            if requiresExpansion {
-                DisclosureGroup(
-                    text("Vollständiges Diktat anzeigen", "Show full transcript"),
-                    isExpanded: $isExpanded
-                ) {
-                    Text(entry.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                        .padding(.top, 2)
-                }
-                .font(.footnote)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-private struct HotkeyRecorderField: NSViewRepresentable {
-    @Binding var hotkey: HotkeyBinding
-    let label: String
-    let language: AppLanguage
-
-    func makeNSView(context: Context) -> HotkeyRecorderButton {
-        let view = HotkeyRecorderButton()
-        view.onChange = { newHotkey in
-            hotkey = newHotkey
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: HotkeyRecorderButton, context: Context) {
-        nsView.displayedHotkey = hotkey
-        nsView.fieldLabel = label
-        nsView.language = language
-    }
-}
-
-private struct HotkeyAdvisoryBox: View {
-    let advisory: HotkeyAdvisory
-
-    private var accentColor: Color {
-        switch advisory.severity {
-        case .critical:
-            return .red
-        case .warning:
-            return .orange
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(advisory.title)
-                .font(.footnote.weight(.semibold))
-            Text(advisory.message)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(accentColor.opacity(0.12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(accentColor.opacity(0.3), lineWidth: 1)
-        )
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private final class HotkeyRecorderButton: NSButton {
-    var onChange: ((HotkeyBinding) -> Void)?
-    var displayedHotkey: HotkeyBinding = .optionSpace {
-        didSet { updatePresentation() }
-    }
-    var fieldLabel: String = "Shortcut" {
-        didSet { updatePresentation() }
-    }
-    var language: AppLanguage = .german {
-        didSet { updatePresentation() }
-    }
-
-    private var isRecording = false {
-        didSet { updatePresentation() }
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        bezelStyle = .rounded
-        setButtonType(.momentaryPushIn)
-        target = self
-        action = #selector(beginRecording)
-        updatePresentation()
-    }
-
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    override var acceptsFirstResponder: Bool { true }
-
-    @objc private func beginRecording() {
-        isRecording = true
-        window?.makeFirstResponder(self)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == UInt16(kVK_Escape)
-            && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty
-        {
-            isRecording = false
-            updatePresentation()
-            return
-        }
-
-        guard let binding = HotkeyBinding.from(event: event) else {
-            NSSound.beep()
-            return
-        }
-
-        displayedHotkey = binding
-        isRecording = false
-        onChange?(binding)
-    }
-
-    override func resignFirstResponder() -> Bool {
-        isRecording = false
-        updatePresentation()
-        return true
-    }
-
-    private func updatePresentation() {
-        title =
-            isRecording
-            ? language.text("Jetzt Tastenkombination drücken", "Press shortcut now")
-            : displayedHotkey.displayName
-        setAccessibilityLabel(fieldLabel)
-        setAccessibilityValue(title)
-        setAccessibilityHelp(
-            language.text(
-                "Leertaste oder Return zum Aufnehmen, Escape zum Abbrechen.",
-                "Press Space or Return to start recording, Escape to cancel."
-            ))
-    }
-}
-
-private struct PermissionStatusRow: View {
-    let title: String
-    let status: PermissionStatus
-    let detail: String
-    let actionTitle: String?
-    let actionHint: String?
-    let action: (() -> Void)?
-
-    init(
-        title: String,
-        status: PermissionStatus,
-        detail: String,
-        actionTitle: String? = nil,
-        actionHint: String? = nil,
-        action: (() -> Void)? = nil
-    ) {
-        self.title = title
-        self.status = status
-        self.detail = detail
-        self.actionTitle = actionTitle
-        self.actionHint = actionHint
-        self.action = action
-    }
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(detail)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            HStack(spacing: 10) {
-                Text(status.label)
-                    .foregroundStyle(status.color)
-
-                if let actionTitle, let action {
-                    Button(actionTitle, action: action)
-                        .wisprSecondaryButtonStyle()
-                        .controlSize(.small)
-                        .accessibilityLabel(
-                            actionHint.map { "\(actionTitle). \($0)" } ?? actionTitle
-                        )
-                }
-            }
-        }
-        .padding(.vertical, 2)
-    }
 }

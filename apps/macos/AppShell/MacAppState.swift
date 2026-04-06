@@ -71,6 +71,7 @@ enum PermissionStatus: String {
     case granted = "Erteilt"
     case denied = "Verweigert"
     case notDetermined = "Noch nicht geprüft"
+    case restricted = "Eingeschränkt"
 
     var label: String {
         rawValue
@@ -84,6 +85,8 @@ enum PermissionStatus: String {
             return .orange
         case .notDetermined:
             return .secondary
+        case .restricted:
+            return .orange
         }
     }
 
@@ -93,8 +96,12 @@ enum PermissionStatus: String {
             return .granted
         case .notDetermined:
             return .notDetermined
-        default:
+        case .denied:
             return .denied
+        case .restricted:
+            return .restricted
+        @unknown default:
+            return .notDetermined
         }
     }
 
@@ -523,6 +530,18 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    /// 0...1 — stärkere Bereinigung nach rechts; nur sinnvoll bei aktiver Bereinigungs-Aufgabe.
+    @Published var aiCleanupIntensity: Double {
+        didSet {
+            let clamped = min(1, max(0, aiCleanupIntensity))
+            if clamped != aiCleanupIntensity {
+                aiCleanupIntensity = clamped
+                return
+            }
+            userDefaults.set(aiCleanupIntensity, forKey: UserDefaultsKeys.aiCleanupIntensity)
+        }
+    }
+
     @Published var voiceModelActiveDuration: VoiceModelActiveDuration {
         didSet {
             userDefaults.set(
@@ -910,8 +929,9 @@ final class MacAppState: ObservableObject {
         aiFormattingMode.supportsSalutation
     }
 
+    /// „Modus“ (Format/Zieltext) nur bei aktiver Aufgabe „Format / Modus“, nicht bei reiner Stil-/Anrede-Aufgabe.
     var aiShowsModeControls: Bool {
-        aiTaskToneEnabled || aiTaskSalutationEnabled || aiTaskFormatEnabled
+        aiTaskFormatEnabled
     }
 
     var aiShowsWritingStyleControls: Bool {
@@ -948,6 +968,7 @@ final class MacAppState: ObservableObject {
             salutation: aiTaskSalutationEnabled && aiFormattingModeSupportsSalutation
                 ? aiSalutation : .none,
             cleanupEnabled: aiTaskCleanupEnabled,
+            cleanupIntensity: aiCleanupIntensity,
             toneAdjustmentEnabled: aiTaskToneEnabled,
             salutationAdjustmentEnabled: aiTaskSalutationEnabled,
             formatAdaptationEnabled: aiTaskFormatEnabled
@@ -1010,6 +1031,7 @@ final class MacAppState: ObservableObject {
         static let aiFormattingMode = "wispr.settings.aiProcessing.formattingMode"
         static let aiWritingStyle = "wispr.settings.aiWritingStyle"
         static let aiSalutation = "wispr.settings.aiSalutation"
+        static let aiCleanupIntensity = "wispr.settings.aiProcessing.cleanupIntensity"
         static let voiceModelActiveDuration = "wispr.settings.ai.voiceModelActiveDuration"
         static let automaticMicrophoneGainBoost = "wispr.settings.automaticMicrophoneGainBoost"
         static let silenceRemovalEnabled = "wispr.settings.silenceRemovalEnabled"
@@ -1263,7 +1285,7 @@ final class MacAppState: ObservableObject {
         {
             self.aiFormattingMode = parsedAIFormattingMode
         } else {
-            self.aiFormattingMode = .plainText
+            self.aiFormattingMode = .asSpoken
         }
 
         if let rawAIWritingStyle = userDefaults.string(forKey: UserDefaultsKeys.aiWritingStyle),
@@ -1281,6 +1303,10 @@ final class MacAppState: ObservableObject {
         } else {
             self.aiSalutation = .none
         }
+
+        let loadedCleanupIntensity =
+            userDefaults.object(forKey: UserDefaultsKeys.aiCleanupIntensity) as? Double ?? 0.5
+        self.aiCleanupIntensity = min(1, max(0, loadedCleanupIntensity))
 
         if let rawVoiceModelActiveDuration = userDefaults.string(
             forKey: UserDefaultsKeys.voiceModelActiveDuration),
@@ -1494,6 +1520,13 @@ final class MacAppState: ObservableObject {
     }
 
     func addRemoteProvider(preset: AIRemoteProviderPreset) {
+        if let existing = remoteProviders.first(where: { $0.preset == preset }) {
+            selectedRemoteProviderID = existing.id
+            appendDiagnostic(
+                "Anbieter \(existing.displayName) ist bereits in der Liste — Auswahl übernommen.")
+            return
+        }
+
         var provider = AIRemoteProviderConfiguration.template(
             for: preset,
             appTitle: "WisprLocal",
@@ -1889,6 +1922,9 @@ final class MacAppState: ObservableObject {
             && !aiTaskFormatEnabled
         {
             aiTaskCleanupEnabled = true
+            if aiCleanupIntensity < 0.05 {
+                aiCleanupIntensity = 0.5
+            }
         }
 
         if !aiFormattingMode.allowedWritingStyles.contains(aiWritingStyle) {
@@ -2035,6 +2071,15 @@ final class MacAppState: ObservableObject {
         guard !trimmedTrigger.isEmpty, !trimmedReplacement.isEmpty else {
             appendDiagnostic(
                 "Snippet wurde nicht gespeichert: Trigger/Replacement darf nicht leer sein.")
+            return
+        }
+
+        if snippetRules.contains(where: { rule in
+            rule.caseSensitive
+                ? rule.trigger == trimmedTrigger
+                : rule.trigger.lowercased() == trimmedTrigger.lowercased()
+        }) {
+            appendDiagnostic("Snippet wurde nicht gespeichert: Trigger existiert bereits.")
             return
         }
 
@@ -2367,7 +2412,13 @@ final class MacAppState: ObservableObject {
     }
 
     func refreshPermissionStates() {
+        let rawMic = AVCaptureDevice.authorizationStatus(for: .audio)
         microphonePermissionStatus = permissionController.microphoneStatus()
+        if debugModeEnabled {
+            appendDebug(
+                "permissions.microphone raw=\(String(describing: rawMic)) mapped=\(microphonePermissionStatus)"
+            )
+        }
         applyAccessibilityStatusWithDebounce(permissionController.accessibilityStatus())
     }
 

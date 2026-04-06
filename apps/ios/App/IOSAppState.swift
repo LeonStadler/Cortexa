@@ -22,12 +22,15 @@ final class IOSAppState: ObservableObject {
 
     private let storage = IOSSharedStorage()
     private let sharedDefaults: UserDefaults?
-    private let licenseStore = LicenseStore(service: "com.wisprlocal.ios.license", account: "primary")
+    private let licenseStore = LicenseStore(
+        service: "com.wisprlocal.ios.license", account: "primary")
     private let licenseVerifier: LicenseVerifier?
 
     init() {
         self.sharedDefaults = try? storage.sharedDefaults()
-        self.selectedLanguageCode = self.sharedDefaults?.string(forKey: SharedDefaultsKeys.languageCode) ?? Self.defaultLanguage
+        self.selectedLanguageCode =
+            self.sharedDefaults?.string(forKey: SharedDefaultsKeys.languageCode)
+            ?? Self.defaultLanguage
         self.licenseVerifier = try? LicenseVerifier()
 
         do {
@@ -73,6 +76,15 @@ final class IOSAppState: ObservableObject {
             return
         }
 
+        if snippetRules.contains(where: { rule in
+            rule.caseSensitive
+                ? rule.trigger == trimmedTrigger
+                : rule.trigger.lowercased() == trimmedTrigger.lowercased()
+        }) {
+            writeDiagnostic("Snippet not saved: trigger already exists")
+            return
+        }
+
         snippetRules.append(
             SnippetRule(
                 trigger: trimmedTrigger,
@@ -97,7 +109,9 @@ final class IOSAppState: ObservableObject {
             return
         }
 
-        if snippetRules.contains(where: { $0.trigger == trimmedTrigger && $0.replacement == entry.text }) {
+        if snippetRules.contains(where: {
+            $0.trigger == trimmedTrigger && $0.replacement == entry.text
+        }) {
             writeDiagnostic("Transcript already exists as snippet")
             return
         }
@@ -160,7 +174,7 @@ final class IOSAppState: ObservableObject {
         }
 
         switch licenseVerifier.verify(key) {
-        case let .valid(payload):
+        case .valid(let payload):
             do {
                 try licenseStore.saveLicenseKey(key)
                 try storage.clearLicenseCache()
@@ -174,7 +188,7 @@ final class IOSAppState: ObservableObject {
                 licenseStatusText = "Could not store license"
             }
 
-        case let .invalid(reason):
+        case .invalid(let reason):
             licenseValid = false
             licenseStatusText = "Invalid: \(reason.localizedDescription)"
         }
@@ -236,11 +250,11 @@ final class IOSAppState: ObservableObject {
         }
 
         switch licenseVerifier.verify(key) {
-        case let .valid(payload):
+        case .valid(let payload):
             licenseStatusText = "Active: \(payload.productTier)"
             licenseValid = true
             storedLicenseSummary = Self.maskedLicense(key)
-        case let .invalid(reason):
+        case .invalid(let reason):
             licenseStatusText = "Invalid: \(reason.localizedDescription)"
             licenseValid = false
             storedLicenseSummary = Self.maskedLicense(key)

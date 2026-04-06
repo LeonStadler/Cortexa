@@ -4,7 +4,6 @@ import SwiftUI
 enum MacNativeDesign {
     static let settingsFormCornerRadius: CGFloat = 14
     static let menuBarPrimaryCornerRadius: CGFloat = 12
-    static let settingsSidebarSearchCornerRadius: CGFloat = 8
     static let settingsTooltipCornerRadius: CGFloat = 12
 
     /// Einstellungen `NavigationSplitView`: Sidebar min/ideal/max und abgeleitete Fenster-Mindestbreite.
@@ -121,44 +120,6 @@ extension View {
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
-    /// Sticky Titelzeile in den Einstellungen: Inhalt scrollt darunter; leichtes Material bzw. Liquid Glass.
-    @ViewBuilder
-    func settingsDetailTitleBarChrome() -> some View {
-        if #available(macOS 26.0, *) {
-            self.background {
-                Rectangle()
-                    .fill(Color.clear)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 0))
-            }
-        } else {
-            self.background(.ultraThinMaterial)
-        }
-    }
-
-    /// Sidebar-Suchfeld: Glass (26+) bzw. Material statt flacher Control-Farbe.
-    @ViewBuilder
-    func settingsSidebarSearchFieldChrome(
-        cornerRadius: CGFloat = MacNativeDesign.settingsSidebarSearchCornerRadius
-    ) -> some View {
-        if #available(macOS 26.0, *) {
-            self.background {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.clear)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
-        } else {
-            self.background {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.thinMaterial)
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-            )
-        }
-    }
-
     /// Inhalt von Hilfe-Popovers (Einstellungen).
     @ViewBuilder
     func settingsTooltipPanelBackground(
@@ -180,6 +141,22 @@ extension View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             )
+        }
+    }
+}
+
+/// Mehrere `.glass`-Buttons in einem Raster: ein gemeinsamer Container (Apple-Empfehlung zu Performance/Morphing).
+struct WisprGroupedGlassEffectContainer<Content: View>: View {
+    var spacing: CGFloat = 10
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content()
+            }
+        } else {
+            content()
         }
     }
 }

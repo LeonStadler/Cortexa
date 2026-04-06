@@ -85,6 +85,10 @@ extension AIRevisionGoal {
 extension AIFormattingMode {
     func localizedDisplayName(interfaceLanguageCode: String) -> String {
         switch (interfaceLanguageCode, self) {
+        case ("en", .asSpoken):
+            return "As spoken"
+        case ("en", .automaticFromContent):
+            return "Automatic formatting"
         case ("en", .plainText):
             return "Plain text"
         case ("en", .email):
@@ -97,6 +101,10 @@ extension AIFormattingMode {
             return "Documentation"
         case ("en", .scientificPaper):
             return "Scientific paper"
+        case (_, .asSpoken):
+            return "Wie gesprochen"
+        case (_, .automaticFromContent):
+            return "Automatische Formatierung"
         case (_, .plainText):
             return "Fließtext"
         case (_, .email):
