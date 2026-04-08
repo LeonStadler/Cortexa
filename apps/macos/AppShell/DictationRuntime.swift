@@ -304,6 +304,8 @@ final class DictationRuntime: @unchecked Sendable {
     var onTranscript: ((String) -> Void)?
     var onFinalTranscript: ((FinalTranscriptEvent) -> Void)?
     var onSessionActivityChanged: ((Bool) -> Void)?
+    /// Mikrofon-/AX-Dialoge oder TCC-Updates: UI soll `authorizationStatus` / AX erneut lesen.
+    var onPermissionInteractionFinished: (() -> Void)?
 
     private let whisperEngine = WhisperCppEngine()
     private let processQueue = DispatchQueue(label: "wispr.dictation.process", qos: .userInitiated)
@@ -345,12 +347,18 @@ final class DictationRuntime: @unchecked Sendable {
     private let pendingInsertionPollNanoseconds: UInt64 = 150_000_000
     private let speechRMSActivationThreshold: Float = 0.008
     private let speechRMSReleaseThreshold: Float = 0.004
-    private let speechActivationChunkCount = 3
+    private let speechActivationChunkCount = 2
 
     private func withSessionLock<T>(_ work: () throws -> T) rethrows -> T {
         sessionLock.lock()
         defer { sessionLock.unlock() }
         return try work()
+    }
+
+    private func publishPermissionInteractionFinished() {
+        DispatchQueue.main.async { [weak self] in
+            self?.onPermissionInteractionFinished?()
+        }
     }
 
     private func runOnMainThread<T>(_ work: () throws -> T) throws -> T {
@@ -493,6 +501,7 @@ final class DictationRuntime: @unchecked Sendable {
             }
 
             let micGranted = await requestMicrophonePermission()
+            publishPermissionInteractionFinished()
             self.publishDebug("permissions.microphone granted=\(micGranted)")
             guard micGranted else {
                 publishStatus("Error")
@@ -508,6 +517,7 @@ final class DictationRuntime: @unchecked Sendable {
                     || options.simulateKeypresses
                 let accessibilityGranted = requestAccessibilityPermission(
                     promptIfNeeded: requiresDirectInsertion)
+                publishPermissionInteractionFinished()
                 publishDebug(
                     "permissions.accessibility granted=\(accessibilityGranted) requiresDirectInsertion=\(requiresDirectInsertion)"
                 )
@@ -679,6 +689,11 @@ final class DictationRuntime: @unchecked Sendable {
         NSWorkspace.shared.open(url)
     }
 
+    /// Systemdialog für Bedienungshilfen anzeigen (ohne eine Diktatsitzung zu starten).
+    func promptAccessibilityTrustFromUser() {
+        _ = requestAccessibilityPermission(promptIfNeeded: true)
+    }
+
     func setAIProcessingService(_ service: AIProcessingService) {
         withSessionLock {
             aiProcessingService = service
@@ -690,11 +705,16 @@ final class DictationRuntime: @unchecked Sendable {
             (
                 isRunning: isRunning,
                 runningMode: runningMode,
-                speechActivityDetected: speechActivityDetected
+                speechActivityDetected: speechActivityDetected,
+                hasLockedTarget: target != nil
             )
         }
         guard snapshot.isRunning, snapshot.runningMode == .streaming else { return }
-        guard snapshot.speechActivityDetected else { return }
+        // Ohne gesichertes Textziel: RMS-Gate, sonst „Warten auf Ziel“ nur durch echten Sprachbeginn auslösen.
+        // Mit Ziel: Partials sofort einfügen (sonst wirken leise Anfänge/Fernfeld-Mikros hackelig oder leer).
+        if !snapshot.hasLockedTarget {
+            guard snapshot.speechActivityDetected else { return }
+        }
 
         let normalized = sanitizeTranscriptArtifacts(in: normalizeText(text), stage: .live)
         guard !normalized.isEmpty else { return }
@@ -813,7 +833,9 @@ final class DictationRuntime: @unchecked Sendable {
 
         return await withCheckedContinuation { continuation in
             AVCaptureDevice.requestAccess(for: .audio) { granted in
-                continuation.resume(returning: granted)
+                DispatchQueue.main.async {
+                    continuation.resume(returning: granted)
+                }
             }
         }
     }
@@ -1190,9 +1212,10 @@ final class DictationRuntime: @unchecked Sendable {
 
                     do {
                         var activeTarget = resolvedTarget
+                        // Wie `deliverFinalText`: Cmd+V-Fallback für Ziele, die kein zuverlässiges AX-Set liefern
                         try self.replaceInsertedText(
                             insertionSnapshot.latestInsertedPreview, in: activeTarget,
-                            allowFallbackPaste: false)
+                            allowFallbackPaste: true)
                         activeTarget.insertedLength = insertionSnapshot.latestInsertedPreview.count
                         self.withSessionLock {
                             self.target = activeTarget

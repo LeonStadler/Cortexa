@@ -1067,6 +1067,7 @@ final class MacAppState: ObservableObject {
     private weak var updaterController: SparkleUpdaterController?
     private var didActivateApplicationObserver: NSObjectProtocol?
     private var didBecomeActiveObserver: NSObjectProtocol?
+    private var didFinishLaunchingObserver: NSObjectProtocol?
     private var didWakeObserver: NSObjectProtocol?
     private var permissionPollTask: Task<Void, Never>?
     private var accessibilityStatusDebounceTask: Task<Void, Never>?
@@ -1411,6 +1412,9 @@ final class MacAppState: ObservableObject {
         dictationRuntime.onFinalTranscript = { [weak self] event in
             self?.handleFinalTranscript(event)
         }
+        dictationRuntime.onPermissionInteractionFinished = { [weak self] in
+            self?.refreshPermissionStatesAfterUserFacingPermissionStep()
+        }
 
         hotkeyManager.onToggle = { [weak self] in
             self?.toggleTranscriptionFromUI()
@@ -1438,6 +1442,9 @@ final class MacAppState: ObservableObject {
         dictationRuntime.setVoiceModelActiveDuration(voiceModelActiveDuration)
         dictationRuntime.prepareRuntime()
         refreshPermissionStates()
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshPermissionStates()
+        }
         applyActivationPolicy()
         syncLaunchOnLogin()
         configureLifecycleObservers()
@@ -1452,6 +1459,9 @@ final class MacAppState: ObservableObject {
         }
         if let didBecomeActiveObserver {
             NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+        }
+        if let didFinishLaunchingObserver {
+            NotificationCenter.default.removeObserver(didFinishLaunchingObserver)
         }
         if let didWakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(didWakeObserver)
@@ -1685,6 +1695,8 @@ final class MacAppState: ObservableObject {
             return
         }
 
+        refreshPermissionStates()
+
         let options = currentStartOptions()
         appendAudit(
             "session.toggle.menuBar start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)"
@@ -1714,6 +1726,8 @@ final class MacAppState: ObservableObject {
     }
 
     private func startTranscriptionForShortcut() {
+        refreshPermissionStates()
+
         let options = currentStartOptions()
         appendAudit(
             "session.toggle start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)"
@@ -2491,6 +2505,59 @@ final class MacAppState: ObservableObject {
         applyAccessibilityStatusWithDebounce(permissionController.accessibilityStatus())
     }
 
+    /// TCC aktualisiert manchmal verzögert – einmal sofort und einmal kurz danach erneut lesen.
+    private func refreshPermissionStatesAfterUserFacingPermissionStep() {
+        refreshPermissionStates()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard let self else { return }
+            self.refreshPermissionStates()
+        }
+    }
+
+    /// Aus den Einstellungen: System-Mikrofondialog oder Privacy-Panel.
+    func requestMicrophoneAccessFromSettings() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let status = AVCaptureDevice.authorizationStatus(for: .audio)
+            switch status {
+            case .authorized:
+                self.refreshPermissionStatesAfterUserFacingPermissionStep()
+            case .notDetermined:
+                let granted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                    AVCaptureDevice.requestAccess(for: .audio) { ok in
+                        DispatchQueue.main.async {
+                            continuation.resume(returning: ok)
+                        }
+                    }
+                }
+                self.refreshPermissionStatesAfterUserFacingPermissionStep()
+                if !granted {
+                    self.appendDiagnostic("Mikrofonzugriff wurde nicht erteilt.")
+                }
+            case .denied, .restricted:
+                self.openMicrophoneSettings()
+                self.schedulePermissionRefresh()
+            @unknown default:
+                self.refreshPermissionStatesAfterUserFacingPermissionStep()
+            }
+        }
+    }
+
+    /// Aus den Einstellungen: AX-Bestätigungsdialog anstoßen und Status neu lesen.
+    func requestAccessibilityAccessFromSettings() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if self.permissionController.accessibilityStatus() == .granted {
+                self.refreshPermissionStatesAfterUserFacingPermissionStep()
+                return
+            }
+            self.dictationRuntime.promptAccessibilityTrustFromUser()
+            self.refreshPermissionStatesAfterUserFacingPermissionStep()
+            self.schedulePermissionRefresh()
+        }
+    }
+
     /// UI-Status für Bedienungshilfen: Freigabe sofort anzeigen; vorübergehende „Verweigert“-Messwerte kurz entprellen.
     private func applyAccessibilityStatusWithDebounce(_ raw: PermissionStatus) {
         if !hasAppliedAccessibilityStatusOnce {
@@ -2600,6 +2667,19 @@ final class MacAppState: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.refreshOperationalState(reason: "app-active")
+            }
+        }
+
+        didFinishLaunchingObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didFinishLaunchingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshPermissionStates()
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                self.refreshPermissionStates()
             }
         }
 
