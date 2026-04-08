@@ -1,6 +1,10 @@
 name: WisprLocalMac
 options:
   minimumXcodeGenVersion: 2.38.0
+  developmentLanguage: en
+  knownRegions:
+    - en
+    - de
 settings:
   base:
     SWIFT_VERSION: 5.10
@@ -28,6 +32,7 @@ targets:
         type: folder
     resources:
       - path: ../AppShell/Resources/Assets.xcassets
+      - path: ../AppShell/Resources/Localizable.xcstrings
       - path: ../../../changelog.md
     settings:
       base:

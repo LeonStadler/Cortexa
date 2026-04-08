@@ -176,6 +176,14 @@ struct MenuBarContentView: View {
         !appState.availableQuickSettingsAIModels.isEmpty
     }
 
+    /// Kompakt: nur bei kopierbarem Text. Normal: bei Text oder gespeichertem Verlauf (Menü/Liste).
+    private var menuBarShowsDictationHistorySection: Bool {
+        if appState.compactMenuBarDesign {
+            return !appState.latestDictationText.isEmpty
+        }
+        return !appState.latestDictationText.isEmpty || !appState.transcriptHistory.isEmpty
+    }
+
     private var visibleMenuBarLanguages: [DictationLanguage] {
         DictationLanguage.allCases.filter { $0 != .auto }
     }
@@ -742,17 +750,16 @@ struct MenuBarContentView: View {
                 }
             }
 
-            if appState.compactMenuBarDesign {
+            if menuBarShowsDictationHistorySection {
+                Divider()
                 if !appState.latestDictationText.isEmpty {
-                    Divider()
                     copyLastDictationButton
-                    Button(text("Verlauf", "History")) {
+                }
+                if appState.compactMenuBarDesign {
+                    Button(text("Verlauf…", "History…")) {
                         appState.openHistorySettingsWindow()
                     }
-                }
-            } else {
-                if !appState.transcriptHistory.isEmpty {
-                    Divider()
+                } else if !appState.transcriptHistory.isEmpty {
                     menuBarNonCompactHistoryMenu
                 }
             }

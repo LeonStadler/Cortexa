@@ -2187,6 +2187,7 @@ final class MacAppState: ObservableObject {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.json]
+        Self.configureImportSnippetsPanel(panel)
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -2204,6 +2205,7 @@ final class MacAppState: ObservableObject {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "wispr-snippets.json"
+        Self.configureSavePanel(panel, titleKey: "filepanel.export.snippets.title")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -2245,6 +2247,7 @@ final class MacAppState: ObservableObject {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.plainText]
         panel.nameFieldStringValue = "wispr-transcript-history.txt"
+        Self.configureSavePanel(panel, titleKey: "filepanel.export.history.title")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -2274,6 +2277,7 @@ final class MacAppState: ObservableObject {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.plainText]
         panel.nameFieldStringValue = "wispr-diagnostics.txt"
+        Self.configureSavePanel(panel, titleKey: "filepanel.export.diagnostics.title")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -2306,6 +2310,7 @@ final class MacAppState: ObservableObject {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.plainText]
         panel.nameFieldStringValue = "wispr-audit.log"
+        Self.configureSavePanel(panel, titleKey: "filepanel.export.audit.title")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -2334,6 +2339,7 @@ final class MacAppState: ObservableObject {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.plainText]
         panel.nameFieldStringValue = "wispr-diagnostic-log.txt"
+        Self.configureSavePanel(panel, titleKey: "filepanel.export.debug_log.title")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
@@ -2963,6 +2969,21 @@ final class MacAppState: ObservableObject {
 
     private static func legacyLicenseCacheURL() -> URL {
         appSupportDirectory().appendingPathComponent("license-cache.json", isDirectory: false)
+    }
+
+    /// Bundle-Lokalisierung (nicht App-Sprache aus den Einstellungen): gleiche Auflösung wie Systemdialoge.
+    private static func localizedFilePanelString(_ key: String) -> String {
+        Bundle.main.localizedString(forKey: key, value: key, table: nil)
+    }
+
+    private static func configureImportSnippetsPanel(_ panel: NSOpenPanel) {
+        panel.title = localizedFilePanelString("filepanel.import.snippets.title")
+        panel.prompt = localizedFilePanelString("filepanel.open.prompt")
+    }
+
+    private static func configureSavePanel(_ panel: NSSavePanel, titleKey: String) {
+        panel.title = localizedFilePanelString(titleKey)
+        panel.prompt = localizedFilePanelString("filepanel.save.prompt")
     }
 
     private static func currentLaunchOnLoginEnabled() -> Bool {

@@ -1,0 +1,142 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "filepanel.export.audit.title" : {
+      "comment" : "NSSavePanel window title for exporting the audit log.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audit-Protokoll exportieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Audit Log"
+          }
+        }
+      }
+    },
+    "filepanel.export.debug_log.title" : {
+      "comment" : "NSSavePanel window title for exporting the technical diagnostic log.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diagnoseprotokoll exportieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Diagnostic Log"
+          }
+        }
+      }
+    },
+    "filepanel.export.diagnostics.title" : {
+      "comment" : "NSSavePanel window title for exporting the diagnostics report.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diagnose exportieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Diagnostics"
+          }
+        }
+      }
+    },
+    "filepanel.export.history.title" : {
+      "comment" : "NSSavePanel window title for exporting transcript history as text.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkriptverlauf exportieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Transcript History"
+          }
+        }
+      }
+    },
+    "filepanel.export.snippets.title" : {
+      "comment" : "NSSavePanel window title for exporting snippets as JSON.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Snippets exportieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Snippets"
+          }
+        }
+      }
+    },
+    "filepanel.import.snippets.title" : {
+      "comment" : "NSOpenPanel window title for importing snippets from JSON.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Snippets importieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import Snippets"
+          }
+        }
+      }
+    },
+    "filepanel.open.prompt" : {
+      "comment" : "Default button label for NSOpenPanel (system-consistent open action).",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open"
+          }
+        }
+      }
+    },
+    "filepanel.save.prompt" : {
+      "comment" : "Default button label for NSSavePanel (system-consistent save action).",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichern"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
