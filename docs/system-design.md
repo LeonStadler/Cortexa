@@ -93,6 +93,8 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 9. Single deterministic insert into original target.
 10. Session transitions to completed.
 
+Insertion readiness is derived from the same AX-focused-target probe that the runtime later uses for capture and delivery. This avoids false-positive accessibility readiness states where TCC looks enabled but focused-target AX reads still fail with `apiDisabled`.
+
 ### 2) Streaming Insert (macOS)
 
 1. Start session and capture immutable target.
@@ -105,6 +107,8 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 8. Inserter patches only the mutable tail while preserving committed text already shown to the user.
 9. Focus changes are ignored (target remains locked).
 10. Stop finalizes the tail, runs a final AI pass when enabled, and closes the session.
+
+Note: the current macOS implementation deliberately skips the separate final AI pass when live AI shaping is active for the same session, preferring one consistent rewrite path over a second post-pass.
 
 ### 3) iOS/iPadOS Keyboard Flow
 

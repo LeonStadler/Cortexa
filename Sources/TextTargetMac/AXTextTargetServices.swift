@@ -12,9 +12,174 @@ private func runOnMainThread<T>(_ work: () throws -> T) throws -> T {
     return try DispatchQueue.main.sync(execute: work)
 }
 
+private enum AXFocusedElementProbe {
+    case element(AXUIElement)
+    case noFocusedElement(frontmostBundleIdentifier: String?)
+    case apiDisabled(frontmostBundleIdentifier: String?)
+}
+
+private enum AXAccessEvaluator {
+    static func permissionState(promptIfNeeded: Bool = false) -> TextTargetPermissionState {
+        let granted = (try? runOnMainThread {
+            if AXIsProcessTrusted() {
+                return true
+            }
+
+            let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+            let options = [promptKey: promptIfNeeded] as CFDictionary
+            if AXIsProcessTrustedWithOptions(options) {
+                return true
+            }
+
+            let probe = focusedElementProbe()
+            switch probe {
+            case .element, .noFocusedElement:
+                return true
+            case .apiDisabled:
+                return false
+            }
+        }) ?? false
+
+        return granted ? .granted : .denied
+    }
+
+    static func probeFocusedTarget() -> (FocusedTextTargetProbeResult, TextTargetSnapshot?) {
+        do {
+            return try runOnMainThread {
+                let probe = focusedElementProbe()
+                switch probe {
+                case .apiDisabled(let frontmostBundleIdentifier):
+                    return (.apiDisabled(frontmostBundleIdentifier: frontmostBundleIdentifier), nil)
+                case .noFocusedElement(let frontmostBundleIdentifier):
+                    return (
+                        .noFocusedElement(frontmostBundleIdentifier: frontmostBundleIdentifier), nil
+                    )
+                case .element(let element):
+                    var roleRef: CFTypeRef?
+                    let roleResult = AXUIElementCopyAttributeValue(
+                        element,
+                        kAXRoleAttribute as CFString,
+                        &roleRef
+                    )
+                    let role = roleResult == .success ? roleRef as? String : nil
+
+                    var isValueSettable = DarwinBoolean(false)
+                    let settableResult = AXUIElementIsAttributeSettable(
+                        element,
+                        kAXValueAttribute as CFString,
+                        &isValueSettable
+                    )
+                    guard settableResult == .success, isValueSettable.boolValue else {
+                        return (
+                            .unsupportedTarget(
+                                frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                                    .bundleIdentifier,
+                                role: role,
+                                valueSettable: isValueSettable.boolValue
+                            ),
+                            nil
+                        )
+                    }
+
+                    var valueRef: CFTypeRef?
+                    let valueResult = AXUIElementCopyAttributeValue(
+                        element,
+                        kAXValueAttribute as CFString,
+                        &valueRef
+                    )
+                    guard valueResult == .success else {
+                        return (
+                            .unableToReadValue(
+                                frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                                    .bundleIdentifier),
+                            nil
+                        )
+                    }
+
+                    let value = (valueRef as? String) ?? ""
+                    let selection = selectedRange(from: element, currentValueLength: value.count)
+
+                    var owningPID: pid_t = 0
+                    let owningPIDResult = AXUIElementGetPid(element, &owningPID)
+                    let app =
+                        owningPIDResult == .success
+                        ? NSRunningApplication(processIdentifier: owningPID)
+                        : NSWorkspace.shared.frontmostApplication
+
+                    let snapshot = TextTargetSnapshot(
+                        bindingID: UUID(),
+                        capturedAt: Date(),
+                        insertionRange: selection,
+                        capturedValue: value,
+                        fallbackBundleIdentifier: app?.bundleIdentifier,
+                        element: element
+                    )
+                    return (.target, snapshot)
+                }
+            }
+        } catch {
+            return (
+                .unableToReadValue(
+                    frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                        .bundleIdentifier),
+                nil
+            )
+        }
+    }
+
+    private static func focusedElementProbe() -> AXFocusedElementProbe {
+        let systemWide = AXUIElementCreateSystemWide()
+        let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+
+        var focused: CFTypeRef?
+        let focusedResult = AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focused
+        )
+
+        switch focusedResult {
+        case .success:
+            if let focused {
+                return .element(focused as! AXUIElement)
+            }
+            return .noFocusedElement(frontmostBundleIdentifier: frontmostBundleIdentifier)
+        case .apiDisabled:
+            return .apiDisabled(frontmostBundleIdentifier: frontmostBundleIdentifier)
+        case .noValue, .cannotComplete, .failure:
+            return .noFocusedElement(frontmostBundleIdentifier: frontmostBundleIdentifier)
+        default:
+            return .noFocusedElement(frontmostBundleIdentifier: frontmostBundleIdentifier)
+        }
+    }
+
+    private static func selectedRange(from element: AXUIElement, currentValueLength: Int) -> NSRange {
+        var selectedRangeRef: CFTypeRef?
+        let rangeResult = AXUIElementCopyAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            &selectedRangeRef
+        )
+
+        if rangeResult == .success,
+            let selectedRangeRef,
+            CFGetTypeID(selectedRangeRef) == AXValueGetTypeID()
+        {
+            let axValue = selectedRangeRef as! AXValue
+            var range = CFRange()
+            if AXValueGetType(axValue) == .cfRange, AXValueGetValue(axValue, .cfRange, &range) {
+                return NSRange(location: max(0, range.location), length: max(0, range.length))
+            }
+        }
+
+        return NSRange(location: currentValueLength, length: 0)
+    }
+}
+
 public enum TextTargetError: Error, LocalizedError {
     case accessibilityDenied
-    case unsupportedFocusedElement
+    case unsupportedFocusedElement(role: String?)
+    case focusedElementUnavailable
     case unableToReadValue
     case unableToWriteValue
     case unsafeClipboardFallback
@@ -23,8 +188,13 @@ public enum TextTargetError: Error, LocalizedError {
         switch self {
         case .accessibilityDenied:
             return "Accessibility permission is required."
-        case .unsupportedFocusedElement:
+        case .unsupportedFocusedElement(let role):
+            if let role, !role.isEmpty {
+                return "Focused element role \(role) is not a supported text input target."
+            }
             return "Focused element is not a supported text input target."
+        case .focusedElementUnavailable:
+            return "No focused text input target is currently available."
         case .unableToReadValue:
             return "Failed to read focused text value."
         case .unableToWriteValue:
@@ -35,57 +205,58 @@ public enum TextTargetError: Error, LocalizedError {
     }
 }
 
+public enum AXTextAccess {
+    public static func permissionState(promptIfNeeded: Bool = false) -> TextTargetPermissionState {
+        AXAccessEvaluator.permissionState(promptIfNeeded: promptIfNeeded)
+    }
+
+    public static func probeFocusedTarget() -> FocusedTextTargetProbeResult {
+        AXAccessEvaluator.probeFocusedTarget().0
+    }
+}
+
 public final class AXTextTargetResolver: TextTargetResolver {
     public init() {}
 
     public func snapshotFocusedTarget() throws -> TextTargetSnapshot {
-        try runOnMainThread {
-            guard AXIsProcessTrusted() else {
-                throw TextTargetError.accessibilityDenied
+        let (probeResult, snapshot) = AXAccessEvaluator.probeFocusedTarget()
+        switch probeResult {
+        case .target:
+            guard let snapshot else {
+                throw TextTargetError.focusedElementUnavailable
             }
-
-            let systemWide = AXUIElementCreateSystemWide()
-            var focused: CFTypeRef?
-            let focusedResult = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused)
-            guard focusedResult == .success, let focusedElement = focused else {
-                throw TextTargetError.unsupportedFocusedElement
-            }
-
-            let element = focusedElement as! AXUIElement
-
-            var valueRef: CFTypeRef?
-            let valueResult = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef)
-            let value = (valueResult == .success ? valueRef as? String : nil) ?? ""
-
-            var selectedRangeRef: CFTypeRef?
-            let rangeResult = AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &selectedRangeRef)
-
-            let selection: NSRange
-            if rangeResult == .success,
-               let selectedRangeRef,
-               CFGetTypeID(selectedRangeRef) == AXValueGetTypeID() {
-                let axValue = selectedRangeRef as! AXValue
-                var range = CFRange()
-                if AXValueGetType(axValue) == .cfRange, AXValueGetValue(axValue, .cfRange, &range) {
-                    selection = NSRange(location: max(0, range.location), length: max(0, range.length))
-                } else {
-                    selection = NSRange(location: value.count, length: 0)
-                }
-            } else {
-                selection = NSRange(location: value.count, length: 0)
-            }
-
-            let app = NSWorkspace.shared.frontmostApplication
-
-            return TextTargetSnapshot(
-                bindingID: UUID(),
-                capturedAt: Date(),
-                insertionRange: selection,
-                capturedValue: value,
-                fallbackBundleIdentifier: app?.bundleIdentifier,
-                element: element
-            )
+            return snapshot
+        case .apiDisabled:
+            throw TextTargetError.accessibilityDenied
+        case .noFocusedElement:
+            throw TextTargetError.focusedElementUnavailable
+        case .unsupportedTarget(_, let role, _):
+            throw TextTargetError.unsupportedFocusedElement(role: role)
+        case .unableToReadValue:
+            throw TextTargetError.unableToReadValue
         }
+    }
+}
+
+private struct PasteboardSnapshot {
+    let items: [NSPasteboardItem]
+
+    static func capture(from pasteboard: NSPasteboard) -> PasteboardSnapshot {
+        let copiedItems =
+            pasteboard.pasteboardItems?.compactMap { item in
+                item.copy() as? NSPasteboardItem
+            } ?? []
+        return PasteboardSnapshot(items: copiedItems)
+    }
+
+    var isEmpty: Bool {
+        items.isEmpty
+    }
+
+    func restore(to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        guard !items.isEmpty else { return }
+        pasteboard.writeObjects(items)
     }
 }
 
@@ -175,16 +346,13 @@ public final class AXTextInserter: TextInserter {
             }
 
             let pasteboard = NSPasteboard.general
-            let previous = pasteboard.string(forType: .string)
+            let previousSnapshot = PasteboardSnapshot.capture(from: pasteboard)
 
             pasteboard.clearContents()
 
             defer {
                 usleep(50_000)
-                pasteboard.clearContents()
-                if let previous {
-                    pasteboard.setString(previous, forType: .string)
-                }
+                previousSnapshot.restore(to: pasteboard)
             }
 
             pasteboard.setString(text, forType: .string)
@@ -208,6 +376,17 @@ public final class AXTextInserter: TextInserter {
 
 public enum TextTargetError: Error {
     case unsupportedPlatform
+}
+
+public enum AXTextAccess {
+    public static func permissionState(promptIfNeeded: Bool = false) -> TextTargetPermissionState {
+        _ = promptIfNeeded
+        return .denied
+    }
+
+    public static func probeFocusedTarget() -> FocusedTextTargetProbeResult {
+        .apiDisabled(frontmostBundleIdentifier: nil)
+    }
 }
 
 public final class AXTextTargetResolver: TextTargetResolver {

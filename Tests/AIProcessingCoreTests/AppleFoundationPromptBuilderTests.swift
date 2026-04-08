@@ -147,5 +147,28 @@
             XCTAssertTrue(prompt.contains("The text language is German."))
             XCTAssertTrue(prompt.contains("Ich geh morgen klettern."))
         }
+
+        func testPromptIncludesFinalInstructionForFinalStage() {
+            let request = AIProcessingRequest(
+                text: "Bitte den Text bereinigen.",
+                stage: .final,
+                locale: Locale(identifier: "de_DE"),
+                configuration: AIProcessingConfiguration(
+                    enabled: true,
+                    selectedModelID: "apple.ondevice",
+                    applyDuringLiveInsertion: false,
+                    applyToFinalResult: true,
+                    formattingMode: .documentation,
+                    formatAdaptationEnabled: true)
+            )
+
+            let prompt = AppleFoundationPromptBuilder.prompt(for: request)
+
+            XCTAssertTrue(
+                prompt.contains(
+                    "This is the final dictated text. Polish it while preserving the meaning and the original language."
+                ))
+            XCTAssertTrue(prompt.contains("Your answer must stay in German."))
+        }
     }
 #endif

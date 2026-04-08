@@ -58,6 +58,8 @@ targets:
       - package: WisprLocalPackage
         product: SessionCore
       - package: WisprLocalPackage
+        product: TextTargetMac
+      - package: WisprLocalPackage
         product: CapabilityCore
       - package: WisprLocalPackage
         product: LicenseCore

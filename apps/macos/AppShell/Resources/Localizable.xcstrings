@@ -1,8 +1,59 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "[%@ • %@]" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "[%1$@ • %2$@]"
+          }
+        }
+      }
+    },
+    "%@ (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "%@ %@/10  %@ %@/10  %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@/10  %3$@ %4$@/10  %5$@"
+          }
+        }
+      }
+    },
+    "%@ • Speed %@/10 • Accuracy %@/10 • %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ • Speed %2$@/10 • Accuracy %3$@/10 • %4$@"
+          }
+        }
+      }
+    },
+    "%@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@"
+          }
+        }
+      }
+    },
     "filepanel.export.audit.title" : {
       "comment" : "NSSavePanel window title for exporting the audit log.",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -20,6 +71,7 @@
     },
     "filepanel.export.debug_log.title" : {
       "comment" : "NSSavePanel window title for exporting the technical diagnostic log.",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -37,6 +89,7 @@
     },
     "filepanel.export.diagnostics.title" : {
       "comment" : "NSSavePanel window title for exporting the diagnostics report.",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -54,6 +107,7 @@
     },
     "filepanel.export.history.title" : {
       "comment" : "NSSavePanel window title for exporting transcript history as text.",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -71,6 +125,7 @@
     },
     "filepanel.export.snippets.title" : {
       "comment" : "NSSavePanel window title for exporting snippets as JSON.",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -88,6 +143,7 @@
     },
     "filepanel.import.snippets.title" : {
       "comment" : "NSOpenPanel window title for importing snippets from JSON.",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -105,6 +161,7 @@
     },
     "filepanel.open.prompt" : {
       "comment" : "Default button label for NSOpenPanel (system-consistent open action).",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -122,6 +179,7 @@
     },
     "filepanel.save.prompt" : {
       "comment" : "Default button label for NSSavePanel (system-consistent save action).",
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -136,6 +194,12 @@
           }
         }
       }
+    },
+    "Leon Stadler" : {
+
+    },
+    "WisprLocal" : {
+
     }
   },
   "version" : "1.0"

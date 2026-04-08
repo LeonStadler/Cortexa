@@ -80,6 +80,7 @@ Pfad: `apps/macos/AppShell/`. Zentrale Orchestrierung u. a. in `MacAppState.swif
 ### Berechtigungen & eingeschränkter Betrieb
 
 - Mikrofon + Bedienungshilfen für direktes Einfügen; ohne AX: **Transkription** möglich, direktes Einfügen deaktiviert (Verlauf/Zwischenablage je nach Einstellung).
+- Die Bedienungshilfen-Anzeige orientiert sich an derselben AX-Fokusprobe wie das spaetere Einfuegen; dadurch erscheinen keine falschen "aktiv"-Zustaende mehr, wenn der Fokuspfad fuer Textziele von macOS noch mit `apiDisabled` blockiert wird.
 - Deep Links in **Systemeinstellungen**.
 
 ### Lizenz, Diagnose, Sicherheit
@@ -87,6 +88,7 @@ Pfad: `apps/macos/AppShell/`. Zentrale Orchestrierung u. a. in `MacAppState.swif
 - Lizenz-UI nur wenn `WLMEnableInternalLicenseUI` gesetzt; Produktions-Key `WLMLicensePublicKeyBase64`.
 - Aktivierung: **Keychain-only secret persistence with legacy cache cleanup** bei alten Builds.
 - **Audit-Log** mit Rotation unter Application Support; optional **debug.log** (Runtime, `whisper-cli` Lifecycle).
+- Finale Zustellung protokolliert jetzt den verwendeten Einfuegepfad (`AX`, Zwischenablage-Fallback oder simulierte Tastatur) sowie Clipboard-Restore und Auto-Send.
 - Export **wispr-diagnostics.txt**; gehärtete Dateirechte für sensible lokale Dateien.
 - Transcript-Sanitizer für typische Nicht-Sprach-Platzhalter vor Anzeige/Einfügen.
 
