@@ -4,8 +4,15 @@ import Foundation
 /// Temporäre NDJSON-Zeilen für Debug-Session `9ba0d5` (Textfeld-Fokus / AX).
 enum AgentSessionDebugLog {
     private static let sessionId = "9ba0d5"
-    private static let logPath =
-        "/Users/leonstadler/Development/wisper-local/.cursor/debug-9ba0d5.log"
+    private static let logURL: URL = {
+        let fileManager = FileManager.default
+        let baseDirectory =
+            fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        return baseDirectory
+            .appendingPathComponent("WisprLocal", isDirectory: true)
+            .appendingPathComponent("debug-\(sessionId).log", isDirectory: false)
+    }()
 
     static func append(
         hypothesisId: String,
@@ -28,10 +35,14 @@ enum AgentSessionDebugLog {
             var line = String(data: json, encoding: .utf8)
         else { return }
         line += "\n"
-        if !FileManager.default.fileExists(atPath: logPath) {
-            FileManager.default.createFile(atPath: logPath, contents: nil)
+        let fileManager = FileManager.default
+        let directoryURL = logURL.deletingLastPathComponent()
+        try? fileManager.createDirectory(
+            at: directoryURL, withIntermediateDirectories: true)
+        if !fileManager.fileExists(atPath: logURL.path) {
+            fileManager.createFile(atPath: logURL.path, contents: nil)
         }
-        guard let handle = FileHandle(forWritingAtPath: logPath) else { return }
+        guard let handle = try? FileHandle(forWritingTo: logURL) else { return }
         defer { try? handle.close() }
         do {
             try handle.seekToEnd()
