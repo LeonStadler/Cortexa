@@ -44,6 +44,7 @@ xcuserdata/
 # IDE / Editor
 .vscode/
 .idea/
+.cursor/*.log
 *.swp
 
 # Distribution artifacts
