@@ -3,6 +3,19 @@ import Foundation
 import ApplicationServices
 #endif
 
+public enum TextTargetPermissionState: Equatable, Sendable {
+    case granted
+    case denied
+}
+
+public enum FocusedTextTargetProbeResult: Equatable, Sendable {
+    case target
+    case noFocusedElement(frontmostBundleIdentifier: String?)
+    case unsupportedTarget(frontmostBundleIdentifier: String?, role: String?, valueSettable: Bool)
+    case apiDisabled(frontmostBundleIdentifier: String?)
+    case unableToReadValue(frontmostBundleIdentifier: String?)
+}
+
 public struct TextTargetSnapshot {
     public let bindingID: UUID
     public let capturedAt: Date
@@ -11,7 +24,7 @@ public struct TextTargetSnapshot {
     public let fallbackBundleIdentifier: String?
 
     #if os(macOS)
-    let element: AXUIElement
+    public let element: AXUIElement
     #endif
 
     #if os(macOS)

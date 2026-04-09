@@ -265,6 +265,8 @@ The macOS app shell uses these options to:
 - expose optional technical diagnostic logging that captures detailed runtime diagnostics plus ASR subprocess lifecycle events for support cases
 - choose whether the final transcript is inserted or copied, and whether clipboard fallback is allowed when no text target is available
 - expose clipboard fallback as an explicit privacy tradeoff rather than a silent background path
+- use the same AX focused-target probe for permission readiness and direct insertion, so the shell does not present insertion as available when AX later answers with `apiDisabled`
+- record final-delivery telemetry for insertion path, clipboard restore, and auto-send execution
 
 Runtime pipeline order:
 
@@ -273,3 +275,9 @@ Runtime pipeline order:
 3. optional translation
 4. optional AI processing
 5. insert / clipboard / history delivery
+
+Current macOS AI delivery rule:
+
+- Live AI processing only runs when `applyDuringLiveInsertion == true`.
+- Final AI processing only runs when `applyToFinalResult == true`.
+- In the current macOS runtime, a live-streaming session skips the separate final AI pass to avoid re-rewriting text that was already shaped during live insertion.

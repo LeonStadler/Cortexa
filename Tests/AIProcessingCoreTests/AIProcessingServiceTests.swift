@@ -199,6 +199,83 @@
             XCTAssertEqual(outcome, .processed(text: "Live polished", modelID: "apple.ondevice"))
         }
 
+        func testFinalProcessingToggleSkipsFinalProcessingWhenDisabled() async {
+            let provider = StubProvider(
+                providerID: "apple.foundation",
+                providerKind: .appleFoundation,
+                descriptors: [
+                    AIModelDescriptor(
+                        id: "apple.ondevice", providerID: "apple.foundation",
+                        requestModelID: "apple.ondevice", displayName: "Apple",
+                        providerKind: .appleFoundation, availability: .available,
+                        quickSettingsEligible: true)
+                ]
+            ) { _, _ in
+                XCTFail(
+                    "Provider should not be called for final processing when final application is disabled."
+                )
+                return ""
+            }
+            let service = AIProcessingService(providers: [provider])
+
+            let outcome = await service.process(
+                AIProcessingRequest(
+                    text: "final draft",
+                    stage: .final,
+                    locale: Locale(identifier: "en_US"),
+                    configuration: AIProcessingConfiguration(
+                        enabled: true,
+                        selectedModelID: "apple.ondevice",
+                        applyDuringLiveInsertion: true,
+                        applyToFinalResult: false)
+                )
+            )
+
+            XCTAssertEqual(outcome.text, "final draft")
+            if case .bypassed(_, let reason) = outcome {
+                XCTAssertTrue(reason.contains("disabled for final results"))
+            } else {
+                XCTFail("Expected bypassed outcome.")
+            }
+        }
+
+        func testFinalProcessingPassesFinalStageRequestToProvider() async {
+            let provider = StubProvider(
+                providerID: "apple.foundation",
+                providerKind: .appleFoundation,
+                descriptors: [
+                    AIModelDescriptor(
+                        id: "apple.ondevice", providerID: "apple.foundation",
+                        requestModelID: "apple.ondevice", displayName: "Apple",
+                        providerKind: .appleFoundation, availability: .available,
+                        quickSettingsEligible: true)
+                ]
+            ) { request, model in
+                XCTAssertEqual(request.stage, .final)
+                XCTAssertEqual(model.id, "apple.ondevice")
+                XCTAssertTrue(request.configuration.applyToFinalResult)
+                return "Final polished"
+            }
+            let service = AIProcessingService(providers: [provider])
+
+            let outcome = await service.process(
+                AIProcessingRequest(
+                    text: "final draft",
+                    stage: .final,
+                    locale: Locale(identifier: "en_US"),
+                    configuration: AIProcessingConfiguration(
+                        enabled: true,
+                        selectedModelID: "apple.ondevice",
+                        applyDuringLiveInsertion: false,
+                        applyToFinalResult: true,
+                        cleanupEnabled: true,
+                        cleanupIntensity: 0.5)
+                )
+            )
+
+            XCTAssertEqual(outcome, .processed(text: "Final polished", modelID: "apple.ondevice"))
+        }
+
         func testUnavailableModelBypassesProviderCall() async {
             let provider = StubProvider(
                 providerID: "apple.foundation",

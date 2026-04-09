@@ -97,6 +97,20 @@ struct SettingsView: View {
         !searchQuery.isEmpty
     }
 
+    /// Etwas länger als die früheren 0,12s: besser im Takt mit Toolbar-Suchfeld (macOS) / Titelwechsel.
+    private var searchFieldSyncedAnimation: Animation? {
+        accessibilityReduceMotion ? nil : .easeInOut(duration: 0.26)
+    }
+
+    /// Kleiner vertikaler Shift neben Opacity — reiner Fade auf `Form`+Material wirkt oft „fragmentiert“.
+    private var searchResultsContentTransition: AnyTransition {
+        if accessibilityReduceMotion {
+            .opacity
+        } else {
+            .opacity.combined(with: .offset(y: 7))
+        }
+    }
+
     /// Live rewrite / adjustment radius affects streaming partials only.
     private var isLiveRewriteScopeApplicable: Bool {
         appState.streamingEnabled
@@ -329,11 +343,9 @@ struct SettingsView: View {
                             }
                         }
                         .frame(maxWidth: 760, alignment: .leading)
-                        .transition(.opacity)
-                        .animation(
-                            accessibilityReduceMotion ? .none : .easeInOut(duration: 0.12),
-                            value: isSearching
-                        )
+                        // Vertikaler Offset + Opacity: Material/Glass in `Form` wirkt bei purem Fade oft zerhackt.
+                        .transition(searchResultsContentTransition)
+                        .contentTransition(.interpolate)
                     }
                     .padding(.horizontal, 28)
                     .padding(.top, 20)
@@ -342,6 +354,8 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationTitle(settingsNavigationTitle)
             }
+            // Gleiche Kurve für Titel (Toolbar) und Inhalt, damit die System-Suchfeld-Animation nicht „auseinanderläuft“.
+            .animation(searchFieldSyncedAnimation, value: isSearching)
             // Nur Detail-Spalte: globales `.controlSize` am SplitView würde auch die Fenster-Toolbar verkleinern.
             .controlSize(.regular)
             .navigationSplitViewColumnWidth(
@@ -1006,14 +1020,32 @@ struct SettingsView: View {
         if matches([
             "mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen",
         ]) {
+            Text(
+                text(
+                    "Freigaben kannst du hier prüfen. „Freigabe anfragen“ öffnet den Systemdialog; „Öffnen“ führt zu den Datenschutz-Einstellungen. Direkt nach einem App-Neustart kann der Status einmal kurz hinterherhängen – dann erneut öffnen oder kurz warten.",
+                    "You can verify access here. “Request access” shows the system prompt; “Open” goes to Privacy settings. Right after launching the app, the status row can briefly lag—open again or wait a moment."
+                )
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
             PermissionStatusRow(
                 title: text("Mikrofon", "Microphone"),
                 status: appState.microphonePermissionStatus,
                 detail: text("Erforderlich für die Audioaufnahme.", "Required for audio capture."),
-                actionTitle: text("Öffnen", "Open"),
-                actionHint: text("Mikrofon-Einstellungen öffnen", "Open microphone settings"),
+                actionTitle: appState.microphonePermissionStatus == .notDetermined
+                    ? text("Freigabe anfragen", "Request access")
+                    : text("Öffnen", "Open"),
+                actionHint: appState.microphonePermissionStatus == .notDetermined
+                    ? text("Systemdialog zur Mikrofonfreigabe", "System prompt for microphone access")
+                    : text("Mikrofon-Einstellungen öffnen", "Open microphone settings"),
                 action: {
-                    appState.openMicrophoneSettings()
+                    if appState.microphonePermissionStatus == .notDetermined {
+                        appState.requestMicrophoneAccessFromSettings()
+                    } else {
+                        appState.openMicrophoneSettings()
+                    }
                 }
             )
 
@@ -1023,10 +1055,20 @@ struct SettingsView: View {
                 detail: text(
                     "Erforderlich zum Einfügen in das aktive Textfeld.",
                     "Required to insert into the active text field."),
-                actionTitle: text("Öffnen", "Open"),
-                actionHint: text("Bedienungshilfen öffnen", "Open accessibility settings"),
+                actionTitle: appState.accessibilityPermissionStatus != .granted
+                    ? text("Freigabe anfragen", "Request access")
+                    : text("Öffnen", "Open"),
+                actionHint: appState.accessibilityPermissionStatus != .granted
+                    ? text(
+                        "Systemdialog zu Bedienungshilfen",
+                        "System prompt for Accessibility")
+                    : text("Bedienungshilfen öffnen", "Open accessibility settings"),
                 action: {
-                    appState.openAccessibilitySettings()
+                    if appState.accessibilityPermissionStatus != .granted {
+                        appState.requestAccessibilityAccessFromSettings()
+                    } else {
+                        appState.openAccessibilitySettings()
+                    }
                 }
             )
 

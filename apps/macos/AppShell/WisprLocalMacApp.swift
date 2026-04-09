@@ -157,16 +157,6 @@ struct MenuBarContentView: View {
         storedLanguage.text(german, english)
     }
 
-    private var latestDictationPreview: String {
-        let normalized = appState.latestDictationText
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard normalized.count > 140 else {
-            return normalized
-        }
-        return "\(normalized.prefix(140))…"
-    }
-
     private var showsUpdateMenuItem: Bool {
         updaterController.state.allowsManualCheck
     }
@@ -186,15 +176,107 @@ struct MenuBarContentView: View {
         !appState.availableQuickSettingsAIModels.isEmpty
     }
 
+    /// Kompakt: nur bei kopierbarem Text. Normal: bei Text oder gespeichertem Verlauf (Menü/Liste).
+    private var menuBarShowsDictationHistorySection: Bool {
+        if appState.compactMenuBarDesign {
+            return !appState.latestDictationText.isEmpty
+        }
+        return !appState.latestDictationText.isEmpty || !appState.transcriptHistory.isEmpty
+    }
+
     private var visibleMenuBarLanguages: [DictationLanguage] {
         DictationLanguage.allCases.filter { $0 != .auto }
     }
 
-    private var selectedAIModelBinding: Binding<String> {
-        Binding(
-            get: { appState.selectedAIModelID ?? "" },
-            set: { appState.selectedAIModelID = $0.isEmpty ? nil : $0 }
-        )
+    private func aiProviderMenuSectionTitle(for model: AIModelDescriptor) -> String {
+        if model.providerID == "apple.foundation" {
+            return text("Apple", "Apple")
+        }
+        if let remote = appState.remoteProviders.first(where: { $0.id == model.providerID }) {
+            return remote.displayName
+        }
+        return model.providerID
+    }
+
+    /// Zeilenbezeichnung ohne vorangestellten Anbieter (z. B. nur „deepseek-r1:1.8b“, nicht „Ollama - …“).
+    private func aiModelMenuRowTitle(for model: AIModelDescriptor) -> String {
+        if model.providerKind == .remoteAPI,
+            let remote = appState.remoteProviders.first(where: { $0.id == model.providerID })
+        {
+            let prefix = remote.displayName + " - "
+            if model.displayName.hasPrefix(prefix) {
+                return String(model.displayName.dropFirst(prefix.count))
+            }
+        }
+        return model.displayName
+    }
+
+    private var aiModelsGroupedForMenu: [(section: String, models: [AIModelDescriptor])] {
+        let models = appState.visibleAIModels
+        guard !models.isEmpty else { return [] }
+        let grouped = Dictionary(grouping: models) { aiProviderMenuSectionTitle(for: $0) }
+        let appleHeading = text("Apple", "Apple")
+        let keys = grouped.keys.sorted { a, b in
+            if a == appleHeading && b != appleHeading { return true }
+            if b == appleHeading && a != appleHeading { return false }
+            return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+        }
+        return keys.compactMap { key -> (String, [AIModelDescriptor])? in
+            guard var list = grouped[key] else { return nil }
+            list.sort {
+                aiModelMenuRowTitle(for: $0).localizedCaseInsensitiveCompare(
+                    aiModelMenuRowTitle(for: $1)) == .orderedAscending
+            }
+            return (key, list)
+        }
+    }
+
+    /// Modellzeilen für `Menu` (kompakt & nicht kompakt). Kein `Picker` im `Menu` (Untermenü).
+    /// SF-Symbol-Checkmarks werden von AppKit hier oft falsch als „alle aktiv“ gerendert — daher Text-Präfix.
+    @ViewBuilder
+    private var menuBarLLMModelRowsInMenu: some View {
+        if appState.visibleAIModels.isEmpty {
+            Text(text("Keine Modelle erkannt", "No models detected"))
+                .disabled(true)
+        } else {
+            ForEach(Array(aiModelsGroupedForMenu.enumerated()), id: \.offset) { _, group in
+                Section(group.section) {
+                    ForEach(group.models) { model in
+                        Button {
+                            appState.selectedAIModelID = model.id
+                        } label: {
+                            Text(
+                                verbatim: (appState.selectedAIModelID == model.id
+                                    ? "✓ " : "\u{3000}")
+                                    + aiModelMenuRowTitle(for: model))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var menuBarLLMModelMenuTrailingSelection: some View {
+        Group {
+            if let selected = appState.selectedAIModel {
+                Text(aiModelMenuRowTitle(for: selected))
+            } else if appState.visibleAIModels.isEmpty {
+                Text(text("—", "—"))
+            } else {
+                Text(text("Auswählen…", "Choose…"))
+            }
+        }
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+
+    private var menuBarLLMAddModelButton: some View {
+        Button {
+            appState.openAISettingsWindow()
+        } label: {
+            Text(text("Modell hinzufügen…", "Add model…"))
+        }
     }
 
     private var selectedVoiceModelBinding: Binding<String> {
@@ -214,8 +296,33 @@ struct MenuBarContentView: View {
         }
     }
 
+    private var voiceModelsByProviderID: [String: [VoiceModelDescriptor]] {
+        Dictionary(grouping: appState.voiceModels, by: \.providerID)
+    }
+
     private var menuBarPopupWidth: CGFloat {
         appState.compactMenuBarDesign ? 280 : 320
+    }
+
+    private let menuBarHistoryPreviewItemLimit = 8
+    private let menuBarHistoryRowCharacterLimit = 64
+    private let menuBarHistoryLabelCharacterLimit = 40
+
+    private func historyMenuSingleLinePreview(_ raw: String, maxLength: Int) -> String {
+        let single =
+            raw
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard single.count > maxLength else { return single }
+        return "\(single.prefix(maxLength))…"
+    }
+
+    private var menuBarHistoryPreviewEntries: [TranscriptHistoryEntry] {
+        Array(appState.transcriptHistory.prefix(menuBarHistoryPreviewItemLimit))
+    }
+
+    private var menuBarHistoryHasMoreThanPreview: Bool {
+        appState.transcriptHistory.count > menuBarHistoryPreviewItemLimit
     }
 
     private var insertionModeLabel: String {
@@ -402,32 +509,36 @@ struct MenuBarContentView: View {
         }
     }
 
+    /// LLM-Auswahl inkl. „Modell hinzufügen“ — Label unterscheidet kompakt (nur Titel) vs. Zeile mit aktueller Auswahl.
     @ViewBuilder
-    private var menuBarAISettingsButton: some View {
-        Button {
-            appState.openAISettingsWindow()
+    private var menuBarLLMModelMenu: some View {
+        Menu {
+            menuBarLLMModelRowsInMenu
+
+            Divider()
+
+            menuBarLLMAddModelButton
         } label: {
-            MenuActionLabel(
-                title: text("AI-Einstellungen…", "AI settings…"),
-                shortcutGlyph: nil,
-                shortcutText: nil
-            )
+            if appState.compactMenuBarDesign {
+                MenuActionLabel(
+                    title: text("LLM Modell", "LLM model"),
+                    shortcutGlyph: nil,
+                    shortcutText: nil
+                )
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(text("LLM Modell", "LLM model"))
+                    Spacer(minLength: 8)
+                    menuBarLLMModelMenuTrailingSelection
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
+    /// Gemeinsame Untermenüs für kompakt und nicht kompakt (keine abhängigen Stil-/Anrede-/Modus-Picker).
     @ViewBuilder
-    private var menuBarNonCompactAIWhenEnabled: some View {
-        Picker(text("LLM", "LLM"), selection: selectedAIModelBinding) {
-            if appState.visibleAIModels.isEmpty {
-                Text(text("Keine Modelle erkannt", "No models detected")).tag("")
-            } else {
-                ForEach(appState.visibleAIModels) { model in
-                    Text(model.displayName).tag(model.id)
-                }
-            }
-        }
-        .disabled(appState.visibleAIModels.isEmpty)
-
+    private var menuBarSharedAIFeatureMenus: some View {
         Menu {
             Toggle(
                 text("Inhaltsstreaming", "Content streaming"),
@@ -464,7 +575,64 @@ struct MenuBarContentView: View {
                 shortcutText: nil
             )
         }
+    }
 
+    /// Nicht kompakt: Verlauf wie LLM-Menü — Zeilen tippen kopiert; unten ggf. Sprung ins Einstellungsfenster.
+    @ViewBuilder
+    private var menuBarNonCompactHistoryMenu: some View {
+        Menu {
+            ForEach(menuBarHistoryPreviewEntries) { entry in
+                Button {
+                    copyToClipboard(entry.text)
+                } label: {
+                    Text(
+                        historyMenuSingleLinePreview(
+                            entry.text,
+                            maxLength: menuBarHistoryRowCharacterLimit
+                        )
+                    )
+                }
+                .accessibilityLabel(
+                    text(
+                        "Vollständigen Verlaufstext in die Zwischenablage kopieren",
+                        "Copy full history item to clipboard"
+                    )
+                )
+            }
+            if menuBarHistoryHasMoreThanPreview {
+                Divider()
+                Button {
+                    appState.openHistorySettingsWindow()
+                } label: {
+                    Text(
+                        text(
+                            "Gesamten Verlauf anzeigen…",
+                            "Show full history…")
+                    )
+                }
+            }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(text("Verlauf", "History"))
+                Spacer(minLength: 8)
+                if let newest = appState.transcriptHistory.first {
+                    Text(
+                        historyMenuSingleLinePreview(
+                            newest.text,
+                            maxLength: menuBarHistoryLabelCharacterLimit
+                        )
+                    )
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Nur nicht kompakt: Stil-/Anrede-/Modus-Picker (abhängig von AI-Aufgaben).
+    @ViewBuilder
+    private var menuBarNonCompactAIDetailPickers: some View {
         if appState.aiShowsWritingStyleControls {
             Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
                 ForEach(appState.availableAIWritingStyles) { style in
@@ -505,127 +673,11 @@ struct MenuBarContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var menuBarCompactAIWhenEnabled: some View {
-        Menu {
-            ForEach(appState.visibleAIModels) { model in
-                Button(model.displayName) {
-                    appState.selectedAIModelID = model.id
-                }
-            }
-        } label: {
-            MenuActionLabel(
-                title: text("LLM-Modell", "LLM model"),
-                shortcutGlyph: nil,
-                shortcutText: nil
-            )
-        }
-        .disabled(appState.visibleAIModels.isEmpty)
-
-        Menu {
-            Toggle(
-                text("Inhaltsstreaming", "Content streaming"),
-                isOn: $appState.aiProcessingApplyDuringLiveInsertion
-            )
-            .disabled(!appState.streamingEnabled || appState.visibleAIModels.isEmpty)
-
-            Toggle(
-                text("Endergebnis einfügen", "Insert final result"),
-                isOn: $appState.aiProcessingApplyToFinalResult
-            )
-            .disabled(appState.visibleAIModels.isEmpty)
-        } label: {
-            MenuActionLabel(
-                title: text("AI anwenden bei", "Apply AI for"),
-                shortcutGlyph: nil,
-                shortcutText: nil
-            )
-        }
-
-        Menu {
-            Toggle(text("Stil / Ton", "Style / Tone"), isOn: $appState.aiTaskToneEnabled)
-                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-            Toggle(text("Anrede", "Salutation"), isOn: $appState.aiTaskSalutationEnabled)
-                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-            Toggle(text("Format / Modus", "Format / Mode"), isOn: $appState.aiTaskFormatEnabled)
-                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-            Toggle(text("Bereinigen", "Clean up"), isOn: $appState.aiTaskCleanupEnabled)
-                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
-        } label: {
-            MenuActionLabel(
-                title: text("AI-Aufgaben", "AI tasks"),
-                shortcutGlyph: nil,
-                shortcutText: nil
-            )
-        }
-
-        if appState.aiShowsWritingStyleControls {
-            Menu {
-                ForEach(appState.availableAIWritingStyles) { style in
-                    Button {
-                        appState.aiWritingStyle = style
-                    } label: {
-                        Text(
-                            style.localizedDisplayName(
-                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        )
-                    }
-                }
-            } label: {
-                MenuActionLabel(
-                    title: text("Stil", "Style"),
-                    shortcutGlyph: nil,
-                    shortcutText: nil
-                )
-            }
-        }
-
-        if appState.aiShowsSalutationControls {
-            Menu {
-                ForEach(AISalutation.allCases) { salutation in
-                    Button {
-                        appState.aiSalutation = salutation
-                    } label: {
-                        Text(
-                            salutation.localizedDisplayName(
-                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        )
-                    }
-                }
-            } label: {
-                MenuActionLabel(
-                    title: text("Anrede", "Salutation"),
-                    shortcutGlyph: nil,
-                    shortcutText: nil
-                )
-            }
-        }
-
-        if appState.aiShowsModeControls {
-            Menu {
-                ForEach(AIFormattingMode.allCases) { mode in
-                    Button {
-                        appState.aiFormattingMode = mode
-                    } label: {
-                        Text(
-                            mode.localizedDisplayName(
-                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        )
-                    }
-                }
-            } label: {
-                MenuActionLabel(
-                    title: text("Modus", "Mode"),
-                    shortcutGlyph: nil,
-                    shortcutText: nil
-                )
-            }
-        }
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: appState.compactMenuBarDesign ? 6 : 8) {
+        VStack(alignment: .leading, spacing: 8) {
             startDictationButton
+
+            Divider()
 
             menuBarPermissionSection
 
@@ -661,8 +713,7 @@ struct MenuBarContentView: View {
             if !appState.compactMenuBarDesign {
                 Picker(text("Sprachmodell", "Voice model"), selection: selectedVoiceModelBinding) {
                     ForEach(menuBarVoiceProviders) { provider in
-                        let models = appState.voiceModels.filter { $0.providerID == provider.id }
-                        if !models.isEmpty {
+                        if let models = voiceModelsByProviderID[provider.id], !models.isEmpty {
                             Section(provider.displayName) {
                                 ForEach(models) { model in
                                     Text(model.displayName).tag(model.id)
@@ -684,28 +735,32 @@ struct MenuBarContentView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: appState.compactMenuBarDesign ? 4 : 6) {
+            VStack(alignment: .leading, spacing: 6) {
                 Toggle(
                     text("AI-Verarbeitung", "AI processing"), isOn: $appState.aiProcessingEnabled
                 )
                 .disabled(!hasQuickSettingsAIModels)
 
                 if appState.aiProcessingEnabled {
-                    if appState.compactMenuBarDesign {
-                        menuBarCompactAIWhenEnabled
-                    } else {
-                        menuBarNonCompactAIWhenEnabled
+                    menuBarLLMModelMenu
+                    menuBarSharedAIFeatureMenus
+                    if !appState.compactMenuBarDesign {
+                        menuBarNonCompactAIDetailPickers
                     }
                 }
-
-                menuBarAISettingsButton
             }
 
-            if !appState.latestDictationText.isEmpty {
+            if menuBarShowsDictationHistorySection {
                 Divider()
-                copyLastDictationButton
-                Button(text("Verlauf", "History")) {
-                    appState.openHistorySettingsWindow()
+                if !appState.latestDictationText.isEmpty {
+                    copyLastDictationButton
+                }
+                if appState.compactMenuBarDesign {
+                    Button(text("Verlauf…", "History…")) {
+                        appState.openHistorySettingsWindow()
+                    }
+                } else if !appState.transcriptHistory.isEmpty {
+                    menuBarNonCompactHistoryMenu
                 }
             }
 

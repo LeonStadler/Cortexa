@@ -61,9 +61,12 @@ Operational notes:
 - Remote AI processing can be added through provider presets or custom OpenAI-compatible API endpoints. Models are discovered dynamically from the provider catalog, API keys are stored in the macOS Keychain, and providers without credentials stay out of the quick settings until they are operational. Local OpenAI-compatible servers such as Ollama or LM Studio can also run without an API key.
 - Auto language detection no longer implies translation. The spoken language is preserved unless translation is explicitly enabled.
 - Basic speech-activity gating suppresses no-speech hallucinations so short idle outputs such as `Musik` are less likely to be inserted when the microphone captures no real dictation.
+- Accessibility readiness now uses the same focused-target AX probe as the insertion pipeline. The UI only reports direct insertion as available when the system-wide AX focus path is actually readable, which avoids false-positive "granted" states where insertion later fails with `kAXErrorAPIDisabled`.
 - If the focused text element briefly disappears during startup, the dictation runtime can recover by reusing the last known AX text target in the same frontmost app.
 - Dictation can start even when no text field is currently active; streaming waits and inserts once a target is focused, and the final transcript waits up to five seconds after stop before either inserting, copying to the clipboard, or falling back to history-only retention depending on the chosen delivery mode.
 - Recoverable streaming target errors no longer push the whole runtime into a broken state; the runtime keeps the current transcript buffered and resumes insertion when a writable text target becomes available again.
+- Final-delivery diagnostics now record whether the result was written via direct AX value-set, clipboard paste fallback, or simulated keyboard input, and whether clipboard restore plus auto-send actually ran.
+- Clipboard restoration now snapshots and restores the full pasteboard item list for clipboard-based delivery instead of only restoring a plain string value.
 - Runtime start now guards against duplicate starts while initialization is in-flight and performs a full reset on audio push failures, reducing stuck `Diktat läuft bereits` error loops.
 - Version metadata is injected into the generated Xcode project from the repo `VERSION` file.
 - The macOS helper scripts look for `xcodegen` in common Homebrew locations and can reuse an already generated `WisprLocalMac.xcodeproj` if regeneration is not needed.
