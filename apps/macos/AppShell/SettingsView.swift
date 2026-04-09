@@ -97,20 +97,6 @@ struct SettingsView: View {
         !searchQuery.isEmpty
     }
 
-    /// Etwas länger als die früheren 0,12s: besser im Takt mit Toolbar-Suchfeld (macOS) / Titelwechsel.
-    private var searchFieldSyncedAnimation: Animation? {
-        accessibilityReduceMotion ? nil : .easeInOut(duration: 0.26)
-    }
-
-    /// Kleiner vertikaler Shift neben Opacity — reiner Fade auf `Form`+Material wirkt oft „fragmentiert“.
-    private var searchResultsContentTransition: AnyTransition {
-        if accessibilityReduceMotion {
-            .opacity
-        } else {
-            .opacity.combined(with: .offset(y: 7))
-        }
-    }
-
     /// Live rewrite / adjustment radius affects streaming partials only.
     private var isLiveRewriteScopeApplicable: Bool {
         appState.streamingEnabled
@@ -305,124 +291,21 @@ struct SettingsView: View {
         return preview.isEmpty ? appState.diagnosticsText : preview
     }
 
-    private var settingsNavigationTitle: String {
-        isSearching
-            ? text("Suchergebnisse", "Search Results")
-            : currentSelectedTab.title(language: storedLanguage)
-    }
-
     var body: some View {
-        NavigationSplitView(columnVisibility: $splitColumnVisibility) {
-            List(selection: selectedTabSelection) {
-                Section {
-                    ForEach(SettingsTab.allCases, id: \.self) { tab in
-                        Label(tab.title(language: storedLanguage), systemImage: tab.symbolName)
-                            .tag(tab)
-                            .imageScale(.medium)
-                    }
-                }
+        SettingsViewShell(
+            splitColumnVisibility: $splitColumnVisibility,
+            showsTabInfoPopover: $showsTabInfoPopover,
+            searchText: $searchText,
+            storedLanguage: storedLanguage,
+            selectedTabSelection: selectedTabSelection,
+            currentSelectedTab: currentSelectedTab,
+            selectedForm: AnyView(selectedForm),
+            searchResultsForm: AnyView(searchResultsForm),
+            accessibilityReduceMotion: accessibilityReduceMotion,
+            onRefreshPermissionStates: {
+                appState.refreshPermissionStates()
             }
-            .listStyle(.sidebar)
-            .settingsSidebarBackgroundExtensionEffect()
-            .environment(\.defaultMinListRowHeight, 36)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .navigationSplitViewColumnWidth(
-                min: MacNativeDesign.SettingsSplitView.sidebarMinWidth,
-                ideal: MacNativeDesign.SettingsSplitView.sidebarIdealWidth,
-                max: MacNativeDesign.SettingsSplitView.sidebarMaxWidth
-            )
-        } detail: {
-            NavigationStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Group {
-                            if isSearching {
-                                searchResultsForm
-                            } else {
-                                selectedForm
-                            }
-                        }
-                        .frame(maxWidth: 760, alignment: .leading)
-                        // Vertikaler Offset + Opacity: Material/Glass in `Form` wirkt bei purem Fade oft zerhackt.
-                        .transition(searchResultsContentTransition)
-                        .contentTransition(.interpolate)
-                    }
-                    .padding(.horizontal, 28)
-                    .padding(.top, 20)
-                    .padding(.bottom, 28)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle(settingsNavigationTitle)
-            }
-            // Gleiche Kurve für Titel (Toolbar) und Inhalt, damit die System-Suchfeld-Animation nicht „auseinanderläuft“.
-            .animation(searchFieldSyncedAnimation, value: isSearching)
-            // Nur Detail-Spalte: globales `.controlSize` am SplitView würde auch die Fenster-Toolbar verkleinern.
-            .controlSize(.regular)
-            .navigationSplitViewColumnWidth(
-                min: MacNativeDesign.SettingsSplitView.detailMinWidth,
-                ideal: 720
-            )
-        }
-        .searchable(
-            text: $searchText,
-            placement: .automatic,
-            prompt: text("Einstellungen durchsuchen", "Search settings")
         )
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    let next: NavigationSplitViewVisibility =
-                        splitColumnVisibility == .detailOnly ? .all : .detailOnly
-                    if accessibilityReduceMotion {
-                        splitColumnVisibility = next
-                    } else {
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            splitColumnVisibility = next
-                        }
-                    }
-                } label: {
-                    Image(systemName: "sidebar.left")
-                }
-                .accessibilityLabel(
-                    text("Seitenleiste ein- oder ausblenden", "Show or hide sidebar")
-                )
-                .help(text("Seitenleiste ein- oder ausblenden", "Show or hide sidebar"))
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showsTabInfoPopover.toggle()
-                } label: {
-                    Image(systemName: "info.circle")
-                }
-                .accessibilityLabel(
-                    text("Informationen zu diesem Bereich", "Information about this section")
-                )
-                // Kein `.help`: vermeidet den nativen Tooltip neben dem Klick-Popover.
-                .popover(isPresented: $showsTabInfoPopover, arrowEdge: .top) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(currentSelectedTab.title(language: storedLanguage))
-                            .font(.headline)
-                        Text(currentSelectedTab.details(language: storedLanguage))
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(14)
-                    .frame(minWidth: 280, maxWidth: 320, alignment: .leading)
-                }
-            }
-        }
-        .environment(\.locale, storedLanguage.localeForFormatting)
-        .frame(
-            minWidth: MacNativeDesign.SettingsSplitView.windowMinWidth,
-            idealWidth: 1020,
-            minHeight: 600,
-            idealHeight: 650
-        )
-        .background(.windowBackground)
-        .onAppear {
-            appState.refreshPermissionStates()
-        }
     }
 
     private var generalForm: some View {

@@ -1,5 +1,11 @@
 # Changelog
 
+## Chore
+
+- 2026-04-09: macOS-AppShell verhaltensgleich in kleinere Runtime-, State- und UI-Bausteine refaktoriert und mit Characterization-Tests abgesichert.
+  - Dateien: `Package.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppPreferencesStore.swift`, `apps/macos/AppShell/SessionConfigurationBuilder.swift`, `apps/macos/AppShell/PermissionCoordinator.swift`, `apps/macos/AppShell/AppLifecycleCoordinator.swift`, `apps/macos/AppShell/SessionEntryController.swift`, `apps/macos/AppShell/TranscriptHistoryController.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/MenuBarContentView.swift`, `apps/macos/AppShell/SettingsWindowPresenter.swift`, `Tests/AppShellSupportTests/AppShellCharacterizationTests.swift`, `Tests/AppShellSupportTests/DictationRuntimeServicesTests.swift`, `Tests/AppShellSupportTests/MacAppPreferencesStoreTests.swift`, `Tests/AppShellSupportTests/SessionConfigurationBuilderTests.swift`, `Tests/AppShellSupportTests/SettingsTabTests.swift`, `Tests/AppShellSupportTests/TranscriptHistoryStoreTests.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`
+  - Funktionalitaet: Die bestehende macOS-Funktionalitaet blieb unveraendert, wurde aber entlang klarer Verantwortungen neu geschnitten. `DictationRuntime` delegiert Permission-, Textziel-, Streaming-Insert- und Final-Delivery-Details jetzt an eigene Services. `MacAppState` nutzt getrennte Bausteine fuer Preferences-Laden, Session-Konfiguration, Permissions, Lifecycle, Session-Einstieg und Verlaufspflege, waehrend `SettingsView` und die Menüleisten-App in eine duennere Shell plus eigene Presenter-/Content-Typen aufgeteilt wurden. Parallel dazu frieren neue Characterization- und Service-Tests das bisherige Verhalten fuer Permissions, Start-/Stop-Pfade, Delivery, History, Suche und Remote-Provider-Editing ein, damit die Refaktorierung keine sichtbare Produktsemantik veraendert.
+
 ## Fixes
 
 - 2026-04-08: AX-Insert-Regression im macOS-Diktatpfad abgesichert; Clipboard-/Auto-Send-Diagnostik und AI-Semantik nachgezogen.

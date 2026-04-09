@@ -110,6 +110,53 @@ enum PermissionStatus: String {
     }
 }
 
+protocol DictationRuntimeControlling: AnyObject {
+    var onStatus: ((String) -> Void)? { get set }
+    var onDiagnostic: ((String) -> Void)? { get set }
+    var onDebugEvent: ((String) -> Void)? { get set }
+    var onTranscript: ((String) -> Void)? { get set }
+    var onFinalTranscript: ((FinalTranscriptEvent) -> Void)? { get set }
+    var onSessionActivityChanged: ((Bool) -> Void)? { get set }
+    var onPermissionInteractionFinished: (() -> Void)? { get set }
+
+    func prepareRuntime()
+    func setVoiceModelActiveDuration(_ duration: VoiceModelActiveDuration)
+    func toggle(options: DictationStartOptions)
+    func cancel()
+    func start(options: DictationStartOptions)
+    func openMicrophoneSettings()
+    func openAccessibilitySettings()
+    func promptAccessibilityTrustFromUser()
+    func setAIProcessingService(_ service: AIProcessingService)
+}
+
+protocol GlobalHotkeyRegistering: AnyObject {
+    var onToggle: (() -> Void)? { get set }
+    var onHoldPress: (() -> Void)? { get set }
+    var onHoldRelease: (() -> Void)? { get set }
+    var onCancel: (() -> Void)? { get set }
+    var onModeSwitch: (() -> Void)? { get set }
+
+    @discardableResult
+    func register(
+        shortcut: HotkeyBinding,
+        shortcutEnabled: Bool,
+        holdShortcut: HotkeyBinding?,
+        holdEnabled: Bool,
+        cancelShortcut: HotkeyBinding?,
+        cancelEnabled: Bool,
+        modeShortcut: HotkeyBinding?,
+        modeEnabled: Bool,
+        force: Bool
+    ) -> Bool
+}
+
+protocol AIRemoteProviderSecretStoring: AnyObject {
+    func saveAPIKey(_ key: String, providerID: String) throws
+    func loadAPIKey(providerID: String) -> String?
+    func removeAPIKey(providerID: String)
+}
+
 enum LiveRewriteScope: String, CaseIterable, Identifiable {
     case currentSentence
     case currentSentenceAndPreviousSentence
@@ -1050,20 +1097,26 @@ final class MacAppState: ObservableObject {
     }
 
     private let userDefaults: UserDefaults
-    private let hotkeyManager = GlobalHotkeyManager()
-    private let dictationRuntime = DictationRuntime()
+    private let preferencesStore: MacAppPreferencesStore
+    private let sessionConfigurationBuilder: SessionConfigurationBuilder
+    private let hotkeyManager: GlobalHotkeyRegistering
+    private let dictationRuntime: DictationRuntimeControlling
     private let snippetStore: SnippetStore
-    private let historyStore: TranscriptHistoryStore
+    private let historyStore: TranscriptHistoryStoring
     private let auditLogger: AuditLogging
     private let debugLogger: AuditLogging
     private let permissionController: PermissionControlling
     private let capabilityProfiler = CapabilityProfiler()
-    private let aiRemoteProviderSecretStore = AIRemoteProviderSecretStore()
+    private let aiRemoteProviderSecretStore: AIRemoteProviderSecretStoring
     private let voiceModelInstaller = VoiceModelInstaller()
     private var aiProcessingService = AIProcessingService()
     private let appConfiguration: MacAppConfiguration
 
     private let licenseController: LicenseController
+    private var permissionCoordinator: PermissionCoordinator!
+    private var appLifecycleCoordinator: AppLifecycleCoordinator!
+    private var sessionEntryController: SessionEntryController!
+    private var transcriptHistoryController: TranscriptHistoryController!
     private weak var updaterController: SparkleUpdaterController?
     private var didActivateApplicationObserver: NSObjectProtocol?
     private var didBecomeActiveObserver: NSObjectProtocol?
@@ -1083,306 +1136,204 @@ final class MacAppState: ObservableObject {
     init(
         userDefaults: UserDefaults = .standard,
         configuration: MacAppConfiguration = .load(),
-        permissionController: PermissionControlling = PermissionController()
+        permissionController: PermissionControlling = PermissionController(),
+        dictationRuntime: DictationRuntimeControlling = DictationRuntime(),
+        hotkeyManager: GlobalHotkeyRegistering = GlobalHotkeyManager(),
+        historyStore: TranscriptHistoryStoring? = nil,
+        aiRemoteProviderSecretStore: AIRemoteProviderSecretStoring = AIRemoteProviderSecretStore(),
+        skipStartupSystemHooks: Bool = false
     ) {
         self.userDefaults = userDefaults
         self.appConfiguration = configuration
         self.permissionController = permissionController
+        self.dictationRuntime = dictationRuntime
+        self.hotkeyManager = hotkeyManager
+        self.aiRemoteProviderSecretStore = aiRemoteProviderSecretStore
+        self.preferencesStore = MacAppPreferencesStore(userDefaults: userDefaults)
+        self.sessionConfigurationBuilder = SessionConfigurationBuilder()
 
-        self.streamingEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.streamingEnabled) as? Bool ?? true
+        let preferences = preferencesStore.loadInitialState(
+            currentLaunchOnLoginEnabled: Self.currentLaunchOnLoginEnabled())
 
-        if let rawLanguage = userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage),
-            let parsedLanguage = DictationLanguage(rawValue: rawLanguage)
-        {
-            self.selectedLanguage = parsedLanguage
-        } else {
-            self.selectedLanguage = .german
-        }
-
-        if let rawTranslationOutputMode = userDefaults.string(
-            forKey: UserDefaultsKeys.translationOutputMode),
-            let parsedTranslationOutputMode = TranslationOutputMode(
-                rawValue: rawTranslationOutputMode)
-        {
-            self.translationOutputMode = parsedTranslationOutputMode
-        } else {
-            self.translationOutputMode = .original
-        }
-        if let storedVisibleMenuBarLanguages = userDefaults.stringArray(
-            forKey: UserDefaultsKeys.visibleMenuBarLanguages)
-        {
-            self.visibleMenuBarLanguages = storedVisibleMenuBarLanguages
-        } else {
-            self.visibleMenuBarLanguages = DictationLanguage.allCases
-                .filter { $0 != .auto }
-                .map(\.rawValue)
-        }
-
-        if let rawPerformance = userDefaults.string(forKey: UserDefaultsKeys.performanceProfile),
-            let parsedPerformance = DictationPerformance(rawValue: rawPerformance)
-        {
-            self.performanceProfile = parsedPerformance
-        } else {
-            self.performanceProfile = .auto
-        }
-
-        self.selectedVoiceProviderID =
-            userDefaults.string(forKey: UserDefaultsKeys.selectedVoiceProviderID)
-            ?? LocalVoiceModelCatalog.defaultProviderID
-        self.selectedVoiceModelID =
-            userDefaults.string(forKey: UserDefaultsKeys.selectedVoiceModelID)
-            ?? LocalVoiceModelCatalog.defaultModelID
-        if let data = userDefaults.data(forKey: UserDefaultsKeys.voiceLanguageOverrides),
-            let decoded = try? JSONDecoder().decode([VoiceLanguageOverride].self, from: data)
-        {
-            self.voiceLanguageOverrides = decoded
-        } else {
-            self.voiceLanguageOverrides = []
-        }
-
-        if let rawHotkey = userDefaults.string(forKey: UserDefaultsKeys.selectedHotkey),
-            let parsedHotkey = HotkeyBinding.from(rawValue: rawHotkey)
-        {
-            self.selectedHotkey = parsedHotkey
-        } else {
-            self.selectedHotkey = .optionSpace
-        }
-
-        self.toggleShortcutEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.toggleShortcutEnabled) as? Bool ?? true
-        self.holdToDictateEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.holdToDictateEnabled) as? Bool ?? false
-
-        if let rawHoldHotkey = userDefaults.string(forKey: UserDefaultsKeys.holdShortcut),
-            let parsedHoldHotkey = HotkeyBinding.from(rawValue: rawHoldHotkey)
-        {
-            self.holdShortcut = parsedHoldHotkey
-        } else {
-            self.holdShortcut = .optionShiftSpace
-        }
-
-        self.cancelShortcutEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.cancelShortcutEnabled) as? Bool ?? false
-        if let rawCancelHotkey = userDefaults.string(forKey: UserDefaultsKeys.cancelShortcut),
-            let parsedCancelHotkey = HotkeyBinding.from(rawValue: rawCancelHotkey)
-        {
-            self.cancelShortcut = parsedCancelHotkey
-        } else {
-            self.cancelShortcut = HotkeyBinding(
-                keyCode: UInt32(kVK_Escape), carbonModifiers: UInt32(optionKey))
-        }
-
-        self.modeSwitchShortcutEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.modeSwitchShortcutEnabled) as? Bool
-            ?? false
-        if let rawModeSwitchHotkey = userDefaults.string(
-            forKey: UserDefaultsKeys.modeSwitchShortcut),
-            let parsedModeSwitchHotkey = HotkeyBinding.from(rawValue: rawModeSwitchHotkey)
-        {
-            self.modeSwitchShortcut = parsedModeSwitchHotkey
-        } else {
-            self.modeSwitchShortcut = HotkeyBinding(
-                keyCode: UInt32(kVK_ANSI_M), carbonModifiers: UInt32(optionKey | shiftKey))
-        }
-
-        self.showMenuBarShortcutHints =
-            userDefaults.object(forKey: UserDefaultsKeys.showMenuBarShortcutHints) as? Bool ?? false
-        self.compactMenuBarDesign =
-            userDefaults.object(forKey: UserDefaultsKeys.compactMenuBarDesign) as? Bool ?? false
-        self.showInDock = userDefaults.object(forKey: UserDefaultsKeys.showInDock) as? Bool ?? false
-        if userDefaults.object(forKey: UserDefaultsKeys.launchOnLoginEnabled) != nil {
-            self.launchOnLoginEnabled = userDefaults.bool(
-                forKey: UserDefaultsKeys.launchOnLoginEnabled)
-        } else {
-            self.launchOnLoginEnabled = Self.currentLaunchOnLoginEnabled()
-        }
-        self.automaticallyCheckForUpdates =
-            userDefaults.object(forKey: UserDefaultsKeys.automaticallyCheckForUpdates) as? Bool
-            ?? true
-        self.debugModeEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.debugModeEnabled) as? Bool ?? false
-        if let rawDeliveryMode = userDefaults.string(
-            forKey: UserDefaultsKeys.finalResultDeliveryMode),
-            let parsedDeliveryMode = FinalResultDeliveryMode(rawValue: rawDeliveryMode)
-        {
-            self.finalResultDeliveryMode = parsedDeliveryMode
-        } else {
-            self.finalResultDeliveryMode = .insert
-        }
-        self.clipboardFallbackWhenNoTarget =
-            userDefaults.object(forKey: UserDefaultsKeys.clipboardFallbackWhenNoTarget) as? Bool
-            ?? false
-
-        if let rawLiveRewriteScope = userDefaults.string(forKey: UserDefaultsKeys.liveRewriteScope),
-            let parsedLiveRewriteScope = LiveRewriteScope(rawValue: rawLiveRewriteScope)
-        {
-            self.liveRewriteScope = parsedLiveRewriteScope
-        } else {
-            self.liveRewriteScope = .currentSentence
-        }
-
-        self.aiProcessingEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.aiProcessingEnabled) as? Bool ?? false
-        self.selectedAIModelID = userDefaults.string(forKey: UserDefaultsKeys.selectedAIModelID)
-
-        if userDefaults.object(forKey: UserDefaultsKeys.aiProcessingApplyDuringLiveInsertion) != nil
-        {
-            self.aiProcessingApplyDuringLiveInsertion = userDefaults.bool(
-                forKey: UserDefaultsKeys.aiProcessingApplyDuringLiveInsertion)
-        } else if userDefaults.string(forKey: UserDefaultsKeys.legacyAIProcessingScope)
-            == "liveAndFinal"
-        {
-            self.aiProcessingApplyDuringLiveInsertion = true
-        } else {
-            self.aiProcessingApplyDuringLiveInsertion = false
-        }
-
-        if userDefaults.object(forKey: UserDefaultsKeys.aiProcessingApplyToFinalResult) != nil {
-            self.aiProcessingApplyToFinalResult = userDefaults.bool(
-                forKey: UserDefaultsKeys.aiProcessingApplyToFinalResult)
-        } else {
-            self.aiProcessingApplyToFinalResult = true
-        }
-
-        let storedAIRevisionGoal = userDefaults.string(forKey: UserDefaultsKeys.aiRevisionGoal)
-            .flatMap(AIRevisionGoal.init(rawValue:))
-
-        if userDefaults.object(forKey: UserDefaultsKeys.aiTaskCleanupEnabled) != nil {
-            self.aiTaskCleanupEnabled = userDefaults.bool(
-                forKey: UserDefaultsKeys.aiTaskCleanupEnabled)
-        } else {
-            self.aiTaskCleanupEnabled =
-                storedAIRevisionGoal == nil || storedAIRevisionGoal == .cleanup
-        }
-
-        if userDefaults.object(forKey: UserDefaultsKeys.aiTaskToneEnabled) != nil {
-            self.aiTaskToneEnabled = userDefaults.bool(forKey: UserDefaultsKeys.aiTaskToneEnabled)
-        } else {
-            self.aiTaskToneEnabled = storedAIRevisionGoal == .adjustTone
-        }
-
-        if userDefaults.object(forKey: UserDefaultsKeys.aiTaskSalutationEnabled) != nil {
-            self.aiTaskSalutationEnabled = userDefaults.bool(
-                forKey: UserDefaultsKeys.aiTaskSalutationEnabled)
-        } else {
-            self.aiTaskSalutationEnabled = storedAIRevisionGoal == .adjustSalutation
-        }
-
-        if userDefaults.object(forKey: UserDefaultsKeys.aiTaskFormatEnabled) != nil {
-            self.aiTaskFormatEnabled = userDefaults.bool(
-                forKey: UserDefaultsKeys.aiTaskFormatEnabled)
-        } else {
-            self.aiTaskFormatEnabled = storedAIRevisionGoal == .adaptFormat
-        }
-
-        if let rawAIRevisionGoal = userDefaults.string(forKey: UserDefaultsKeys.aiRevisionGoal),
-            let parsedAIRevisionGoal = AIRevisionGoal(rawValue: rawAIRevisionGoal)
-        {
-            self.aiRevisionGoal = parsedAIRevisionGoal
-        } else {
-            self.aiRevisionGoal = .cleanup
-        }
-
-        if let rawAIFormattingMode = userDefaults.string(forKey: UserDefaultsKeys.aiFormattingMode),
-            let parsedAIFormattingMode = AIFormattingMode(rawValue: rawAIFormattingMode)
-        {
-            self.aiFormattingMode = parsedAIFormattingMode
-        } else {
-            self.aiFormattingMode = .asSpoken
-        }
-
-        if let rawAIWritingStyle = userDefaults.string(forKey: UserDefaultsKeys.aiWritingStyle),
-            let parsedAIWritingStyle = AIWritingStyle(rawValue: rawAIWritingStyle)
-        {
-            self.aiWritingStyle = parsedAIWritingStyle
-        } else {
-            self.aiWritingStyle = .none
-        }
-
-        if let rawAISalutation = userDefaults.string(forKey: UserDefaultsKeys.aiSalutation),
-            let parsedAISalutation = AISalutation(rawValue: rawAISalutation)
-        {
-            self.aiSalutation = parsedAISalutation
-        } else {
-            self.aiSalutation = .none
-        }
-
-        let loadedCleanupIntensity =
-            userDefaults.object(forKey: UserDefaultsKeys.aiCleanupIntensity) as? Double ?? 0.5
-        self.aiCleanupIntensity = min(1, max(0, loadedCleanupIntensity))
-
-        if let rawVoiceModelActiveDuration = userDefaults.string(
-            forKey: UserDefaultsKeys.voiceModelActiveDuration),
-            let parsedVoiceModelActiveDuration = VoiceModelActiveDuration(
-                rawValue: rawVoiceModelActiveDuration)
-        {
-            self.voiceModelActiveDuration = parsedVoiceModelActiveDuration
-        } else {
-            self.voiceModelActiveDuration = .oneMinute
-        }
-
-        self.automaticMicrophoneGainBoost =
-            userDefaults.object(forKey: UserDefaultsKeys.automaticMicrophoneGainBoost) as? Bool
-            ?? false
-        self.silenceRemovalEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.silenceRemovalEnabled) as? Bool ?? false
-        self.dynamicNormalizationEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.dynamicNormalizationEnabled) as? Bool
-            ?? false
-        self.noiseSuppressionLevel =
-            userDefaults.object(forKey: UserDefaultsKeys.noiseSuppressionLevel) as? Double ?? 0.35
-        self.soundEffectsEnabled =
-            userDefaults.object(forKey: UserDefaultsKeys.soundEffectsEnabled) as? Bool ?? false
-        let loadedSoundVolume =
-            userDefaults.object(forKey: UserDefaultsKeys.soundEffectsVolume) as? Double ?? 50
-        let steppedSoundVolume = (loadedSoundVolume / 5).rounded() * 5
-        self.soundEffectsVolume = min(100, max(0, steppedSoundVolume))
-
-        if let rawHistoryRetentionPolicy = userDefaults.string(
-            forKey: UserDefaultsKeys.historyRetentionPolicy),
-            let parsedHistoryRetentionPolicy = HistoryRetentionPolicy(
-                rawValue: rawHistoryRetentionPolicy)
-        {
-            self.historyRetentionPolicy = parsedHistoryRetentionPolicy
-        } else {
-            self.historyRetentionPolicy = .forever
-        }
-
-        self.autoSendAfterPaste =
-            userDefaults.object(forKey: UserDefaultsKeys.autoSendAfterPaste) as? Bool ?? false
-        self.restoreClipboardAfterPaste =
-            userDefaults.object(forKey: UserDefaultsKeys.restoreClipboardAfterPaste) as? Bool
-            ?? false
-        self.simulateKeypresses =
-            userDefaults.object(forKey: UserDefaultsKeys.simulateKeypresses) as? Bool ?? false
-
-        let persistedRemoteProviders: [AIRemoteProviderConfiguration]
-        if let data = userDefaults.data(forKey: UserDefaultsKeys.remoteProviders),
-            let decoded = try? JSONDecoder().decode(
-                [AIRemoteProviderConfiguration].self, from: data)
-        {
-            persistedRemoteProviders = decoded
-        } else {
-            persistedRemoteProviders = []
-        }
-        self.remoteProviders = persistedRemoteProviders
-
-        let initialSelectedRemoteProviderID =
-            userDefaults.string(forKey: UserDefaultsKeys.selectedRemoteProviderID)
-            ?? persistedRemoteProviders.first?.id
-        self.selectedRemoteProviderID = initialSelectedRemoteProviderID
+        self.streamingEnabled = preferences.streamingEnabled
+        self.selectedLanguage = preferences.selectedLanguage
+        self.translationOutputMode = preferences.translationOutputMode
+        self.visibleMenuBarLanguages = preferences.visibleMenuBarLanguages
+        self.performanceProfile = preferences.performanceProfile
+        self.selectedVoiceProviderID = preferences.selectedVoiceProviderID
+        self.selectedVoiceModelID = preferences.selectedVoiceModelID
+        self.voiceLanguageOverrides = preferences.voiceLanguageOverrides
+        self.selectedHotkey = preferences.selectedHotkey
+        self.toggleShortcutEnabled = preferences.toggleShortcutEnabled
+        self.holdToDictateEnabled = preferences.holdToDictateEnabled
+        self.holdShortcut = preferences.holdShortcut
+        self.cancelShortcutEnabled = preferences.cancelShortcutEnabled
+        self.cancelShortcut = preferences.cancelShortcut
+        self.modeSwitchShortcutEnabled = preferences.modeSwitchShortcutEnabled
+        self.modeSwitchShortcut = preferences.modeSwitchShortcut
+        self.finalResultDeliveryMode = preferences.finalResultDeliveryMode
+        self.clipboardFallbackWhenNoTarget = preferences.clipboardFallbackWhenNoTarget
+        self.liveRewriteScope = preferences.liveRewriteScope
+        self.showMenuBarShortcutHints = preferences.showMenuBarShortcutHints
+        self.compactMenuBarDesign = preferences.compactMenuBarDesign
+        self.showInDock = preferences.showInDock
+        self.launchOnLoginEnabled = preferences.launchOnLoginEnabled
+        self.automaticallyCheckForUpdates = preferences.automaticallyCheckForUpdates
+        self.debugModeEnabled = preferences.debugModeEnabled
+        self.aiProcessingEnabled = preferences.aiProcessingEnabled
+        self.selectedAIModelID = preferences.selectedAIModelID
+        self.aiProcessingApplyDuringLiveInsertion = preferences.aiProcessingApplyDuringLiveInsertion
+        self.aiProcessingApplyToFinalResult = preferences.aiProcessingApplyToFinalResult
+        self.aiTaskCleanupEnabled = preferences.aiTaskCleanupEnabled
+        self.aiTaskToneEnabled = preferences.aiTaskToneEnabled
+        self.aiTaskSalutationEnabled = preferences.aiTaskSalutationEnabled
+        self.aiTaskFormatEnabled = preferences.aiTaskFormatEnabled
+        self.aiRevisionGoal = preferences.aiRevisionGoal
+        self.aiFormattingMode = preferences.aiFormattingMode
+        self.aiWritingStyle = preferences.aiWritingStyle
+        self.aiSalutation = preferences.aiSalutation
+        self.aiCleanupIntensity = preferences.aiCleanupIntensity
+        self.voiceModelActiveDuration = preferences.voiceModelActiveDuration
+        self.automaticMicrophoneGainBoost = preferences.automaticMicrophoneGainBoost
+        self.silenceRemovalEnabled = preferences.silenceRemovalEnabled
+        self.dynamicNormalizationEnabled = preferences.dynamicNormalizationEnabled
+        self.noiseSuppressionLevel = preferences.noiseSuppressionLevel
+        self.soundEffectsEnabled = preferences.soundEffectsEnabled
+        self.soundEffectsVolume = preferences.soundEffectsVolume
+        self.historyRetentionPolicy = preferences.historyRetentionPolicy
+        self.autoSendAfterPaste = preferences.autoSendAfterPaste
+        self.restoreClipboardAfterPaste = preferences.restoreClipboardAfterPaste
+        self.simulateKeypresses = preferences.simulateKeypresses
+        self.remoteProviders = preferences.remoteProviders
+        self.selectedRemoteProviderID = preferences.selectedRemoteProviderID
 
         self.snippetStore = SnippetStore(fileURL: Self.snippetStorageURL())
-        self.historyStore = TranscriptHistoryStore(fileURL: Self.historyStorageURL())
+        self.historyStore = historyStore ?? TranscriptHistoryStore(fileURL: Self.historyStorageURL())
         self.auditLogger = AuditLogger(fileURL: Self.auditLogStorageURL())
         self.debugLogger = AuditLogger(fileURL: Self.debugLogStorageURL())
         self.licenseController = LicenseController(
             configuration: configuration, cacheFileURL: Self.legacyLicenseCacheURL())
         self.remoteProviderAPIKeyDraft =
-            initialSelectedRemoteProviderID.flatMap {
+            preferences.selectedRemoteProviderID.flatMap {
                 aiRemoteProviderSecretStore.loadAPIKey(providerID: $0)
             } ?? ""
+
+        self.permissionCoordinator = PermissionCoordinator(
+            permissionController: permissionController,
+            dictationRuntime: dictationRuntime,
+            currentMicrophonePermissionStatus: { [weak self] in
+                self?.microphonePermissionStatus ?? .notDetermined
+            },
+            setMicrophonePermissionStatus: { [weak self] status in
+                self?.microphonePermissionStatus = status
+            },
+            currentAccessibilityPermissionStatus: { [weak self] in
+                self?.accessibilityPermissionStatus ?? .notDetermined
+            },
+            setAccessibilityPermissionStatus: { [weak self] status in
+                self?.accessibilityPermissionStatus = status
+            },
+            registerSelectedHotkey: { [weak self] force in
+                self?.registerSelectedHotkey(force: force)
+            },
+            appendDiagnostic: { [weak self] line in
+                self?.appendDiagnostic(line)
+            },
+            appendDebug: { [weak self] line in
+                self?.appendDebug(line)
+            },
+            isDebugModeEnabled: { [weak self] in
+                self?.debugModeEnabled ?? false
+            }
+        )
+
+        let lifecycleCoordinator = AppLifecycleCoordinator(
+            onRefreshPermissionStates: { [weak self] in
+                self?.refreshPermissionStates()
+            },
+            onRefreshPermissionsAfterExternalEvent: { [weak self] reason in
+                self?.permissionCoordinator.refreshPermissionsAfterExternalEvent(reason: reason)
+            },
+            onRefreshOperationalState: { [weak self] reason in
+                self?.refreshOperationalState(reason: reason)
+            }
+        )
+        self.appLifecycleCoordinator = lifecycleCoordinator
+
+        self.sessionEntryController = SessionEntryController(
+            dictationRuntime: dictationRuntime,
+            currentStartOptions: { [weak self] in
+                self?.currentStartOptions() ?? DictationStartOptions(
+                    mode: .finalize,
+                    language: .german,
+                    translationOutput: .original,
+                    performance: .auto,
+                    selectedVoiceProviderID: LocalVoiceModelCatalog.defaultProviderID,
+                    selectedVoiceModelID: LocalVoiceModelCatalog.defaultModelID,
+                    liveRewriteScope: .currentSentence,
+                    snippetRules: [],
+                    finalResultDeliveryMode: .insert,
+                    clipboardFallbackWhenNoTarget: false,
+                    simulateKeypresses: false,
+                    restoreClipboardAfterPaste: false,
+                    autoSendAfterPaste: false,
+                    aiProcessing: AIProcessingConfiguration(enabled: false, selectedModelID: nil),
+                    audioProcessing: AudioProcessingConfiguration(),
+                    soundFeedback: SoundFeedbackConfiguration()
+                )
+            },
+            refreshPermissionStates: { [weak self] in
+                self?.refreshPermissionStates()
+            },
+            dictationCapabilityAllowsDirectInsertion: { [weak self] in
+                self?.dictationCapability.allowsDirectInsertion ?? false
+            },
+            lastExternalApplication: { lifecycleCoordinator.lastExternalApplication },
+            appendAudit: { [weak self] line in
+                self?.appendAudit(line)
+            },
+            appendDiagnostic: { [weak self] line in
+                self?.appendDiagnostic(line)
+            },
+            currentRecordingStatus: { [weak self] in
+                self?.recordingStatus ?? "Idle"
+            },
+            currentSelectedLanguageRawValue: { [weak self] in
+                self?.selectedLanguage.rawValue ?? DictationLanguage.german.rawValue
+            },
+            currentPerformanceProfileRawValue: { [weak self] in
+                self?.performanceProfile.rawValue ?? DictationPerformance.auto.rawValue
+            },
+            currentDictationCapability: { [weak self] in
+                self?.dictationCapability ?? .unavailable
+            },
+            isSessionActive: { [weak self] in
+                self?.isSessionActive ?? false
+            },
+            holdToDictateEnabled: { [weak self] in
+                self?.holdToDictateEnabled ?? false
+            }
+        )
+
+        self.transcriptHistoryController = TranscriptHistoryController(
+            historyStore: self.historyStore,
+            currentTranscriptHistory: { [weak self] in
+                self?.transcriptHistory ?? []
+            },
+            setTranscriptHistory: { [weak self] entries in
+                self?.transcriptHistory = entries
+            },
+            currentHistoryRetentionPolicy: { [weak self] in
+                self?.historyRetentionPolicy ?? .forever
+            },
+            appendDiagnostic: { [weak self] line in
+                self?.appendDiagnostic(line)
+            },
+            appendAudit: { [weak self] line in
+                self?.appendAudit(line)
+            }
+        )
+
         refreshVoiceModelCatalog()
         sanitizeAIProcessingSelections()
         sanitizeSpeechModelSelections()
@@ -1391,13 +1342,13 @@ final class MacAppState: ObservableObject {
         dictationRuntime.onStatus = { [weak self] status in
             self?.recordingStatus = status
             if status != "Recording" {
-                self?.holdSessionActive = false
+                self?.sessionEntryController.resetHoldSessionActive()
             }
         }
         dictationRuntime.onSessionActivityChanged = { [weak self] isActive in
             self?.isSessionActive = isActive
             if !isActive {
-                self?.holdSessionActive = false
+                self?.sessionEntryController.resetHoldSessionActive()
             }
         }
         dictationRuntime.onDiagnostic = { [weak self] diagnostic in
@@ -1410,20 +1361,20 @@ final class MacAppState: ObservableObject {
             self?.lastTranscript = transcript
         }
         dictationRuntime.onFinalTranscript = { [weak self] event in
-            self?.handleFinalTranscript(event)
+            self?.transcriptHistoryController.handleFinalTranscript(event)
         }
         dictationRuntime.onPermissionInteractionFinished = { [weak self] in
-            self?.refreshPermissionStatesAfterUserFacingPermissionStep()
+            self?.permissionCoordinator.refreshPermissionStatesAfterUserFacingPermissionStep()
         }
 
         hotkeyManager.onToggle = { [weak self] in
-            self?.toggleTranscriptionFromUI()
+            self?.sessionEntryController.toggleTranscriptionFromUI()
         }
         hotkeyManager.onHoldPress = { [weak self] in
-            self?.handleHoldShortcutPressed()
+            self?.sessionEntryController.handleHoldShortcutPressed()
         }
         hotkeyManager.onHoldRelease = { [weak self] in
-            self?.handleHoldShortcutReleased()
+            self?.sessionEntryController.handleHoldShortcutReleased()
         }
         hotkeyManager.onCancel = { [weak self] in
             self?.cancelTranscriptionFromUI()
@@ -1434,7 +1385,7 @@ final class MacAppState: ObservableObject {
         registerSelectedHotkey(force: true)
 
         loadSnippets()
-        loadHistory()
+        transcriptHistoryController.loadHistory()
         updateCapabilitySummary()
         rebuildAIProcessingStack(reason: "initial-load")
         updateUpdaterState()
@@ -1442,12 +1393,14 @@ final class MacAppState: ObservableObject {
         dictationRuntime.setVoiceModelActiveDuration(voiceModelActiveDuration)
         dictationRuntime.prepareRuntime()
         refreshPermissionStates()
-        DispatchQueue.main.async { [weak self] in
-            self?.refreshPermissionStates()
+        if !skipStartupSystemHooks {
+            DispatchQueue.main.async { [weak self] in
+                self?.refreshPermissionStates()
+            }
+            applyActivationPolicy()
+            syncLaunchOnLogin()
+            lifecycleCoordinator.start()
         }
-        applyActivationPolicy()
-        syncLaunchOnLogin()
-        configureLifecycleObservers()
     }
 
     deinit {
@@ -1661,119 +1614,23 @@ final class MacAppState: ObservableObject {
     }
 
     func handleHoldShortcutPressed() {
-        appendAudit("hotkey.hold.press recordingStatus=\(recordingStatus)")
-        guard holdToDictateEnabled else { return }
-        guard !holdSessionActive else { return }
-        guard !isSessionActive else { return }
-
-        holdSessionActive = true
-        startTranscriptionForShortcut()
+        sessionEntryController.handleHoldShortcutPressed()
     }
 
     func handleHoldShortcutReleased() {
-        appendAudit("hotkey.hold.release recordingStatus=\(recordingStatus)")
-        guard holdSessionActive else { return }
-        holdSessionActive = false
-        guard isSessionActive else { return }
-        dictationRuntime.toggle(options: currentStartOptions())
+        sessionEntryController.handleHoldShortcutReleased()
     }
 
     func toggleTranscriptionFromUI() {
-        if isSessionActive {
-            appendAudit("session.toggle stop")
-            holdSessionActive = false
-            dictationRuntime.toggle(options: currentStartOptions())
-            return
-        }
-
-        startTranscriptionForShortcut()
+        sessionEntryController.toggleTranscriptionFromUI()
     }
 
     func toggleTranscriptionFromMenuBar() {
-        if isSessionActive {
-            toggleTranscriptionFromUI()
-            return
-        }
-
-        refreshPermissionStates()
-
-        let options = currentStartOptions()
-        appendAudit(
-            "session.toggle.menuBar start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)"
-        )
-
-        // #region agent log
-        AgentSessionDebugLog.append(
-            hypothesisId: "H5",
-            location: "MacAppState.toggleTranscriptionFromMenuBar",
-            message: "menu_bar_toggle_before_restore_guard",
-            data: [
-                "allowsDirectInsertion": "\(dictationCapability.allowsDirectInsertion)",
-                "capability": "\(dictationCapability)",
-                "lastExternalBundle": lastExternalApplication?.bundleIdentifier ?? "nil",
-                "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                    ?? "nil",
-            ]
-        )
-        // #endregion
-
-        guard dictationCapability.allowsDirectInsertion else {
-            dictationRuntime.start(options: options)
-            return
-        }
-
-        restorePreviousApplicationAndStart(options: options, source: "menuBar")
+        sessionEntryController.toggleTranscriptionFromMenuBar()
     }
 
     private func startTranscriptionForShortcut() {
-        refreshPermissionStates()
-
-        let options = currentStartOptions()
-        appendAudit(
-            "session.toggle start mode=\(options.mode) language=\(selectedLanguage.rawValue) profile=\(performanceProfile.rawValue)"
-        )
-
-        if dictationCapability.allowsDirectInsertion,
-            shouldRestorePreviousApplicationBeforeStarting(),
-            let previousApplication = lastExternalApplication
-        {
-            appendDiagnostic(
-                "Wechsle vor dem Start zurück zur letzten App, um das fokussierte Textfeld zu verwenden."
-            )
-            restorePreviousApplicationAndStart(
-                options: options, source: "shortcut", preferredApplication: previousApplication)
-            return
-        }
-
-        dictationRuntime.toggle(options: options)
-    }
-
-    private func currentStartOptions() -> DictationStartOptions {
-        let mode: DictationMode
-        if finalResultDeliveryMode == .clipboardOnly {
-            mode = .finalize
-        } else {
-            mode = streamingEnabled ? .streaming : .finalize
-        }
-        return DictationStartOptions(
-            mode: mode,
-            language: selectedLanguage,
-            translationOutput: translationOutputMode,
-            performance: performanceProfile,
-            selectedVoiceProviderID: effectiveVoiceProviderID(for: selectedLanguage),
-            selectedVoiceModelID: effectiveVoiceModelDescriptor(for: selectedLanguage)?.id
-                ?? selectedVoiceModelID,
-            liveRewriteScope: liveRewriteScope,
-            snippetRules: snippetRules,
-            finalResultDeliveryMode: finalResultDeliveryMode,
-            clipboardFallbackWhenNoTarget: clipboardFallbackWhenNoTarget,
-            simulateKeypresses: simulateKeypresses,
-            restoreClipboardAfterPaste: restoreClipboardAfterPaste,
-            autoSendAfterPaste: autoSendAfterPaste,
-            aiProcessing: aiProcessingConfiguration,
-            audioProcessing: audioProcessingConfiguration,
-            soundFeedback: soundFeedbackConfiguration
-        )
+        sessionEntryController.startTranscriptionForShortcut()
     }
 
     func refreshVoiceModelCatalog() {
@@ -1911,43 +1768,6 @@ final class MacAppState: ObservableObject {
 
         let fixedLanguage = DictationLanguage(rawValue: languageCode) ?? .english
         return [.auto, fixedLanguage]
-    }
-
-    private func effectiveVoiceProviderID(for language: DictationLanguage) -> String {
-        effectiveVoiceModelDescriptor(for: language)?.providerID ?? selectedVoiceProviderID
-    }
-
-    private func effectiveVoiceModelDescriptor(for language: DictationLanguage)
-        -> VoiceModelDescriptor?
-    {
-        let overrideDescriptor: VoiceModelDescriptor?
-        if language != .auto,
-            let overrideID = voiceLanguageOverrides.first(where: {
-                $0.languageCode == language.rawValue
-            })?.modelID
-        {
-            overrideDescriptor = voiceModels.first(where: { $0.id == overrideID })
-        } else {
-            overrideDescriptor = nil
-        }
-
-        if let overrideDescriptor, canUseVoiceModel(overrideDescriptor, for: language) {
-            return overrideDescriptor
-        }
-
-        if let selectedVoiceModel, canUseVoiceModel(selectedVoiceModel, for: language) {
-            return selectedVoiceModel
-        }
-
-        if let standard = voiceModels.first(where: {
-            $0.id == LocalVoiceModelCatalog.defaultModelID
-        }),
-            canUseVoiceModel(standard, for: language)
-        {
-            return standard
-        }
-
-        return voiceModels.first(where: { canUseVoiceModel($0, for: language) })
     }
 
     private func sanitizeAIProcessingSelections() {
@@ -2138,13 +1958,11 @@ final class MacAppState: ObservableObject {
     }
 
     func openMicrophoneSettings() {
-        dictationRuntime.openMicrophoneSettings()
-        schedulePermissionRefresh()
+        permissionCoordinator.openMicrophoneSettings()
     }
 
     func openAccessibilitySettings() {
-        dictationRuntime.openAccessibilitySettings()
-        schedulePermissionRefresh()
+        permissionCoordinator.openAccessibilitySettings()
     }
 
     func addSnippet(trigger: String, replacement: String) {
@@ -2219,57 +2037,23 @@ final class MacAppState: ObservableObject {
     }
 
     func copyHistoryEntry(_ entry: TranscriptHistoryEntry) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(entry.text, forType: .string)
-        appendDiagnostic("History-Eintrag kopiert: \(entry.id.uuidString.prefix(8))")
+        transcriptHistoryController.copyHistoryEntry(entry)
     }
 
     func copyAllHistoryToClipboard() {
-        let joined =
-            transcriptHistory
-            .reversed()
-            .map {
-                "[\(Self.displayDate($0.createdAt))] [\($0.mode)] [\($0.languageCode)] \($0.text)"
-            }
-            .joined(separator: "\n")
-
-        guard !joined.isEmpty else { return }
-
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(joined, forType: .string)
-        appendDiagnostic("Gesamte History in Zwischenablage kopiert")
+        transcriptHistoryController.copyAllHistoryToClipboard()
     }
 
     func exportHistoryAsText() {
-        let panel = NSSavePanel()
-        panel.canCreateDirectories = true
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "wispr-transcript-history.txt"
-        Self.configureSavePanel(panel, titleKey: "filepanel.export.history.title")
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            try historyStore.exportText(entries: transcriptHistory, to: url)
-            appendDiagnostic("History exportiert")
-            appendAudit("history.export path=\(url.path)")
-        } catch {
-            appendDiagnostic("History-Export fehlgeschlagen: \(error.localizedDescription)")
-        }
+        transcriptHistoryController.exportHistoryAsText()
     }
 
     func removeHistoryEntry(_ entryID: UUID) {
-        transcriptHistory.removeAll { $0.id == entryID }
-        persistHistory()
+        transcriptHistoryController.removeHistoryEntry(entryID)
     }
 
     func clearHistory() {
-        transcriptHistory.removeAll()
-        persistHistory()
-        appendDiagnostic("History geleert")
-        appendAudit("history.clear")
+        transcriptHistoryController.clearHistory()
     }
 
     func exportDiagnosticsReport() {
@@ -2382,35 +2166,7 @@ final class MacAppState: ObservableObject {
     }
 
     private func handleFinalTranscript(_ event: FinalTranscriptEvent) {
-        let trimmed = event.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        let entry = TranscriptHistoryEntry(
-            text: trimmed,
-            languageCode: event.languageCode,
-            mode: event.mode == .streaming ? "streaming" : "finalize"
-        )
-
-        transcriptHistory.insert(entry, at: 0)
-        pruneHistoryIfNeeded()
-        if transcriptHistory.count > 500 {
-            transcriptHistory = Array(transcriptHistory.prefix(500))
-        }
-        persistHistory()
-        appendDiagnostic("History gespeichert (\(transcriptHistory.count) Einträge)")
-        switch event.deliveryOutcome {
-        case .inserted:
-            appendDiagnostic("Finales Transkript eingefügt.")
-        case .copiedToClipboard:
-            appendDiagnostic("Finales Transkript in die Zwischenablage kopiert.")
-        case .historyOnlyNoTarget:
-            appendDiagnostic("Finales Transkript ohne Ziel nur in der History gespeichert.")
-        case .failed(let reason):
-            appendDiagnostic("Finales Transkript konnte nicht zugestellt werden: \(reason)")
-        }
-        appendAudit(
-            "transcript.final language=\(event.languageCode) mode=\(entry.mode) chars=\(trimmed.count)"
-        )
+        transcriptHistoryController.handleFinalTranscript(event)
     }
 
     private func applyLicenseSnapshot(_ snapshot: LicenseStatusSnapshot, clearInput: Bool) {
@@ -2461,36 +2217,15 @@ final class MacAppState: ObservableObject {
     }
 
     private func loadHistory() {
-        do {
-            transcriptHistory = try historyStore.load()
-            pruneHistoryIfNeeded()
-            appendDiagnostic("History geladen: \(transcriptHistory.count)")
-        } catch {
-            appendDiagnostic("History-Load fehlgeschlagen: \(error.localizedDescription)")
-            transcriptHistory = []
-        }
+        transcriptHistoryController.loadHistory()
     }
 
     private func persistHistory() {
-        do {
-            try historyStore.save(transcriptHistory)
-        } catch {
-            appendDiagnostic("History-Save fehlgeschlagen: \(error.localizedDescription)")
-        }
+        transcriptHistoryController.persistHistory()
     }
 
     private func pruneHistoryIfNeeded() {
-        guard let retainedDays = historyRetentionPolicy.retainedDays else { return }
-        let cutoff =
-            Calendar.current.date(byAdding: .day, value: -retainedDays, to: Date()) ?? .distantPast
-        let originalCount = transcriptHistory.count
-        transcriptHistory.removeAll { $0.createdAt < cutoff }
-        if transcriptHistory.count != originalCount {
-            persistHistory()
-            appendDiagnostic(
-                "History aufgrund der Aufbewahrungsrichtlinie bereinigt: \(transcriptHistory.count) Einträge"
-            )
-        }
+        transcriptHistoryController.pruneHistoryIfNeeded()
     }
 
     private func updateCapabilitySummary() {
@@ -2501,122 +2236,26 @@ final class MacAppState: ObservableObject {
     }
 
     func refreshPermissionStates() {
-        let rawMic = AVCaptureDevice.authorizationStatus(for: .audio)
-        microphonePermissionStatus = permissionController.microphoneStatus()
-        if debugModeEnabled {
-            appendDebug(
-                "permissions.microphone raw=\(String(describing: rawMic)) mapped=\(microphonePermissionStatus)"
-            )
-        }
-        applyAccessibilityStatusWithDebounce(permissionController.accessibilityStatus())
+        permissionCoordinator.refreshPermissionStates()
+    }
+
+    private func refreshPermissionsAfterExternalEvent(reason: String) {
+        permissionCoordinator.refreshPermissionsAfterExternalEvent(reason: reason)
     }
 
     /// TCC aktualisiert manchmal verzögert – einmal sofort und einmal kurz danach erneut lesen.
     private func refreshPermissionStatesAfterUserFacingPermissionStep() {
-        refreshPermissionStates()
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            guard let self else { return }
-            self.refreshPermissionStates()
-        }
+        permissionCoordinator.refreshPermissionStatesAfterUserFacingPermissionStep()
     }
 
     /// Aus den Einstellungen: System-Mikrofondialog oder Privacy-Panel.
     func requestMicrophoneAccessFromSettings() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let status = AVCaptureDevice.authorizationStatus(for: .audio)
-            switch status {
-            case .authorized:
-                self.refreshPermissionStatesAfterUserFacingPermissionStep()
-            case .notDetermined:
-                let granted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-                    AVCaptureDevice.requestAccess(for: .audio) { ok in
-                        DispatchQueue.main.async {
-                            continuation.resume(returning: ok)
-                        }
-                    }
-                }
-                self.refreshPermissionStatesAfterUserFacingPermissionStep()
-                if !granted {
-                    self.appendDiagnostic("Mikrofonzugriff wurde nicht erteilt.")
-                }
-            case .denied, .restricted:
-                self.openMicrophoneSettings()
-                self.schedulePermissionRefresh()
-            @unknown default:
-                self.refreshPermissionStatesAfterUserFacingPermissionStep()
-            }
-        }
+        permissionCoordinator.requestMicrophoneAccessFromSettings()
     }
 
     /// Aus den Einstellungen: AX-Bestätigungsdialog anstoßen und Status neu lesen.
     func requestAccessibilityAccessFromSettings() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            if self.permissionController.accessibilityStatus() == .granted {
-                self.refreshPermissionStatesAfterUserFacingPermissionStep()
-                return
-            }
-            self.dictationRuntime.promptAccessibilityTrustFromUser()
-            self.refreshPermissionStatesAfterUserFacingPermissionStep()
-            self.schedulePermissionRefresh()
-        }
-    }
-
-    /// UI-Status für Bedienungshilfen: Freigabe sofort anzeigen; vorübergehende „Verweigert“-Messwerte kurz entprellen.
-    private func applyAccessibilityStatusWithDebounce(_ raw: PermissionStatus) {
-        if !hasAppliedAccessibilityStatusOnce {
-            accessibilityStatusDebounceTask?.cancel()
-            accessibilityPermissionStatus = raw
-            hasAppliedAccessibilityStatusOnce = true
-            return
-        }
-        if raw == .granted {
-            accessibilityStatusDebounceTask?.cancel()
-            accessibilityPermissionStatus = .granted
-            return
-        }
-        if raw == accessibilityPermissionStatus {
-            accessibilityStatusDebounceTask?.cancel()
-            return
-        }
-        accessibilityStatusDebounceTask?.cancel()
-        accessibilityStatusDebounceTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            guard !Task.isCancelled, let self else { return }
-            let again = self.permissionController.accessibilityStatus()
-            if again == raw {
-                self.accessibilityPermissionStatus = again
-            }
-        }
-    }
-
-    private func schedulePermissionRefresh() {
-        permissionPollTask?.cancel()
-        permissionPollTask = Task { @MainActor [weak self] in
-            let delaysNanoseconds: [UInt64] = [
-                400_000_000, 1_200_000_000, 2_500_000_000, 5_000_000_000,
-            ]
-            for delay in delaysNanoseconds {
-                try? await Task.sleep(nanoseconds: delay)
-                guard !Task.isCancelled else { return }
-                self?.refreshPermissionsAfterExternalEvent(reason: "permission-poll")
-            }
-        }
-    }
-
-    /// TCC/AX nach Systemeinstellungen: nur Status lesen; Hotkeys nur bei tatsächlicher Änderung neu registrieren.
-    private func refreshPermissionsAfterExternalEvent(reason: String) {
-        let beforeMic = microphonePermissionStatus
-        let rawAXBefore = permissionController.accessibilityStatus()
-        refreshPermissionStates()
-        let afterMic = microphonePermissionStatus
-        let rawAXAfter = permissionController.accessibilityStatus()
-        if beforeMic != afterMic || rawAXBefore != rawAXAfter {
-            registerSelectedHotkey(force: true)
-            appendDiagnostic("Berechtigungen geändert (\(reason))")
-        }
+        permissionCoordinator.requestAccessibilityAccessFromSettings()
     }
 
     private func appendDiagnostic(_ line: String) {
@@ -2648,76 +2287,53 @@ final class MacAppState: ObservableObject {
     }
 
     private func configureLifecycleObservers() {
-        didActivateApplicationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                // Nach Systemeinstellungen o. Ä. ist oft eine andere App aktiv; TCC-Status trotzdem neu lesen.
-                self.refreshPermissionsAfterExternalEvent(reason: "workspace-app-activated")
-                if let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
-                    as? NSRunningApplication,
-                    application.bundleIdentifier != Bundle.main.bundleIdentifier
-                {
-                    self.lastExternalApplication = application
-                }
-            }
-        }
+        appLifecycleCoordinator.start()
+    }
 
-        didBecomeActiveObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshOperationalState(reason: "app-active")
-            }
-        }
+    private func currentStartOptions() -> DictationStartOptions {
+        sessionConfigurationBuilder.build(from: sessionConfigurationInput())
+    }
 
-        didFinishLaunchingObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didFinishLaunchingNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.refreshPermissionStates()
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                self.refreshPermissionStates()
-            }
-        }
-
-        didWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshOperationalState(reason: "system-wake")
-            }
-        }
+    private func sessionConfigurationInput() -> SessionConfigurationInput {
+        SessionConfigurationInput(
+            streamingEnabled: streamingEnabled,
+            selectedLanguage: selectedLanguage,
+            translationOutputMode: translationOutputMode,
+            performanceProfile: performanceProfile,
+            selectedVoiceProviderID: selectedVoiceProviderID,
+            selectedVoiceModelID: selectedVoiceModelID,
+            voiceLanguageOverrides: voiceLanguageOverrides,
+            voiceModels: voiceModels,
+            installedVoiceModelFileNames: installedVoiceModelFileNames,
+            liveRewriteScope: liveRewriteScope,
+            snippetRules: snippetRules,
+            finalResultDeliveryMode: finalResultDeliveryMode,
+            clipboardFallbackWhenNoTarget: clipboardFallbackWhenNoTarget,
+            simulateKeypresses: simulateKeypresses,
+            restoreClipboardAfterPaste: restoreClipboardAfterPaste,
+            autoSendAfterPaste: autoSendAfterPaste,
+            aiProcessing: aiProcessingConfiguration,
+            audioProcessing: audioProcessingConfiguration,
+            soundFeedback: soundFeedbackConfiguration
+        )
     }
 
     private func refreshOperationalState(reason: String) {
         registerSelectedHotkey(force: true)
         updateCapabilitySummary()
         rebuildAIProcessingStack(reason: reason)
-        refreshPermissionsAfterExternalEvent(reason: reason)
+        permissionCoordinator.refreshPermissionsAfterExternalEvent(reason: reason)
         dictationRuntime.prepareRuntime()
         updateUpdaterState()
         appendAudit("lifecycle.refresh reason=\(reason)")
     }
 
     private func persistRemoteProviders() {
-        guard let data = try? JSONEncoder().encode(remoteProviders) else { return }
-        userDefaults.set(data, forKey: UserDefaultsKeys.remoteProviders)
+        preferencesStore.saveRemoteProviders(remoteProviders)
     }
 
     private func persistVoiceLanguageOverrides() {
-        guard let data = try? JSONEncoder().encode(voiceLanguageOverrides) else { return }
-        userDefaults.set(data, forKey: UserDefaultsKeys.voiceLanguageOverrides)
+        preferencesStore.saveVoiceLanguageOverrides(voiceLanguageOverrides)
     }
 
     private func rebuildAIProcessingStack(reason: String) {
@@ -2995,3 +2611,9 @@ final class MacAppState: ObservableObject {
         return false
     }
 }
+
+extension DictationRuntime: DictationRuntimeControlling {}
+
+extension GlobalHotkeyManager: GlobalHotkeyRegistering {}
+
+extension AIRemoteProviderSecretStore: AIRemoteProviderSecretStoring {}

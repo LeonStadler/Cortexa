@@ -5,6 +5,12 @@ This folder contains the SwiftUI MenuBarExtra-based macOS app target.
 Planned Xcode target composition:
 
 - `WisprLocalMacApp` (menu bar host)
+- `SettingsWindowPresenter` (explicit settings window bootstrap for the agent app)
+- `MenuBarContentView` (menu bar composition and quick settings surface)
+- `SettingsViewShell` (sidebar + search + detail shell for settings)
+- `MacAppState` (published UI state and orchestration)
+- `MacAppPreferencesStore`, `SessionConfigurationBuilder`, `PermissionCoordinator`, `AppLifecycleCoordinator`, `SessionEntryController`, `TranscriptHistoryController` (internal app-state support services)
+- `DictationRuntimeServices` (permission, focused-target, streaming insertion, final delivery helpers behind `DictationRuntime`)
 - links to Swift packages from `/Sources/*`
 - entitlements: microphone + accessibility prompt UX
 - hardened runtime + notarization-ready signing settings
@@ -34,6 +40,7 @@ Operational notes:
 - `Settings…` from the menu bar opens an explicit preference-styled settings window, which is more reliable for the agent/menu bar app than relying on the default SwiftUI settings selector.
 - The settings let you switch the visible app UI between German and English.
 - The settings window is organized into a sidebar-driven preferences layout for general app preferences, dictation, shortcuts, history, about, snippets, and advanced options.
+- The settings shell and the menu bar content are now split into dedicated files so UI structure stays separate from app bootstrap and state orchestration.
 - The settings sidebar now also includes a dedicated `AI` tab, while translation remains under `Diktat` because it belongs to the ASR/transcription path rather than the text-rewrite provider layer.
 - The settings use a fixed source-list sidebar plus a global native search field above the detail view, so switching sections and searching across areas stays compact and predictable.
 - Settings search scans across all top-level areas and shows grouped results per section instead of restricting the search to the currently selected area.
@@ -67,6 +74,7 @@ Operational notes:
 - Recoverable streaming target errors no longer push the whole runtime into a broken state; the runtime keeps the current transcript buffered and resumes insertion when a writable text target becomes available again.
 - Final-delivery diagnostics now record whether the result was written via direct AX value-set, clipboard paste fallback, or simulated keyboard input, and whether clipboard restore plus auto-send actually ran.
 - Clipboard restoration now snapshots and restores the full pasteboard item list for clipboard-based delivery instead of only restoring a plain string value.
+- AppShell refactors are guarded by a dedicated `AppShellSupport` SwiftPM target plus characterization tests so permission flows, history retention, session entry, and settings navigation can be validated without shipping behavior changes.
 - Runtime start now guards against duplicate starts while initialization is in-flight and performs a full reset on audio push failures, reducing stuck `Diktat läuft bereits` error loops.
 - Version metadata is injected into the generated Xcode project from the repo `VERSION` file.
 - The macOS helper scripts look for `xcodegen` in common Homebrew locations and can reuse an already generated `WisprLocalMac.xcodeproj` if regeneration is not needed.

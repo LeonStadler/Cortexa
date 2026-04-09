@@ -45,6 +45,24 @@ let package = Package(
         .target(
             name: "LicenseCore"
         ),
+        .target(
+            name: "AppShellSupport",
+            dependencies: [
+                "AIProcessingCore",
+                "ASRCore",
+                "AudioCore",
+                "CapabilityCore",
+                "LicenseCore",
+                "SessionCore",
+                "SnippetCore",
+                "TextTargetMac"
+            ],
+            path: "apps/macos/AppShell",
+            exclude: [
+                "WisprLocalMacApp.swift",
+                "Resources"
+            ]
+        ),
         .testTarget(
             name: "AIProcessingCoreTests",
             dependencies: ["AIProcessingCore"]
@@ -76,6 +94,10 @@ let package = Package(
         .testTarget(
             name: "DocsContractTests",
             dependencies: []
+        ),
+        .testTarget(
+            name: "AppShellSupportTests",
+            dependencies: ["AppShellSupport"]
         )
     ]
 )

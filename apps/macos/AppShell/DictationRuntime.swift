@@ -290,38 +290,6 @@ enum DictationRuntimeError: LocalizedError {
     }
 }
 
-private struct LockedTextTarget {
-    let element: AXUIElement
-    let insertionLocation: Int
-    let originalSelectedLength: Int
-    let fallbackBundleIdentifier: String?
-    var insertedLength: Int
-}
-
-private struct FinalInsertionMetrics {
-    let path: String
-    let clipboardRestored: Bool
-    let autoSent: Bool
-}
-
-private struct PasteboardSnapshot {
-    let items: [NSPasteboardItem]
-
-    static func capture(from pasteboard: NSPasteboard) -> PasteboardSnapshot {
-        let copiedItems =
-            pasteboard.pasteboardItems?.compactMap { item in
-                item.copy() as? NSPasteboardItem
-            } ?? []
-        return PasteboardSnapshot(items: copiedItems)
-    }
-
-    func restore(to pasteboard: NSPasteboard) {
-        pasteboard.clearContents()
-        guard !items.isEmpty else { return }
-        pasteboard.writeObjects(items)
-    }
-}
-
 final class DictationRuntime: @unchecked Sendable {
     var onStatus: ((String) -> Void)?
     var onDiagnostic: ((String) -> Void)?
@@ -339,6 +307,10 @@ final class DictationRuntime: @unchecked Sendable {
     private var aiProcessingService = AIProcessingService()
     private let soundFeedbackPlayer = SoundFeedbackPlayer()
     private let sessionLock = NSLock()
+    private let permissionService = RuntimePermissionService()
+    private let focusedTextTargetService = FocusedTextTargetService()
+    private let streamingTextInsertionService = StreamingTextInsertionService()
+    private let finalTranscriptDeliveryService = FinalTranscriptDeliveryService()
 
     private let audioEngine = AVAudioEngine()
     private var converter: AVAudioConverter?
@@ -366,8 +338,6 @@ final class DictationRuntime: @unchecked Sendable {
     private var maxObservedRMS: Float = 0
     private var lastRecoverableInsertDiagnosticAt: Date?
     private var accessibilityPermissionGranted = false
-    private let focusedTargetRetryCount = 8
-    private let focusedTargetRetryDelayNanoseconds: UInt64 = 150_000_000
     private let pendingInsertionTimeoutNanoseconds: UInt64 = 5_000_000_000
     private let pendingInsertionPollNanoseconds: UInt64 = 150_000_000
     private let speechRMSActivationThreshold: Float = 0.008
@@ -384,14 +354,6 @@ final class DictationRuntime: @unchecked Sendable {
         DispatchQueue.main.async { [weak self] in
             self?.onPermissionInteractionFinished?()
         }
-    }
-
-    private func runOnMainThread<T>(_ work: () throws -> T) throws -> T {
-        if Thread.isMainThread {
-            return try work()
-        }
-
-        return try DispatchQueue.main.sync(execute: work)
     }
 
     func prepareRuntime() {
@@ -794,7 +756,7 @@ final class DictationRuntime: @unchecked Sendable {
 
                 do {
                     guard var activeTarget = target else { return }
-                    try self.replaceInsertedText(
+                    _ = try self.replaceInsertedText(
                         patchText,
                         in: activeTarget,
                         allowFallbackPaste: false,
@@ -814,7 +776,7 @@ final class DictationRuntime: @unchecked Sendable {
                     }
                     if let resolvedTarget = self.resolveAvailableTextTarget() {
                         var reboundTarget = resolvedTarget
-                        try self.replaceInsertedText(
+                        _ = try self.replaceInsertedText(
                             patchText,
                             in: reboundTarget,
                             allowFallbackPaste: false,
@@ -849,141 +811,34 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func requestMicrophonePermission() async -> Bool {
-        #if os(macOS)
-            let status = AVCaptureDevice.authorizationStatus(for: .audio)
-            if status == .authorized {
-                return true
-            }
-        #endif
-
-        return await withCheckedContinuation { continuation in
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                DispatchQueue.main.async {
-                    continuation.resume(returning: granted)
-                }
-            }
-        }
+        await permissionService.requestMicrophonePermission()
     }
 
     private func requestAccessibilityPermission(promptIfNeeded: Bool) -> Bool {
-        AXTextAccess.permissionState(promptIfNeeded: promptIfNeeded) == .granted
+        permissionService.requestAccessibilityPermission(promptIfNeeded: promptIfNeeded)
     }
 
     private func captureFocusedTextTarget() throws -> LockedTextTarget {
-        let probeResult = AXTextAccess.probeFocusedTarget()
-        switch probeResult {
-        case .target:
-            let snapshot = try AXTextTargetResolver().snapshotFocusedTarget()
-            let lockedTarget = makeLockedTextTarget(from: snapshot)
-            lastKnownTarget = lockedTarget
-            return lockedTarget
-        case .apiDisabled(let frontmostBundleIdentifier):
-            AgentSessionDebugLog.append(
-                hypothesisId: "H3",
-                location: "DictationRuntime.captureFocusedTextTarget",
-                message: "ax_api_disabled",
-                data: [
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
-                ]
-            )
-            throw DictationRuntimeError.accessibilityPermissionDenied
-        case .noFocusedElement(let frontmostBundleIdentifier):
-            AgentSessionDebugLog.append(
-                hypothesisId: "H3",
-                location: "DictationRuntime.captureFocusedTextTarget",
-                message: "ax_focused_unavailable",
-                data: [
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
-                ]
-            )
-            throw DictationRuntimeError.focusedElementUnavailable
-        case .unsupportedTarget(let frontmostBundleIdentifier, let role, let valueSettable):
-            AgentSessionDebugLog.append(
-                hypothesisId: "H4",
-                location: "DictationRuntime.captureFocusedTextTarget",
-                message: "validate_editable_failed",
-                data: [
-                    "role": role ?? "nil",
-                    "valueSettable": "\(valueSettable)",
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
-                ]
-            )
-            throw DictationRuntimeError.unsupportedTextTarget
-        case .unableToReadValue(let frontmostBundleIdentifier):
-            AgentSessionDebugLog.append(
-                hypothesisId: "H4",
-                location: "DictationRuntime.captureFocusedTextTarget",
-                message: "read_value_failed",
-                data: [
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
-                ]
-            )
-            throw DictationRuntimeError.focusedElementUnavailable
-        }
-    }
-
-    private func makeLockedTextTarget(from snapshot: TextTargetSnapshot) -> LockedTextTarget {
-        LockedTextTarget(
-            element: snapshot.element,
-            insertionLocation: snapshot.insertionRange.location,
-            originalSelectedLength: snapshot.insertionRange.length,
-            fallbackBundleIdentifier: snapshot.fallbackBundleIdentifier,
-            insertedLength: snapshot.insertionRange.length
-        )
-    }
-
-    private func readSelectedRange(for element: AXUIElement, currentValueLength: Int) -> CFRange {
-        var selectedRangeRef: CFTypeRef?
-        let rangeResult = AXUIElementCopyAttributeValue(
-            element, kAXSelectedTextRangeAttribute as CFString, &selectedRangeRef)
-
-        if rangeResult == .success,
-            let selectedRangeRef,
-            CFGetTypeID(selectedRangeRef) == AXValueGetTypeID()
-        {
-            let axValue = selectedRangeRef as! AXValue
-            var range = CFRange()
-            if AXValueGetType(axValue) == .cfRange, AXValueGetValue(axValue, .cfRange, &range) {
-                return CFRange(location: max(0, range.location), length: max(0, range.length))
-            }
-        }
-
-        return CFRange(location: currentValueLength, length: 0)
+        let target = try focusedTextTargetService.captureFocusedTextTarget()
+        lastKnownTarget = target
+        return target
     }
 
     private func captureFocusedTextTargetWithRetry(emitWaitingDiagnostics: Bool = true) async throws
         -> LockedTextTarget
     {
-        var lastError: Error = DictationRuntimeError.focusedElementUnavailable
-
-        for attempt in 0..<focusedTargetRetryCount {
-            do {
-                let target = try captureFocusedTextTarget()
-                lastKnownTarget = target
-                return target
-            } catch {
-                lastError = error
-                if let recoveredTarget = try? recoverLastKnownTarget() {
-                    lastKnownTarget = recoveredTarget
-                    publishDiagnostic("Verwende zuletzt bekanntes Textziel erneut.")
-                    return recoveredTarget
-                }
-                guard case DictationRuntimeError.focusedElementUnavailable = error,
-                    attempt < focusedTargetRetryCount - 1
-                else {
-                    throw error
-                }
-
-                if emitWaitingDiagnostics {
-                    publishDiagnostic(
-                        "Warte auf fokussiertes Textfeld (\(attempt + 1)/\(focusedTargetRetryCount))..."
-                    )
-                }
-                try? await Task.sleep(nanoseconds: focusedTargetRetryDelayNanoseconds)
+        try await focusedTextTargetService.captureFocusedTextTargetWithRetry(
+            emitWaitingDiagnostics: emitWaitingDiagnostics,
+            captureFocusedTextTarget: { try self.captureFocusedTextTarget() },
+            recoverLastKnownTarget: {
+                let recoveredTarget = try self.recoverLastKnownTarget()
+                self.lastKnownTarget = recoveredTarget
+                return recoveredTarget
+            },
+            publishDiagnostic: { [weak self] message in
+                self?.publishDiagnostic(message)
             }
-        }
-
-        throw lastError
+        )
     }
 
     private func recoverLastKnownTarget() throws -> LockedTextTarget {
@@ -995,178 +850,59 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func refreshLockedTextTarget(_ target: LockedTextTarget) throws -> LockedTextTarget {
-        try runOnMainThread {
-            if let expectedBundleIdentifier = target.fallbackBundleIdentifier,
-                NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                    != expectedBundleIdentifier
-            {
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-
-            var isValueSettable = DarwinBoolean(false)
-            let settableResult = AXUIElementIsAttributeSettable(
-                target.element, kAXValueAttribute as CFString, &isValueSettable)
-            guard settableResult == .success, isValueSettable.boolValue else {
-                throw DictationRuntimeError.unsupportedTextTarget
-            }
-
-            var valueRef: CFTypeRef?
-            let readResult = AXUIElementCopyAttributeValue(
-                target.element, kAXValueAttribute as CFString, &valueRef)
-            guard readResult == .success else {
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-
-            let currentValue = (valueRef as? String) ?? ""
-            let range = readSelectedRange(for: target.element, currentValueLength: currentValue.count)
-
-            return LockedTextTarget(
-                element: target.element,
-                insertionLocation: range.location,
-                originalSelectedLength: range.length,
-                fallbackBundleIdentifier: target.fallbackBundleIdentifier,
-                insertedLength: max(range.length, target.insertedLength)
-            )
-        }
+        try focusedTextTargetService.refreshLockedTextTarget(target)
     }
 
     private func resolveAvailableTextTarget() -> LockedTextTarget? {
-        if let target,
-            let refreshed = try? refreshLockedTextTarget(target)
-        {
-            return refreshed
-        }
-        if let focused = try? captureFocusedTextTarget() {
-            return focused
-        }
-        if let recovered = try? recoverLastKnownTarget() {
-            return recovered
-        }
-        return nil
+        focusedTextTargetService.resolveAvailableTextTarget(
+            currentTarget: target,
+            captureFocusedTextTarget: { try self.captureFocusedTextTarget() },
+            recoverLastKnownTarget: { try self.recoverLastKnownTarget() },
+            refreshLockedTextTarget: { try self.refreshLockedTextTarget($0) }
+        )
     }
 
     private func waitForAvailableTextTarget(timeoutNanoseconds: UInt64) async -> LockedTextTarget? {
-        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
-        while DispatchTime.now().uptimeNanoseconds < deadline {
-            if let target = resolveAvailableTextTarget() {
-                return target
-            }
-            try? await Task.sleep(nanoseconds: pendingInsertionPollNanoseconds)
-        }
-        return nil
+        await focusedTextTargetService.waitForAvailableTextTarget(
+            timeoutNanoseconds: timeoutNanoseconds,
+            pollNanoseconds: pendingInsertionPollNanoseconds,
+            resolveAvailableTextTarget: { self.resolveAvailableTextTarget() }
+        )
     }
 
     private func deliverFinalText(_ finalText: String) async -> FinalTranscriptDeliveryOutcome {
-        guard let currentOptions = withSessionLock({ currentOptions }) else {
-            return .failed("Fehlende Diktat-Optionen.")
-        }
-
-        if currentOptions.finalResultDeliveryMode == .clipboardOnly {
-            copyTranscriptToClipboard(finalText)
-            publishDiagnostic("Finales Transkript wurde in die Zwischenablage kopiert.")
-            withSessionLock {
-                waitingForInsertionTarget = false
-            }
-            return .copiedToClipboard
-        }
-
-        // Live-Abfrage: nach Freigabe in den Systemeinstellungen ohne Neustart gültig (nicht nur Session-Cache).
-        if !AccessibilityTrust.isClientProcessTrusted() {
-            if currentOptions.clipboardFallbackWhenNoTarget {
-                copyTranscriptToClipboard(finalText)
-                publishDiagnostic(
-                    "Bedienungshilfen fehlen. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert."
-                )
-                return .copiedToClipboard
-            }
-
-            publishDiagnostic(
-                "Bedienungshilfen fehlen. Das finale Transkript bleibt in der History verfügbar.")
-            return .historyOnlyNoTarget
-        }
-
-        if let activeStreamingTarget = target {
-            do {
-                let metrics = try insertFinalText(
-                    finalText,
-                    into: activeStreamingTarget,
-                    options: currentOptions,
-                    allowFallbackPaste: true
-                )
-                publishFinalDeliveryMetrics(metrics)
-                withSessionLock {
-                    waitingForInsertionTarget = false
+        let currentOptions = withSessionLock { self.currentOptions }
+        let activeStreamingTarget = withSessionLock { self.target }
+        return await finalTranscriptDeliveryService.deliverFinalText(
+            finalText,
+            currentOptions: currentOptions,
+            activeStreamingTarget: activeStreamingTarget,
+            resolveAvailableTextTarget: {
+                self.resolveAvailableTextTarget()
+            },
+            waitForAvailableTextTarget: { timeout in
+                await self.waitForAvailableTextTarget(timeoutNanoseconds: timeout)
+            },
+            setWaitingForInsertionTarget: { value in
+                self.withSessionLock {
+                    self.waitingForInsertionTarget = value
                 }
-                return .inserted
-            } catch {
-                publishDiagnostic(
-                    "Vorhandenes Live-Textziel konnte nicht aktualisiert werden. Versuche das aktuelle Fokusziel erneut."
-                )
-            }
-        }
-
-        if let resolvedTarget = resolveAvailableTextTarget() {
-            do {
-                let metrics = try insertFinalText(
-                    finalText,
-                    into: resolvedTarget,
-                    options: currentOptions,
-                    allowFallbackPaste: true
-                )
-                publishFinalDeliveryMetrics(metrics)
-                withSessionLock {
-                    waitingForInsertionTarget = false
-                }
-                return .inserted
-            } catch {
-                return .failed(error.localizedDescription)
-            }
-        }
-
-        withSessionLock {
-            waitingForInsertionTarget = true
-        }
-        publishDiagnostic(
-            "Kein Textfeld aktiv. Warte bis zu 5 Sekunden auf ein Ziel für das finale Transkript.")
-
-        if let delayedTarget = await waitForAvailableTextTarget(
-            timeoutNanoseconds: pendingInsertionTimeoutNanoseconds)
-        {
-            do {
-                let metrics = try insertFinalText(
-                    finalText,
-                    into: delayedTarget,
-                    options: currentOptions,
-                    allowFallbackPaste: true
-                )
-                publishFinalDeliveryMetrics(metrics)
-                withSessionLock {
-                    waitingForInsertionTarget = false
-                }
-                publishDiagnostic("Textziel erkannt. Finales Transkript wurde eingefügt.")
-                return .inserted
-            } catch {
-                withSessionLock {
-                    waitingForInsertionTarget = false
-                }
-                return .failed(error.localizedDescription)
-            }
-        }
-
-        withSessionLock {
-            waitingForInsertionTarget = false
-        }
-        if currentOptions.clipboardFallbackWhenNoTarget {
-            copyTranscriptToClipboard(finalText)
-            publishDiagnostic(
-                "Kein Textfeld gewählt. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert."
-            )
-            return .copiedToClipboard
-        }
-
-        publishDiagnostic(
-            "Kein Textfeld gewählt. Das finale Transkript bleibt in der History verfügbar.")
-        return .historyOnlyNoTarget
+            },
+            copyTranscriptToClipboard: { text in
+                self.copyTranscriptToClipboard(text)
+            },
+            insertFinalText: { text, target, options, allowFallbackPaste in
+                try self.insertFinalText(
+                    text, into: target, options: options, allowFallbackPaste: allowFallbackPaste)
+            },
+            publishDiagnostic: { value in
+                self.publishDiagnostic(value)
+            },
+            publishFinalDeliveryMetrics: { metrics in
+                self.publishFinalDeliveryMetrics(metrics)
+            },
+            pendingInsertionTimeoutNanoseconds: pendingInsertionTimeoutNanoseconds
+        )
     }
 
     private func publishFinalDeliveryMetrics(_ metrics: FinalInsertionMetrics) {
@@ -1224,7 +960,7 @@ final class DictationRuntime: @unchecked Sendable {
                     do {
                         var activeTarget = resolvedTarget
                         // Wie `deliverFinalText`: Cmd+V-Fallback für Ziele, die kein zuverlässiges AX-Set liefern
-                        try self.replaceInsertedText(
+                        _ = try self.replaceInsertedText(
                             insertionSnapshot.latestInsertedPreview, in: activeTarget,
                             allowFallbackPaste: true)
                         activeTarget.insertedLength = insertionSnapshot.latestInsertedPreview.count
@@ -1499,65 +1235,20 @@ final class DictationRuntime: @unchecked Sendable {
         allowFallbackPaste: Bool,
         preservingPrefixLength: Int = 0
     ) throws -> (path: String, clipboardRestored: Bool) {
-        try runOnMainThread {
-            var valueRef: CFTypeRef?
-            let readResult = AXUIElementCopyAttributeValue(
-                lockedTarget.element, kAXValueAttribute as CFString, &valueRef)
-            if readResult != .success {
-                if allowFallbackPaste {
-                    let clipboardRestored = try pasteIntoFallbackTarget(lockedTarget, text: text)
-                    var updated = lockedTarget
-                    updated.insertedLength = text.count
-                    target = updated
-                    lastKnownTarget = updated
-                    return ("clipboardPaste", clipboardRestored)
-                }
-                throw DictationRuntimeError.focusedElementUnavailable
+        let restoreClipboardAfterPaste = withSessionLock {
+            currentOptions?.restoreClipboardAfterPaste ?? true
+        }
+        return try streamingTextInsertionService.replaceInsertedText(
+            text,
+            in: lockedTarget,
+            allowFallbackPaste: allowFallbackPaste,
+            preservingPrefixLength: preservingPrefixLength,
+            restoreClipboardAfterPaste: restoreClipboardAfterPaste
+        ) { updatedTarget in
+            self.withSessionLock {
+                self.target = updatedTarget
+                self.lastKnownTarget = updatedTarget
             }
-
-            let currentValue = (valueRef as? String) ?? ""
-            let location = min(max(0, lockedTarget.insertionLocation), currentValue.count)
-            let preservedLength = Swift.min(
-                Swift.min(max(0, preservingPrefixLength), text.count),
-                Swift.min(lockedTarget.insertedLength, max(0, currentValue.count - location))
-            )
-            let replacementStart = min(location + preservedLength, currentValue.count)
-            let replacementEnd = min(
-                location + max(0, lockedTarget.insertedLength), currentValue.count)
-
-            let startIndex = currentValue.index(currentValue.startIndex, offsetBy: replacementStart)
-            let endIndex = currentValue.index(currentValue.startIndex, offsetBy: replacementEnd)
-
-            var updatedValue = currentValue
-            updatedValue.replaceSubrange(
-                startIndex..<endIndex, with: String(text.dropFirst(preservedLength)))
-
-            let setResult = AXUIElementSetAttributeValue(
-                lockedTarget.element, kAXValueAttribute as CFString, updatedValue as CFTypeRef)
-            if setResult != .success {
-                if allowFallbackPaste {
-                    let clipboardRestored = try pasteIntoFallbackTarget(lockedTarget, text: text)
-                    var updated = lockedTarget
-                    updated.insertedLength = text.count
-                    target = updated
-                    lastKnownTarget = updated
-                    return ("clipboardPaste", clipboardRestored)
-                }
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-
-            var updatedTarget = lockedTarget
-            updatedTarget.insertedLength = text.count
-            target = updatedTarget
-            lastKnownTarget = updatedTarget
-
-            let newCursor = location + text.count
-            var range = CFRange(location: newCursor, length: 0)
-            if let axRange = AXValueCreate(.cfRange, &range) {
-                _ = AXUIElementSetAttributeValue(
-                    lockedTarget.element, kAXSelectedTextRangeAttribute as CFString, axRange)
-            }
-            return ("axValueSet", false)
         }
     }
 
@@ -1572,7 +1263,7 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func pasteIntoFallbackTarget(_ target: LockedTextTarget, text: String) throws -> Bool {
-        try pasteIntoFallbackTarget(
+        try streamingTextInsertionService.pasteIntoFallbackTarget(
             target,
             text: text,
             restoreClipboard: withSessionLock { currentOptions?.restoreClipboardAfterPaste ?? true }
@@ -1582,40 +1273,11 @@ final class DictationRuntime: @unchecked Sendable {
     private func pasteIntoFallbackTarget(
         _ target: LockedTextTarget, text: String, restoreClipboard: Bool
     ) throws -> Bool {
-        if let expectedBundleIdentifier = target.fallbackBundleIdentifier {
-            let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?
-                .bundleIdentifier
-            guard frontmostBundleIdentifier == expectedBundleIdentifier else {
-                throw DictationRuntimeError.unsafePasteFallback
-            }
-        }
-
-        let pasteboard = NSPasteboard.general
-        let previousSnapshot = PasteboardSnapshot.capture(from: pasteboard)
-
-        defer {
-            if restoreClipboard {
-                usleep(50_000)
-                previousSnapshot.restore(to: pasteboard)
-            }
-        }
-
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-
-        guard let source = CGEventSource(stateID: .combinedSessionState) else {
-            throw DictationRuntimeError.focusedElementUnavailable
-        }
-
-        let keyV: CGKeyCode = 9
-        let down = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: true)
-        down?.flags = .maskCommand
-        let up = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: false)
-        up?.flags = .maskCommand
-
-        down?.post(tap: .cghidEventTap)
-        up?.post(tap: .cghidEventTap)
-        return restoreClipboard
+        try streamingTextInsertionService.pasteIntoFallbackTarget(
+            target,
+            text: text,
+            restoreClipboard: restoreClipboard
+        )
     }
 
     private func insertFinalText(
@@ -1624,110 +1286,30 @@ final class DictationRuntime: @unchecked Sendable {
         options: DictationStartOptions,
         allowFallbackPaste: Bool
     ) throws -> FinalInsertionMetrics {
-        let insertion: (path: String, clipboardRestored: Bool)
-        if options.simulateKeypresses {
-            do {
-                try simulateKeyboardInsertion(text, into: lockedTarget)
-                insertion = ("simulatedKeypresses", false)
-            } catch {
-                if allowFallbackPaste {
-                    let clipboardRestored = try pasteIntoFallbackTarget(
-                        lockedTarget,
-                        text: text,
-                        restoreClipboard: options.restoreClipboardAfterPaste
-                    )
-                    insertion = ("clipboardPaste", clipboardRestored)
-                } else {
-                    throw error
+        try streamingTextInsertionService.insertFinalText(
+            text,
+            into: lockedTarget,
+            options: options,
+            allowFallbackPaste: allowFallbackPaste,
+            onTargetUpdated: { updatedTarget in
+                self.withSessionLock {
+                    self.target = updatedTarget
+                    self.lastKnownTarget = updatedTarget
                 }
             }
-        } else {
-            insertion = try replaceInsertedText(
-                text,
-                in: lockedTarget,
-                allowFallbackPaste: allowFallbackPaste
-            )
-        }
-
-        var autoSent = false
-        if options.autoSendAfterPaste {
-            try sendReturnKey()
-            autoSent = true
-        }
-        return FinalInsertionMetrics(
-            path: insertion.path,
-            clipboardRestored: insertion.clipboardRestored,
-            autoSent: autoSent
         )
     }
 
     private func simulateKeyboardInsertion(_ text: String, into target: LockedTextTarget) throws {
-        if let expectedBundleIdentifier = target.fallbackBundleIdentifier {
-            let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?
-                .bundleIdentifier
-            guard frontmostBundleIdentifier == expectedBundleIdentifier else {
-                throw DictationRuntimeError.unsafePasteFallback
-            }
-        }
-
-        guard
-            let source = CGEventSource(stateID: .hidSystemState)
-                ?? CGEventSource(stateID: .combinedSessionState)
-        else {
-            throw DictationRuntimeError.focusedElementUnavailable
-        }
-
-        let unicodeValues = Array(text.utf16)
-        guard !unicodeValues.isEmpty else { return }
-
-        let chunkSize = 48
-        for chunkStart in stride(from: 0, to: unicodeValues.count, by: chunkSize) {
-            let chunkEnd = min(chunkStart + chunkSize, unicodeValues.count)
-            let chunk = Array(unicodeValues[chunkStart..<chunkEnd])
-
-            guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)
-            else {
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-            chunk.withUnsafeBufferPointer { buffer in
-                if let baseAddress = buffer.baseAddress {
-                    down.keyboardSetUnicodeString(
-                        stringLength: buffer.count, unicodeString: baseAddress)
-                }
-            }
-            down.post(tap: .cghidEventTap)
-
-            guard let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-            else {
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-            up.post(tap: .cghidEventTap)
-        }
+        try streamingTextInsertionService.simulateKeyboardInsertion(text, into: target)
     }
 
     private func sendReturnKey() throws {
-        guard
-            let source = CGEventSource(stateID: .hidSystemState)
-                ?? CGEventSource(stateID: .combinedSessionState)
-        else {
-            throw DictationRuntimeError.focusedElementUnavailable
-        }
-
-        let returnKey: CGKeyCode = CGKeyCode(kVK_Return)
-        guard let down = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: true),
-            let up = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: false)
-        else {
-            throw DictationRuntimeError.focusedElementUnavailable
-        }
-
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        try streamingTextInsertionService.sendReturnKey()
     }
 
     private func copyTranscriptToClipboard(_ text: String) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        streamingTextInsertionService.copyTranscriptToClipboard(text)
     }
 
     private func configureEngine(for options: DictationStartOptions, runtimeMode: DictationMode)
