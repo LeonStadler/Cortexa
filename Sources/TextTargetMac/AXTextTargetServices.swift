@@ -16,31 +16,75 @@ private enum AXFocusedElementProbe {
     case element(AXUIElement)
     case noFocusedElement(frontmostBundleIdentifier: String?)
     case apiDisabled(frontmostBundleIdentifier: String?)
+    case probeFailed(frontmostBundleIdentifier: String?, reason: AXProbeFailureReason)
 }
 
 private enum AXAccessEvaluator {
-    static func permissionState(promptIfNeeded: Bool = false) -> TextTargetPermissionState {
-        let granted = (try? runOnMainThread {
+    static func permissionSnapshot(promptIfNeeded: Bool = false) -> AccessibilityTrustSnapshot {
+        let fallbackProbe = FocusedTextTargetProbeResult.noFocusedElement(
+            frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        )
+        return (try? runOnMainThread {
             if AXIsProcessTrusted() {
-                return true
+                return AccessibilityTrustSnapshot(
+                    permissionState: .granted,
+                    probeResult: focusedTextTargetProbe(),
+                    frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                        .bundleIdentifier
+                )
             }
 
             let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
             let options = [promptKey: promptIfNeeded] as CFDictionary
             if AXIsProcessTrustedWithOptions(options) {
-                return true
+                return AccessibilityTrustSnapshot(
+                    permissionState: .granted,
+                    probeResult: focusedTextTargetProbe(),
+                    frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                        .bundleIdentifier
+                )
             }
 
-            let probe = focusedElementProbe()
+            let probe = focusedTextTargetProbe()
             switch probe {
-            case .element, .noFocusedElement:
-                return true
+            case .target, .noFocusedElement:
+                return AccessibilityTrustSnapshot(
+                    permissionState: .denied,
+                    probeResult: probe,
+                    frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                        .bundleIdentifier
+                )
             case .apiDisabled:
-                return false
+                return AccessibilityTrustSnapshot(
+                    permissionState: .denied,
+                    probeResult: probe,
+                    frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                        .bundleIdentifier
+                )
+            case .unsupportedTarget, .unableToReadValue:
+                return AccessibilityTrustSnapshot(
+                    permissionState: .denied,
+                    probeResult: probe,
+                    frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                        .bundleIdentifier
+                )
+            case .probeFailed:
+                return AccessibilityTrustSnapshot(
+                    permissionState: .denied,
+                    probeResult: probe,
+                    frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                        .bundleIdentifier
+                )
             }
-        }) ?? false
+        }) ?? AccessibilityTrustSnapshot(
+            permissionState: .denied,
+            probeResult: fallbackProbe,
+            frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        )
+    }
 
-        return granted ? .granted : .denied
+    static func permissionState(promptIfNeeded: Bool = false) -> TextTargetPermissionState {
+        permissionSnapshot(promptIfNeeded: promptIfNeeded).permissionState
     }
 
     static func probeFocusedTarget() -> (FocusedTextTargetProbeResult, TextTargetSnapshot?) {
@@ -53,6 +97,14 @@ private enum AXAccessEvaluator {
                 case .noFocusedElement(let frontmostBundleIdentifier):
                     return (
                         .noFocusedElement(frontmostBundleIdentifier: frontmostBundleIdentifier), nil
+                    )
+                case .probeFailed(let frontmostBundleIdentifier, let reason):
+                    return (
+                        .probeFailed(
+                            frontmostBundleIdentifier: frontmostBundleIdentifier,
+                            reason: reason
+                        ),
+                        nil
                     )
                 case .element(let element):
                     var roleRef: CFTypeRef?
@@ -146,10 +198,39 @@ private enum AXAccessEvaluator {
             return .noFocusedElement(frontmostBundleIdentifier: frontmostBundleIdentifier)
         case .apiDisabled:
             return .apiDisabled(frontmostBundleIdentifier: frontmostBundleIdentifier)
-        case .noValue, .cannotComplete, .failure:
+        case .noValue:
             return .noFocusedElement(frontmostBundleIdentifier: frontmostBundleIdentifier)
+        case .cannotComplete:
+            return .probeFailed(
+                frontmostBundleIdentifier: frontmostBundleIdentifier,
+                reason: .cannotComplete
+            )
+        case .failure:
+            return .probeFailed(
+                frontmostBundleIdentifier: frontmostBundleIdentifier,
+                reason: .failure
+            )
         default:
+            return .probeFailed(
+                frontmostBundleIdentifier: frontmostBundleIdentifier,
+                reason: .unknown
+            )
+        }
+    }
+
+    private static func focusedTextTargetProbe() -> FocusedTextTargetProbeResult {
+        switch focusedElementProbe() {
+        case .element:
+            return .target
+        case .noFocusedElement(let frontmostBundleIdentifier):
             return .noFocusedElement(frontmostBundleIdentifier: frontmostBundleIdentifier)
+        case .apiDisabled(let frontmostBundleIdentifier):
+            return .apiDisabled(frontmostBundleIdentifier: frontmostBundleIdentifier)
+        case .probeFailed(let frontmostBundleIdentifier, let reason):
+            return .probeFailed(
+                frontmostBundleIdentifier: frontmostBundleIdentifier,
+                reason: reason
+            )
         }
     }
 
@@ -210,6 +291,11 @@ public enum AXTextAccess {
         AXAccessEvaluator.permissionState(promptIfNeeded: promptIfNeeded)
     }
 
+    public static func permissionSnapshot(promptIfNeeded: Bool = false) -> AccessibilityTrustSnapshot
+    {
+        AXAccessEvaluator.permissionSnapshot(promptIfNeeded: promptIfNeeded)
+    }
+
     public static func probeFocusedTarget() -> FocusedTextTargetProbeResult {
         AXAccessEvaluator.probeFocusedTarget().0
     }
@@ -234,6 +320,8 @@ public final class AXTextTargetResolver: TextTargetResolver {
             throw TextTargetError.unsupportedFocusedElement(role: role)
         case .unableToReadValue:
             throw TextTargetError.unableToReadValue
+        case .probeFailed:
+            throw TextTargetError.accessibilityDenied
         }
     }
 }
@@ -382,6 +470,15 @@ public enum AXTextAccess {
     public static func permissionState(promptIfNeeded: Bool = false) -> TextTargetPermissionState {
         _ = promptIfNeeded
         return .denied
+    }
+
+    public static func permissionSnapshot(promptIfNeeded: Bool = false) -> AccessibilityTrustSnapshot
+    {
+        AccessibilityTrustSnapshot(
+            permissionState: permissionState(promptIfNeeded: promptIfNeeded),
+            probeResult: .apiDisabled(frontmostBundleIdentifier: nil),
+            frontmostBundleIdentifier: nil
+        )
     }
 
     public static func probeFocusedTarget() -> FocusedTextTargetProbeResult {

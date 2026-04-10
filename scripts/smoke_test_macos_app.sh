@@ -11,6 +11,11 @@ APP_INFO_PLIST="${APP_PATH}/Contents/Info.plist"
 RUNTIME_DIR="${APP_PATH}/Contents/Resources/Runtime"
 FALLBACK_RUNTIME_DIR="${APP_PATH}/Contents/Resources"
 LOG_PATH="${ROOT_DIR}/artifacts/mac/dev-run.log"
+SIGNING_ARTIFACT_DIR="${ROOT_DIR}/artifacts/mac/signing"
+CURRENT_SIGNING_SUMMARY="${SIGNING_ARTIFACT_DIR}/debug-signing.current.txt"
+CURRENT_SIGNING_RAW="${SIGNING_ARTIFACT_DIR}/debug-signing.current.raw.txt"
+PREVIOUS_SIGNING_SUMMARY="${SIGNING_ARTIFACT_DIR}/debug-signing.previous.txt"
+PREVIOUS_SIGNING_RAW="${SIGNING_ARTIFACT_DIR}/debug-signing.previous.raw.txt"
 KEEP_RUNNING=0
 SKIP_LAUNCH=0
 EXERCISE_UI=1
@@ -60,10 +65,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_command xcodebuild
+require_command codesign
 require_command plutil
 require_command pgrep
 
 mkdir -p "${ROOT_DIR}/artifacts/mac"
+mkdir -p "${SIGNING_ARTIFACT_DIR}"
 
 log "Preparing runtime bundle"
 "${ROOT_DIR}/scripts/prepare_runtime_bundle.sh"
@@ -104,6 +111,99 @@ LSUIELEMENT=$(/usr/libexec/PlistBuddy -c "Print :LSUIElement" "${APP_INFO_PLIST}
 
 log "Info.plist summary"
 plutil -p "${APP_INFO_PLIST}" | sed -n '1,80p'
+log "Capturing signing identity snapshot"
+if [[ -f "${CURRENT_SIGNING_SUMMARY}" ]]; then
+  cp "${CURRENT_SIGNING_SUMMARY}" "${PREVIOUS_SIGNING_SUMMARY}"
+fi
+if [[ -f "${CURRENT_SIGNING_RAW}" ]]; then
+  cp "${CURRENT_SIGNING_RAW}" "${PREVIOUS_SIGNING_RAW}"
+fi
+
+set +e
+codesign -dvvv --requirements :- "${APP_PATH}" >"${CURRENT_SIGNING_RAW}" 2>&1
+CODESIGN_STATUS=$?
+set -e
+
+extract_signing_value() {
+  local prefix="$1"
+  local file_path="$2"
+  sed -n "s/^${prefix}=//p" "${file_path}" | head -n 1 | tr -d '\r'
+}
+
+extract_designated_requirement() {
+  local file_path="$1"
+  awk '
+    /^designated[[:space:]]*=>/ {
+      capturing=1
+      line=$0
+      sub(/^designated[[:space:]]*=>[[:space:]]*/, "", line)
+      if (line != "") {
+        captured = captured (captured == "" ? "" : " ") line
+      }
+      next
+    }
+    /^Designated Requirement:/ {
+      capturing=1
+      next
+    }
+    capturing && /^[[:space:]]+/ {
+      line=$0
+      sub(/^[[:space:]]+/, "", line)
+      if (line != "") {
+        captured = captured (captured == "" ? "" : " ") line
+      }
+      next
+    }
+    capturing && NF == 0 {
+      exit
+    }
+    END {
+      if (captured != "") {
+        print captured
+      }
+    }
+  ' "${file_path}" | tr -d '\r'
+}
+
+if [[ "${CODESIGN_STATUS}" -ne 0 ]]; then
+  log "codesign output:"
+  sed -n '1,120p' "${CURRENT_SIGNING_RAW}"
+  error "codesign identity snapshot failed with status ${CODESIGN_STATUS}"
+fi
+
+CODESIGN_IDENTIFIER="$(extract_signing_value "Identifier" "${CURRENT_SIGNING_RAW}")"
+CODESIGN_TEAM_IDENTIFIER="$(extract_signing_value "TeamIdentifier" "${CURRENT_SIGNING_RAW}")"
+CODESIGN_EXECUTABLE="$(extract_signing_value "Executable" "${CURRENT_SIGNING_RAW}")"
+CODESIGN_DESIGNATED_REQUIREMENT="$(extract_designated_requirement "${CURRENT_SIGNING_RAW}")"
+
+[[ -n "${CODESIGN_IDENTIFIER}" ]] || error "codesign did not report an Identifier for the built app"
+[[ -n "${CODESIGN_TEAM_IDENTIFIER}" ]] || log "Warning: codesign did not report a TeamIdentifier"
+[[ -n "${CODESIGN_DESIGNATED_REQUIREMENT}" ]] || log "Warning: codesign did not report a designated requirement"
+
+{
+  printf 'app_path=%s\n' "${APP_PATH}"
+  printf 'executable=%s\n' "${CODESIGN_EXECUTABLE}"
+  printf 'identifier=%s\n' "${CODESIGN_IDENTIFIER}"
+  printf 'team_identifier=%s\n' "${CODESIGN_TEAM_IDENTIFIER}"
+  printf 'designated_requirement=%s\n' "${CODESIGN_DESIGNATED_REQUIREMENT}"
+} >"${CURRENT_SIGNING_SUMMARY}"
+
+log "Signing identity snapshot"
+log "  Executable: ${CODESIGN_EXECUTABLE}"
+log "  Identifier: ${CODESIGN_IDENTIFIER}"
+log "  Team Identifier: ${CODESIGN_TEAM_IDENTIFIER:-<missing>}"
+log "  Designated Requirement: ${CODESIGN_DESIGNATED_REQUIREMENT:-<missing>}"
+
+if [[ -f "${PREVIOUS_SIGNING_SUMMARY}" ]]; then
+  if cmp -s "${PREVIOUS_SIGNING_SUMMARY}" "${CURRENT_SIGNING_SUMMARY}"; then
+    log "Signing identity matches the previous smoke-test build"
+  else
+    log "Signing identity changed compared to the previous smoke-test build"
+    diff -u "${PREVIOUS_SIGNING_SUMMARY}" "${CURRENT_SIGNING_SUMMARY}" || true
+  fi
+else
+  log "No previous signing snapshot found; stored the current build as the baseline for the next run"
+fi
 
 if [[ "${SKIP_LAUNCH}" -eq 1 ]]; then
   log "Skipping app launch; build and bundle validation completed."

@@ -37,6 +37,28 @@ Accessibility onboarding text:
 3. Capability checks re-run whenever app returns from settings.
 4. App stays functional in limited mode when AX is missing (transcribe only).
 
+## Rebuild / TCC recovery
+
+Nach einem Rebuild kann die Bedienungshilfe in den Systemeinstellungen zwar aktiv aussehen, aber fuer den neu gestarteten Build noch nicht wirksam sein.
+
+Empfohlener Recovery-Flow:
+
+1. `WisprLocalMac` in `System Settings -> Privacy & Security -> Accessibility` einmal entfernen.
+2. Die App neu starten.
+3. Einen frischen Diktatversuch starten, damit der aktuelle Build den Accessibility-Dialog erneut anstoßen kann.
+4. `WisprLocalMac` neu hinzufügen und wieder in den Bedienungshilfen aktivieren.
+
+Wenn der Eintrag bereits aktiviert ist, aber das Einfügen weiterhin nicht greift, ist das ein typisches Zeichen fuer einen alten TCC-Eintrag aus einem frueheren Build.
+
+### Smoke scenarios for manual checks
+
+- Fresh build without microphone or Accessibility permission.
+- Rebuild with an existing Accessibility entry that looks enabled but is not effective yet.
+- Accessibility toggled off and on without removing the entry.
+- Accessibility removed and re-added for the current build.
+
+Diese Szenarien gehoeren in den Smoke-Test vor einem Release.
+
 ### Praktische Schritte in der aktuellen App
 
 Optional vor dem UI-Test:
@@ -66,3 +88,4 @@ Das baut die Debug-App, prüft das Bundle und startet `WisprLocalMac` direkt aus
   - allow transcription
   - disable finalize/stream insert actions
   - allow clipboard-only manual copy flow
+  - if the app appears authorized but still cannot insert after a rebuild, instruct the user to remove and re-add the entry in Accessibility

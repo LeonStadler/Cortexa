@@ -72,6 +72,7 @@ enum PermissionStatus: String {
     case denied = "Verweigert"
     case notDetermined = "Noch nicht geprüft"
     case restricted = "Eingeschränkt"
+    case stale = "Erneut prüfen"
 
     var label: String {
         rawValue
@@ -87,6 +88,8 @@ enum PermissionStatus: String {
             return .secondary
         case .restricted:
             return .orange
+        case .stale:
+            return .yellow
         }
     }
 
@@ -105,8 +108,8 @@ enum PermissionStatus: String {
         }
     }
 
-    static func accessibility(isTrusted: Bool) -> PermissionStatus {
-        isTrusted ? .granted : .denied
+    static func accessibility(snapshot: AccessibilityPermissionSnapshot) -> PermissionStatus {
+        snapshot.status
     }
 }
 
@@ -654,6 +657,7 @@ final class MacAppState: ObservableObject {
     @Published var lastTranscript: String = ""
     @Published var microphonePermissionStatus: PermissionStatus = .notDetermined
     @Published var accessibilityPermissionStatus: PermissionStatus = .notDetermined
+    @Published var accessibilityPermissionHintText: String = ""
 
     @Published var licenseInput: String = ""
     @Published var storedLicenseSummary: String?
@@ -800,14 +804,44 @@ final class MacAppState: ObservableObject {
     var permissionSummary: String {
         switch dictationCapability {
         case .fullSystemInsertion:
+            if accessibilityPermissionStatus == .stale {
+                return
+                    "Bedienungshilfen wirken fuer diesen Build noch nicht verlaesslich. Bitte den Eintrag kurz entfernen und neu hinzufuegen."
+            }
             return "Alle Berechtigungen erteilt."
         case .limitedTranscription:
+            if accessibilityPermissionStatus == .stale {
+                return
+                    "Bedienungshilfen scheinen von einem frueheren Build zu stammen. Diktate bleiben als Verlauf oder Zwischenablage verfuegbar, bis der Eintrag neu hinzugefuegt wurde."
+            }
             return
                 "Bedienungshilfen fehlen. Diktate bleiben als Verlauf oder Zwischenablage verfügbar."
         case .unavailable:
             let missing = missingPermissionTargets
             return "Fehlende Berechtigungen: \(missing.joined(separator: ", "))."
         }
+    }
+
+    var accessibilityPermissionDetailText: String {
+        if accessibilityPermissionStatus == .stale {
+            return
+                "Der Accessibility-Eintrag ist sichtbar, wirkt fuer den aktuellen Build aber noch nicht. Entferne WisprLocal in den Bedienungshilfen kurz und fuege es erneut hinzu."
+        }
+        return "Erforderlich zum Einfuegen in das aktive Textfeld."
+    }
+
+    var accessibilityPermissionActionTitle: String {
+        accessibilityPermissionStatus == .granted ? "Öffnen" : "Freigabe anfragen"
+    }
+
+    var accessibilityPermissionActionHint: String {
+        if accessibilityPermissionStatus == .stale {
+            return "Accessibility erneut pruefen und Recovery-Hinweis anzeigen"
+        }
+        if accessibilityPermissionStatus == .granted {
+            return "Bedienungshilfen öffnen"
+        }
+        return "Systemdialog zu Bedienungshilfen"
     }
 
     /// Kurztext für die Menüleisten-Popup-Zeile (verhindert breite Layouts durch lange Sätze).
@@ -1411,6 +1445,12 @@ final class MacAppState: ObservableObject {
         }
         dictationRuntime.onFinalTranscript = { [weak self] event in
             self?.handleFinalTranscript(event)
+        }
+        dictationRuntime.onAccessibilityPermissionIssue = { [weak self] message in
+            self?.accessibilityPermissionStatus = .stale
+            self?.accessibilityPermissionHintText = message
+            self?.appendDiagnostic(message)
+            self?.schedulePermissionRefresh()
         }
         dictationRuntime.onPermissionInteractionFinished = { [weak self] in
             self?.refreshPermissionStatesAfterUserFacingPermissionStep()
@@ -2500,7 +2540,7 @@ final class MacAppState: ObservableObject {
             "CPU: \(profile.activeProcessorCount)/\(profile.processorCount), RAM: \(String(format: "%.1f", memoryGB)) GB, Thermal: \(profile.thermalState)"
     }
 
-    func refreshPermissionStates() {
+    func refreshPermissionStates(reason: String = "manual-refresh") {
         let rawMic = AVCaptureDevice.authorizationStatus(for: .audio)
         microphonePermissionStatus = permissionController.microphoneStatus()
         if debugModeEnabled {
@@ -2508,16 +2548,20 @@ final class MacAppState: ObservableObject {
                 "permissions.microphone raw=\(String(describing: rawMic)) mapped=\(microphonePermissionStatus)"
             )
         }
-        applyAccessibilityStatusWithDebounce(permissionController.accessibilityStatus())
+        let accessibilitySnapshot = permissionController.accessibilitySnapshot()
+        if debugModeEnabled {
+            appendDebug("\(accessibilitySnapshot.diagnosticsDescription) reason=\(reason)")
+        }
+        applyAccessibilityStatusWithDebounce(accessibilitySnapshot.status)
     }
 
     /// TCC aktualisiert manchmal verzögert – einmal sofort und einmal kurz danach erneut lesen.
     private func refreshPermissionStatesAfterUserFacingPermissionStep() {
-        refreshPermissionStates()
+        refreshPermissionStates(reason: "after-user-facing-step")
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 350_000_000)
             guard let self else { return }
-            self.refreshPermissionStates()
+            self.refreshPermissionStates(reason: "after-user-facing-step-delayed")
         }
     }
 
@@ -2554,11 +2598,12 @@ final class MacAppState: ObservableObject {
     func requestAccessibilityAccessFromSettings() {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            if self.permissionController.accessibilityStatus() == .granted {
-                self.refreshPermissionStatesAfterUserFacingPermissionStep()
-                return
-            }
             self.dictationRuntime.promptAccessibilityTrustFromUser()
+            if self.accessibilityPermissionStatus == .stale {
+                self.appendDiagnostic(
+                    "Die Bedienungshilfen-Freigabe scheint zu einem frueheren Build zu gehoeren. Bitte entferne WisprLocal in den Bedienungshilfen kurz und fuege es erneut hinzu."
+                )
+            }
             self.refreshPermissionStatesAfterUserFacingPermissionStep()
             self.schedulePermissionRefresh()
         }
@@ -2569,12 +2614,18 @@ final class MacAppState: ObservableObject {
         if !hasAppliedAccessibilityStatusOnce {
             accessibilityStatusDebounceTask?.cancel()
             accessibilityPermissionStatus = raw
+            if raw != .stale {
+                accessibilityPermissionHintText = ""
+            }
             hasAppliedAccessibilityStatusOnce = true
             return
         }
-        if raw == .granted {
+        if raw == .granted || raw == .stale {
             accessibilityStatusDebounceTask?.cancel()
-            accessibilityPermissionStatus = .granted
+            accessibilityPermissionStatus = raw
+            if raw != .stale {
+                accessibilityPermissionHintText = ""
+            }
             return
         }
         if raw == accessibilityPermissionStatus {
@@ -2588,6 +2639,9 @@ final class MacAppState: ObservableObject {
             let again = self.permissionController.accessibilityStatus()
             if again == raw {
                 self.accessibilityPermissionStatus = again
+                if again != .stale {
+                    self.accessibilityPermissionHintText = ""
+                }
             }
         }
     }
@@ -2610,7 +2664,7 @@ final class MacAppState: ObservableObject {
     private func refreshPermissionsAfterExternalEvent(reason: String) {
         let beforeMic = microphonePermissionStatus
         let rawAXBefore = permissionController.accessibilityStatus()
-        refreshPermissionStates()
+        refreshPermissionStates(reason: reason)
         let afterMic = microphonePermissionStatus
         let rawAXAfter = permissionController.accessibilityStatus()
         if beforeMic != afterMic || rawAXBefore != rawAXAfter {

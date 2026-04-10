@@ -329,6 +329,7 @@ final class DictationRuntime: @unchecked Sendable {
     var onTranscript: ((String) -> Void)?
     var onFinalTranscript: ((FinalTranscriptEvent) -> Void)?
     var onSessionActivityChanged: ((Bool) -> Void)?
+    var onAccessibilityPermissionIssue: ((String) -> Void)?
     /// Mikrofon-/AX-Dialoge oder TCC-Updates: UI soll `authorizationStatus` / AX erneut lesen.
     var onPermissionInteractionFinished: (() -> Void)?
 
@@ -365,6 +366,7 @@ final class DictationRuntime: @unchecked Sendable {
     private var speechChunkStreak = 0
     private var maxObservedRMS: Float = 0
     private var lastRecoverableInsertDiagnosticAt: Date?
+    private var lastAccessibilityPermissionIssueAt: Date?
     private var accessibilityPermissionGranted = false
     private let focusedTargetRetryCount = 8
     private let focusedTargetRetryDelayNanoseconds: UInt64 = 150_000_000
@@ -383,6 +385,40 @@ final class DictationRuntime: @unchecked Sendable {
     private func publishPermissionInteractionFinished() {
         DispatchQueue.main.async { [weak self] in
             self?.onPermissionInteractionFinished?()
+        }
+    }
+
+    private func publishAccessibilityPermissionIssue(_ message: String, context: String) {
+        let now = Date()
+        if let lastAccessibilityPermissionIssueAt,
+            now.timeIntervalSince(lastAccessibilityPermissionIssueAt) < 1.5
+        {
+            publishDebug("permissions.accessibility.issue.suppressed context=\(context)")
+            return
+        }
+
+        lastAccessibilityPermissionIssueAt = now
+        accessibilityPermissionGranted = false
+        publishDebug("permissions.accessibility.issue context=\(context) message=\(message)")
+        DispatchQueue.main.async { [weak self] in
+            self?.onAccessibilityPermissionIssue?(message)
+        }
+    }
+
+    private func publishStaleAccessibilityPermissionGuidance(context: String) {
+        publishAccessibilityPermissionIssue(
+            "Die Bedienungshilfen-Freigabe scheint zu einem frueheren Build zu gehoeren. Bitte entferne WisprLocal in den Bedienungshilfen kurz und fuege es erneut hinzu.",
+            context: context
+        )
+    }
+
+    private func reportAccessibilityIssueIfProbeLooksStale(context: String) {
+        let snapshot = AXTextAccess.permissionSnapshot()
+        switch snapshot.probeResult {
+        case .apiDisabled, .probeFailed:
+            publishStaleAccessibilityPermissionGuidance(context: context)
+        default:
+            break
         }
     }
 
@@ -552,8 +588,18 @@ final class DictationRuntime: @unchecked Sendable {
                 try configureEngine(for: options, runtimeMode: effectiveMode)
 
                 if accessibilityGranted {
-                    let lockedTarget = try? await captureFocusedTextTargetWithRetry(
-                        emitWaitingDiagnostics: false)
+                    let lockedTarget: LockedTextTarget?
+                    do {
+                        lockedTarget = try await captureFocusedTextTargetWithRetry(
+                            emitWaitingDiagnostics: false)
+                    } catch DictationRuntimeError.accessibilityPermissionDenied {
+                        publishStaleAccessibilityPermissionGuidance(
+                            context: "start.capture-focused-target"
+                        )
+                        throw DictationRuntimeError.accessibilityPermissionDenied
+                    } catch {
+                        lockedTarget = nil
+                    }
                     withSessionLock {
                         self.target = lockedTarget
                         if let lockedTarget {
@@ -878,6 +924,7 @@ final class DictationRuntime: @unchecked Sendable {
             lastKnownTarget = lockedTarget
             return lockedTarget
         case .apiDisabled(let frontmostBundleIdentifier):
+            publishStaleAccessibilityPermissionGuidance(context: "capture-focused-target.api-disabled")
             AgentSessionDebugLog.append(
                 hypothesisId: "H3",
                 location: "DictationRuntime.captureFocusedTextTarget",
@@ -919,6 +966,18 @@ final class DictationRuntime: @unchecked Sendable {
                 ]
             )
             throw DictationRuntimeError.focusedElementUnavailable
+        case .probeFailed(let frontmostBundleIdentifier, let reason):
+            publishStaleAccessibilityPermissionGuidance(context: "capture-focused-target.probe-failed")
+            AgentSessionDebugLog.append(
+                hypothesisId: "H3",
+                location: "DictationRuntime.captureFocusedTextTarget",
+                message: "ax_probe_failed",
+                data: [
+                    "frontmostBundle": frontmostBundleIdentifier ?? "nil",
+                    "reason": reason.rawValue,
+                ]
+            )
+            throw DictationRuntimeError.accessibilityPermissionDenied
         }
     }
 
@@ -1007,6 +1066,7 @@ final class DictationRuntime: @unchecked Sendable {
             let settableResult = AXUIElementIsAttributeSettable(
                 target.element, kAXValueAttribute as CFString, &isValueSettable)
             guard settableResult == .success, isValueSettable.boolValue else {
+                reportAccessibilityIssueIfProbeLooksStale(context: "refresh-locked-target.settable")
                 throw DictationRuntimeError.unsupportedTextTarget
             }
 
@@ -1014,6 +1074,7 @@ final class DictationRuntime: @unchecked Sendable {
             let readResult = AXUIElementCopyAttributeValue(
                 target.element, kAXValueAttribute as CFString, &valueRef)
             guard readResult == .success else {
+                reportAccessibilityIssueIfProbeLooksStale(context: "refresh-locked-target.read")
                 throw DictationRuntimeError.focusedElementUnavailable
             }
 
@@ -1072,6 +1133,9 @@ final class DictationRuntime: @unchecked Sendable {
 
         // Live-Abfrage: nach Freigabe in den Systemeinstellungen ohne Neustart gültig (nicht nur Session-Cache).
         if !AccessibilityTrust.isClientProcessTrusted() {
+            if currentOptions.finalResultDeliveryMode == .insert || currentOptions.simulateKeypresses {
+                publishStaleAccessibilityPermissionGuidance(context: "deliver-final-text.permission-check")
+            }
             if currentOptions.clipboardFallbackWhenNoTarget {
                 copyTranscriptToClipboard(finalText)
                 publishDiagnostic(
@@ -1504,6 +1568,7 @@ final class DictationRuntime: @unchecked Sendable {
             let readResult = AXUIElementCopyAttributeValue(
                 lockedTarget.element, kAXValueAttribute as CFString, &valueRef)
             if readResult != .success {
+                reportAccessibilityIssueIfProbeLooksStale(context: "replace-inserted-text.read")
                 if allowFallbackPaste {
                     let clipboardRestored = try pasteIntoFallbackTarget(lockedTarget, text: text)
                     var updated = lockedTarget
@@ -1535,6 +1600,7 @@ final class DictationRuntime: @unchecked Sendable {
             let setResult = AXUIElementSetAttributeValue(
                 lockedTarget.element, kAXValueAttribute as CFString, updatedValue as CFTypeRef)
             if setResult != .success {
+                reportAccessibilityIssueIfProbeLooksStale(context: "replace-inserted-text.write")
                 if allowFallbackPaste {
                     let clipboardRestored = try pasteIntoFallbackTarget(lockedTarget, text: text)
                     var updated = lockedTarget
