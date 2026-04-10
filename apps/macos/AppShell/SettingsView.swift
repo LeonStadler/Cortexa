@@ -89,12 +89,19 @@ struct SettingsView: View {
         return formatter.string(from: date)
     }
 
-    private var searchQuery: String {
-        searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    private var settingsSearchPresentation: SettingsSearchPresentation {
+        SettingsSearchPresentation(
+            searchText: searchText,
+            transcriptHistory: appState.transcriptHistory,
+            snippetRules: appState.snippetRules,
+            diagnosticsText: appState.diagnosticsText,
+            capabilitySummary: appState.capabilitySummary,
+            updaterStatusText: appState.updaterStatusText
+        )
     }
 
     private var isSearching: Bool {
-        !searchQuery.isEmpty
+        settingsSearchPresentation.isSearching
     }
 
     /// Live rewrite / adjustment radius affects streaming partials only.
@@ -105,8 +112,7 @@ struct SettingsView: View {
     }
 
     private func matches(_ keywords: [String]) -> Bool {
-        guard isSearching else { return true }
-        return keywords.contains { $0.lowercased().contains(searchQuery) }
+        settingsSearchPresentation.matches(keywords)
     }
 
     private func selectedRemoteProviderBinding<T>(
@@ -126,161 +132,55 @@ struct SettingsView: View {
     }
 
     private var filteredHistory: [TranscriptHistoryEntry] {
-        guard isSearching else {
-            return appState.transcriptHistory
-        }
-        return appState.transcriptHistory.filter {
-            $0.text.lowercased().contains(searchQuery)
-                || $0.languageCode.lowercased().contains(searchQuery)
-                || $0.mode.lowercased().contains(searchQuery)
-        }
+        settingsSearchPresentation.filteredHistory
     }
 
     private var compactHistoryEntries: [TranscriptHistoryEntry] {
-        if isSearching {
-            return filteredHistory
-        }
-        return Array(filteredHistory.prefix(12))
+        settingsSearchPresentation.compactHistoryEntries()
     }
 
     private var filteredSnippets: [SnippetRule] {
-        guard isSearching else {
-            return appState.snippetRules
-        }
-        return appState.snippetRules.filter {
-            $0.trigger.lowercased().contains(searchQuery)
-                || $0.replacement.lowercased().contains(searchQuery)
-        }
+        settingsSearchPresentation.filteredSnippets
     }
 
     private var generalHasMatches: Bool {
-        matches([
-            "language", "sprache", "menüleiste", "menu bar", "shortcut hints", "compact", "kompakt",
-            "dock", "launch on login", "updates", "zugriff", "permissions", "berechtigungen",
-            "mikrofon", "accessibility", "bedienungshilfen",
-        ])
+        settingsSearchPresentation.generalHasMatches
     }
 
     private var dictationHasMatches: Bool {
-        matches([
-            "streaming",
-            "clipboard",
-            "zwischenablage",
-            "insert",
-            "delivery",
-            "paste",
-            "auto-send",
-            "restore clipboard",
-            "keypress",
-            "anpassung",
-            "anpassungsradius",
-            "anpassen",
-            "rückwirkung",
-            "rückwirkend",
-            "rückwirkungsbereich",
-            "rueckwirkung",
-            "rueckwirkend",
-            "rueckwirkungsbereich",
-            "rewrite",
-            "kontext",
-            "retroaktiv",
-            "weit zurück",
-        ])
+        settingsSearchPresentation.dictationHasMatches
     }
 
     private var speechHasMatches: Bool {
-        matches([
-            "speech",
-            "voice",
-            "sprache",
-            "language",
-            "translate",
-            "translation",
-            "übersetzung",
-            "uebersetzung",
-            "modell",
-            "model",
-            "anbieter",
-            "provider",
-            "whisper",
-            "parakeet",
-            "qualität",
-            "quality",
-            "installieren",
-            "download",
-        ])
+        settingsSearchPresentation.speechHasMatches
     }
 
     private var shortcutsHasMatches: Bool {
-        matches([
-            "shortcut", "kurzbefehl", "hold", "dictation", "diktat", "cancel", "abbrechen", "mode",
-            "modus",
-        ])
+        settingsSearchPresentation.shortcutsHasMatches
     }
 
     private var aiHasMatches: Bool {
-        matches([
-            "ai",
-            "processing",
-            "modell",
-            "model",
-            "rewrite",
-            "stil",
-            "style",
-            "ton",
-            "tone",
-            "anrede",
-            "formal",
-            "informal",
-            "apple intelligence",
-            "api",
-            "openrouter",
-            "provider",
-            "anbieter",
-            "key",
-            "api key",
-        ])
+        settingsSearchPresentation.aiHasMatches
     }
 
     private var historyHasMatches: Bool {
-        matches([
-            "history", "verlauf", "transkript", "dictation", "diktat", "retention", "aufbewahrung",
-            "storage", "folder",
-        ]) || !filteredHistory.isEmpty
+        settingsSearchPresentation.historyHasMatches
     }
 
     private var aboutHasMatches: Bool {
-        matches([
-            "about", "über", "ueber", "leon", "stadler", "website", "webseite", "proprietär",
-            "proprietary", "lizenz", "intermedia", "design", "fotografie", "vorarlberg",
-            "changelog",
-            "neuigkeiten", "release", "release notes", "änderungen", "aenderungen",
-        ])
+        settingsSearchPresentation.aboutHasMatches
     }
 
     private var snippetsHasMatches: Bool {
-        matches([
-            "snippet", "textbaustein", "replacement", "trigger", "json", "import", "export",
-            "importieren", "exportieren",
-        ]) || !filteredSnippets.isEmpty
+        settingsSearchPresentation.snippetsHasMatches
     }
 
     private var advancedHasMatches: Bool {
-        matches([
-            "update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit",
-            "storage", "folder", "app support", "logs", "protokolle", "voice", "modell", "model",
-            "warm", "dauer", "duration", "laufzeit", "speicher halten", "runtime",
-            "version", "build", "app", "wispr", "wisprlocal", "bundle", "cfbundle",
-        ]) || appState.diagnosticsText.lowercased().contains(searchQuery)
-            || appState.capabilitySummary.lowercased().contains(searchQuery)
-            || appState.updaterStatusText.lowercased().contains(searchQuery)
+        settingsSearchPresentation.advancedHasMatches
     }
 
     private var soundHasMatches: Bool {
-        matches([
-            "sound", "audio", "mikrofon", "volume", "loudness", "silence", "normalization",
-            "normalisierung", "verstärkung", "gain", "feedback",
-        ])
+        settingsSearchPresentation.soundHasMatches
     }
 
     private var compressedDiagnosticsText: String {
@@ -308,45 +208,114 @@ struct SettingsView: View {
         )
     }
 
-    private var generalForm: some View {
-        Form {
-            Section(text("App", "App")) {
-                generalAppearanceContent
-            }
-            Section(text("Menüleiste", "Menu bar")) {
-                generalMenuBarContent
-            }
-            Section(text("Zugriff", "Access")) {
-                generalPermissionsContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
     @ViewBuilder
     private var selectedForm: some View {
         switch currentSelectedTab {
         case .general:
-            generalForm
+            GeneralSettingsPage(
+                appSectionTitle: text("App", "App"),
+                menuBarSectionTitle: text("Menüleiste", "Menu bar"),
+                accessSectionTitle: text("Zugriff", "Access"),
+                appContent: erasedView { generalAppearanceContent },
+                menuBarContent: erasedView { generalMenuBarContent },
+                accessContent: erasedView { generalPermissionsContent }
+            )
         case .speech:
-            speechForm
+            SpeechSettingsPage(
+                quickExplainerSectionTitle: text("Kurz erklärt", "Quick explainer"),
+                providersSectionTitle: text("Anbieter", "Providers"),
+                modelSectionTitle: text("Modell", "Model"),
+                languageSectionTitle: text("Sprache", "Language"),
+                qualitySectionTitle: text("Qualität", "Quality"),
+                translationSectionTitle: text("Übersetzung", "Translation"),
+                installedModelsSectionTitle: text("Installierte Modelle", "Installed models"),
+                overviewContent: erasedView { speechOverviewContent },
+                providerContent: erasedView { speechProviderContent },
+                modelSelectionContent: erasedView { speechModelSelectionContent },
+                languageContent: erasedView { speechLanguageContent },
+                qualityContent: erasedView { speechQualityContent },
+                translationContent: erasedView { translationContent },
+                installedModelsContent: erasedView { installedSpeechModelsContent }
+            )
         case .dictation:
-            dictationForm
+            DictationSettingsPage(
+                liveRewritingSectionTitle: text("Live-Anpassung", "Live rewriting"),
+                textInputSectionTitle: text("Texteingabe", "Text input"),
+                liveRewriteContent: erasedView { liveRewriteContent },
+                deliveryContent: erasedView { dictationDeliveryContent }
+            )
         case .sound:
-            soundForm
+            SoundSettingsPage(
+                inputSectionTitle: text("Eingang", "Input"),
+                feedbackSectionTitle: text("Rückmeldung", "Feedback"),
+                inputContent: erasedView { soundInputContent },
+                feedbackContent: erasedView { soundFeedbackContent }
+            )
         case .shortcuts:
-            shortcutsForm
+            ShortcutsSettingsPage(
+                startStopSectionTitle: text("Start / Stopp", "Start / Stop"),
+                holdSectionTitle: text("Halten zum Diktieren", "Hold to Dictate"),
+                cancelSectionTitle: text("Abbrechen", "Cancel"),
+                modeSwitchSectionTitle: text("Moduswechsel", "Mode switch"),
+                startStopContent: erasedView { startStopShortcutContent },
+                holdContent: erasedView { holdShortcutContent },
+                cancelContent: erasedView { cancelShortcutContent },
+                modeSwitchContent: erasedView { modeSwitchShortcutContent }
+            )
         case .ai:
-            aiForm
+            AISettingsPage(
+                processingSectionTitle: text("Verarbeitung", "Processing"),
+                providersSectionTitle: text("Anbieter", "Providers"),
+                modelsSectionTitle: text("Modelle", "Models"),
+                processingContent: erasedView { aiProcessingContent },
+                providerContent: erasedView { aiProviderContent },
+                modelContent: erasedView { aiModelContent }
+            )
         case .history:
-            historyForm
+            HistorySettingsPage(
+                actionsSectionTitle: text("Aktionen", "Actions"),
+                retentionSectionTitle: text("Aufbewahrung", "Retention"),
+                entriesSectionTitle: text("Transkriptverlauf", "Transcript History"),
+                actionsContent: erasedView { historyActionContent },
+                retentionContent: erasedView { historyRetentionContent },
+                entriesContent: erasedView { historyEntriesContent }
+            )
         case .about:
-            aboutForm
+            AboutSettingsPage(
+                aboutMeSectionTitle: text("Über mich", "About me"),
+                changelogSectionTitle: text("Changelog", "Changelog"),
+                supportSectionTitle: text("Support", "Support"),
+                developerContent: erasedView { aboutDeveloperRows },
+                changelogContent: erasedView { aboutChangelogContent },
+                supportContent: appState.isLicenseUIEnabledForDevelopment
+                    ? erasedView { aboutSupportContent } : nil
+            )
         case .snippets:
-            snippetsForm
+            SnippetsSettingsPage(
+                newSnippetSectionTitle: text("Neues Snippet", "New snippet"),
+                importExportSectionTitle: text("Import und Export", "Import and export"),
+                savedSnippetsSectionTitle: text("Gespeicherte Snippets", "Saved snippets"),
+                newSnippetContent: erasedView { snippetNewEntryRows },
+                importExportContent: erasedView { snippetImportExportRows },
+                savedContent: erasedView { snippetSavedRows }
+            )
         case .advanced:
-            advancedForm
+            AdvancedSettingsPage(
+                appSectionTitle: text("App", "App"),
+                modelRuntimeSectionTitle: text("Modelllaufzeit", "Model runtime"),
+                storageLocationSectionTitle: text("Speicherort", "Storage location"),
+                updatesSectionTitle: text("Updates", "Updates"),
+                diagnosticsSectionTitle: text("Diagnose", "Diagnostics"),
+                licenseSectionTitle: text("Lizenz", "License"),
+                overviewContent: erasedView { advancedOverviewContent },
+                appInfoContent: erasedView { aboutAppInfoRows },
+                runtimeContent: erasedView { voiceModelRuntimeContent },
+                storageContent: erasedView { advancedStorageContent },
+                updatesContent: erasedView { updatesContent },
+                diagnosticsContent: erasedView { diagnosticsContent },
+                licenseContent: appState.isLicenseUIEnabledForDevelopment
+                    ? erasedView { licenseContent } : nil
+            )
         }
     }
 
@@ -367,194 +336,31 @@ struct SettingsView: View {
         appState.selectedSettingsTab
     }
 
-    private var speechForm: some View {
-        Form {
-            Section(text("Kurz erklärt", "Quick explainer")) {
-                speechOverviewContent
-            }
-            Section(text("Anbieter", "Providers")) {
-                speechProviderContent
-            }
-            Section(text("Modell", "Model")) {
-                speechModelSelectionContent
-            }
-            Section(text("Sprache", "Language")) {
-                speechLanguageContent
-            }
-            Section(text("Qualität", "Quality")) {
-                speechQualityContent
-            }
-            Section(text("Übersetzung", "Translation")) {
-                translationContent
-            }
-            Section(text("Installierte Modelle", "Installed models")) {
-                installedSpeechModelsContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
+    private var searchResultsSections: [SettingsPageSection] {
+        var sections: [SettingsPageSection] = []
 
-    private var dictationForm: some View {
-        Form {
-            Section(text("Live-Anpassung", "Live rewriting")) {
-                liveRewriteContent
-            }
-            Section(text("Texteingabe", "Text input")) {
-                dictationDeliveryContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var soundForm: some View {
-        Form {
-            Section(text("Eingang", "Input")) {
-                soundInputContent
-            }
-            Section(text("Rückmeldung", "Feedback")) {
-                soundFeedbackContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var shortcutsForm: some View {
-        Form {
-            Section(text("Start / Stopp", "Start / Stop")) {
-                startStopShortcutContent
-            }
-            Section(text("Halten zum Diktieren", "Hold to Dictate")) {
-                holdShortcutContent
-            }
-            Section(text("Abbrechen", "Cancel")) {
-                cancelShortcutContent
-            }
-            Section(text("Moduswechsel", "Mode switch")) {
-                modeSwitchShortcutContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var aiForm: some View {
-        Form {
-            Section(text("Verarbeitung", "Processing")) {
-                aiProcessingContent
-            }
-            Section(text("Anbieter", "Providers")) {
-                aiProviderContent
-            }
-            Section(text("Modelle", "Models")) {
-                aiModelContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var historyForm: some View {
-        Form {
-            Section(text("Aktionen", "Actions")) {
-                historyActionContent
-            }
-            Section(text("Aufbewahrung", "Retention")) {
-                historyRetentionContent
-            }
-            Section(text("Transkriptverlauf", "Transcript History")) {
-                historyEntriesContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var aboutForm: some View {
-        Form {
-            Section(text("Über mich", "About me")) {
-                aboutDeveloperRows
-            }
-            Section(text("Changelog", "Changelog")) {
-                aboutChangelogContent
-            }
-            if appState.isLicenseUIEnabledForDevelopment {
-                Section(text("Support", "Support")) {
-                    aboutSupportContent
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var snippetsForm: some View {
-        Form {
-            Section(text("Neues Snippet", "New snippet")) {
-                snippetNewEntryRows
-            }
-            Section(text("Import und Export", "Import and export")) {
-                snippetImportExportRows
-            }
-            Section(text("Gespeicherte Snippets", "Saved snippets")) {
-                snippetSavedRows
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var advancedForm: some View {
-        Form {
-            Section {
-                advancedOverviewContent
-            }
-            Section(text("App", "App")) {
-                aboutAppInfoRows
-            }
-            Section(text("Modelllaufzeit", "Model runtime")) {
-                voiceModelRuntimeContent
-            }
-            Section(text("Speicherort", "Storage location")) {
-                advancedStorageContent
-            }
-            Section(text("Updates", "Updates")) {
-                updatesContent
-            }
-            Section(text("Diagnose", "Diagnostics")) {
-                diagnosticsContent
-            }
-            if appState.isLicenseUIEnabledForDevelopment {
-                Section(text("Lizenz", "License")) {
-                    licenseContent
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var searchResultsForm: some View {
-        Form {
-            if generalHasMatches {
-                Section(text("Allgemein", "General")) {
+        if generalHasMatches {
+            sections.append(
+                pageSection(id: "general", title: text("Allgemein", "General")) {
                     generalAppearanceContent
                     generalMenuBarContent
                     generalPermissionsContent
                 }
-            }
+            )
+        }
 
-            if dictationHasMatches {
-                Section(text("Diktat", "Dictation")) {
+        if dictationHasMatches {
+            sections.append(
+                pageSection(id: "dictation", title: text("Diktat", "Dictation")) {
                     liveRewriteContent
                     dictationDeliveryContent
                 }
-            }
+            )
+        }
 
-            if speechHasMatches {
-                Section(text("Speech", "Speech")) {
+        if speechHasMatches {
+            sections.append(
+                pageSection(id: "speech", title: text("Speech", "Speech")) {
                     speechOverviewContent
                     speechProviderContent
                     speechModelSelectionContent
@@ -563,60 +369,74 @@ struct SettingsView: View {
                     translationContent
                     installedSpeechModelsContent
                 }
-            }
+            )
+        }
 
-            if soundHasMatches {
-                Section(text("Sound", "Sound")) {
+        if soundHasMatches {
+            sections.append(
+                pageSection(id: "sound", title: text("Sound", "Sound")) {
                     soundInputContent
                     soundFeedbackContent
                 }
-            }
+            )
+        }
 
-            if shortcutsHasMatches {
-                Section(text("Kurzbefehle", "Shortcuts")) {
+        if shortcutsHasMatches {
+            sections.append(
+                pageSection(id: "shortcuts", title: text("Kurzbefehle", "Shortcuts")) {
                     startStopShortcutContent
                     holdShortcutContent
                     cancelShortcutContent
                     modeSwitchShortcutContent
                 }
-            }
+            )
+        }
 
-            if aiHasMatches {
-                Section(text("AI", "AI")) {
+        if aiHasMatches {
+            sections.append(
+                pageSection(id: "ai", title: text("AI", "AI")) {
                     aiProcessingContent
                     aiProviderContent
                     aiModelContent
                 }
-            }
+            )
+        }
 
-            if historyHasMatches {
-                Section(text("Verlauf", "History")) {
+        if historyHasMatches {
+            sections.append(
+                pageSection(id: "history", title: text("Verlauf", "History")) {
                     historyActionContent
                     historyRetentionContent
                     historyEntriesContent
                 }
-            }
+            )
+        }
 
-            if aboutHasMatches {
-                Section(text("About", "About")) {
+        if aboutHasMatches {
+            sections.append(
+                pageSection(id: "about", title: text("About", "About")) {
                     aboutDeveloperRows
                     aboutChangelogContent
                     if appState.isLicenseUIEnabledForDevelopment {
                         aboutSupportContent
                     }
                 }
-            }
+            )
+        }
 
-            if snippetsHasMatches {
-                Section(text("Snippets", "Snippets")) {
+        if snippetsHasMatches {
+            sections.append(
+                pageSection(id: "snippets", title: text("Snippets", "Snippets")) {
                     snippetNewEntryRows
                     snippetImportExportRows
                     snippetSavedRows
                 }
-            }
+            )
+        }
 
-            if advancedHasMatches {
-                Section(text("Erweitert", "Advanced")) {
+        if advancedHasMatches {
+            sections.append(
+                pageSection(id: "advanced", title: text("Erweitert", "Advanced")) {
                     if aboutAppMetadataMatchesSearch {
                         aboutAppInfoRows
                     }
@@ -628,24 +448,40 @@ struct SettingsView: View {
                         licenseContent
                     }
                 }
-            }
+            )
+        }
 
-            if !generalHasMatches && !speechHasMatches && !dictationHasMatches && !soundHasMatches
-                && !shortcutsHasMatches && !aiHasMatches && !historyHasMatches && !aboutHasMatches
-                && !snippetsHasMatches && !advancedHasMatches
-            {
-                Section {
+        if sections.isEmpty {
+            sections.append(
+                pageSection(id: "empty") {
                     Text(
                         text(
-                            "Keine passenden Einstellungen gefunden.", "No matching settings found."
+                            "Keine passenden Einstellungen gefunden.",
+                            "No matching settings found."
                         )
                     )
                     .foregroundStyle(.secondary)
                 }
-            }
+            )
         }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
+
+        return sections
+    }
+
+    private var searchResultsForm: some View {
+        SearchResultsSettingsPage(sections: searchResultsSections)
+    }
+
+    private func pageSection<Content: View>(
+        id: String,
+        title: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> SettingsPageSection {
+        SettingsPageSection(id: id, title: title, content: erasedView(content))
+    }
+
+    private func erasedView<Content: View>(@ViewBuilder _ content: () -> Content) -> AnyView {
+        AnyView(content())
     }
 
     @ViewBuilder

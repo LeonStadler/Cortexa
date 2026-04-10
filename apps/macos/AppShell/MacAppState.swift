@@ -10,7 +10,6 @@ import LicenseCore
 import ServiceManagement
 import SnippetCore
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct TranscriptHistoryEntry: Identifiable, Codable, Equatable {
     let id: UUID
@@ -1117,21 +1116,14 @@ final class MacAppState: ObservableObject {
     private var appLifecycleCoordinator: AppLifecycleCoordinator!
     private var sessionEntryController: SessionEntryController!
     private var transcriptHistoryController: TranscriptHistoryController!
+    private var diagnosticsController: DiagnosticsController!
+    private var snippetController: SnippetController!
+    private var aiProviderController: AIProviderController!
+    private var speechModelController: SpeechModelController!
     private weak var updaterController: SparkleUpdaterController?
-    private var didActivateApplicationObserver: NSObjectProtocol?
-    private var didBecomeActiveObserver: NSObjectProtocol?
-    private var didFinishLaunchingObserver: NSObjectProtocol?
-    private var didWakeObserver: NSObjectProtocol?
-    private var permissionPollTask: Task<Void, Never>?
-    private var accessibilityStatusDebounceTask: Task<Void, Never>?
     private var dockPolicySettingsReopenWorkItem: DispatchWorkItem?
-    private var hasAppliedAccessibilityStatusOnce = false
-    private var diagnosticLines: [String] = []
     private var checkForUpdatesHandler: (() -> Void)?
-    private var lastExternalApplication: NSRunningApplication?
     private var openSettingsHandler: (() -> Void)?
-    private var holdSessionActive = false
-    private var debugLines: [String] = []
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -1217,6 +1209,41 @@ final class MacAppState: ObservableObject {
             preferences.selectedRemoteProviderID.flatMap {
                 aiRemoteProviderSecretStore.loadAPIKey(providerID: $0)
             } ?? ""
+
+        self.diagnosticsController = DiagnosticsController(
+            auditLogger: self.auditLogger,
+            debugLogger: self.debugLogger,
+            currentRecordingStatus: { [weak self] in
+                self?.recordingStatus ?? "Idle"
+            },
+            currentPermissionSummary: { [weak self] in
+                self?.permissionSummary ?? ""
+            },
+            currentCapabilitySummary: { [weak self] in
+                self?.capabilitySummary ?? ""
+            },
+            currentUpdaterStatusText: { [weak self] in
+                self?.updaterStatusText ?? ""
+            },
+            currentLicenseStatusText: { [weak self] in
+                self?.licenseStatusText ?? ""
+            },
+            currentDebugModeEnabled: { [weak self] in
+                self?.debugModeEnabled ?? false
+            },
+            currentDiagnosticsText: { [weak self] in
+                self?.diagnosticsText ?? ""
+            },
+            currentDebugLogText: { [weak self] in
+                self?.debugLogText ?? ""
+            },
+            setDiagnosticsText: { [weak self] value in
+                self?.diagnosticsText = value
+            },
+            setDebugLogText: { [weak self] value in
+                self?.debugLogText = value
+            }
+        )
 
         self.permissionCoordinator = PermissionCoordinator(
             permissionController: permissionController,
@@ -1334,6 +1361,133 @@ final class MacAppState: ObservableObject {
             }
         )
 
+        self.snippetController = SnippetController(
+            snippetStore: self.snippetStore,
+            currentSnippetRules: { [weak self] in
+                self?.snippetRules ?? []
+            },
+            setSnippetRules: { [weak self] rules in
+                self?.snippetRules = rules
+            },
+            currentSelectedLanguageLocaleIdentifier: { [weak self] in
+                self?.selectedLanguage.locale.identifier ?? DictationLanguage.german.locale.identifier
+            },
+            appendDiagnostic: { [weak self] line in
+                self?.appendDiagnostic(line)
+            },
+            appendAudit: { [weak self] line in
+                self?.appendAudit(line)
+            }
+        )
+
+        self.aiProviderController = AIProviderController(
+            aiRemoteProviderSecretStore: aiRemoteProviderSecretStore,
+            dictationRuntime: dictationRuntime,
+            currentRemoteProviders: { [weak self] in
+                self?.remoteProviders ?? []
+            },
+            setRemoteProviders: { [weak self] providers in
+                self?.remoteProviders = providers
+            },
+            currentSelectedRemoteProviderID: { [weak self] in
+                self?.selectedRemoteProviderID
+            },
+            setSelectedRemoteProviderID: { [weak self] providerID in
+                self?.selectedRemoteProviderID = providerID
+            },
+            currentRemoteProviderAPIKeyDraft: { [weak self] in
+                self?.remoteProviderAPIKeyDraft ?? ""
+            },
+            setRemoteProviderAPIKeyDraft: { [weak self] apiKey in
+                self?.remoteProviderAPIKeyDraft = apiKey
+            },
+            currentSelectedAIModelID: { [weak self] in
+                self?.selectedAIModelID
+            },
+            setSelectedAIModelID: { [weak self] modelID in
+                self?.selectedAIModelID = modelID
+            },
+            currentAIProcessingEnabled: { [weak self] in
+                self?.aiProcessingEnabled ?? false
+            },
+            setAIProcessingEnabled: { [weak self] isEnabled in
+                self?.aiProcessingEnabled = isEnabled
+            },
+            setAIModels: { [weak self] models in
+                self?.aiModels = models
+            },
+            persistRemoteProviders: { [weak self] in
+                self?.persistRemoteProviders()
+            },
+            appendDiagnostic: { [weak self] line in
+                self?.appendDiagnostic(line)
+            },
+            appendAudit: { [weak self] line in
+                self?.appendAudit(line)
+            }
+        )
+
+        self.speechModelController = SpeechModelController(
+            voiceModelInstaller: self.voiceModelInstaller,
+            currentSelectedLanguage: { [weak self] in
+                self?.selectedLanguage ?? .german
+            },
+            setSelectedLanguage: { [weak self] language in
+                self?.selectedLanguage = language
+            },
+            currentTranslationOutputMode: { [weak self] in
+                self?.translationOutputMode ?? .original
+            },
+            setTranslationOutputMode: { [weak self] mode in
+                self?.translationOutputMode = mode
+            },
+            currentSelectedVoiceProviderID: { [weak self] in
+                self?.selectedVoiceProviderID ?? LocalVoiceModelCatalog.defaultProviderID
+            },
+            setSelectedVoiceProviderID: { [weak self] providerID in
+                self?.selectedVoiceProviderID = providerID
+            },
+            currentSelectedVoiceModelID: { [weak self] in
+                self?.selectedVoiceModelID ?? LocalVoiceModelCatalog.defaultModelID
+            },
+            setSelectedVoiceModelID: { [weak self] modelID in
+                self?.selectedVoiceModelID = modelID
+            },
+            currentVoiceLanguageOverrides: { [weak self] in
+                self?.voiceLanguageOverrides ?? []
+            },
+            setVoiceLanguageOverrides: { [weak self] overrides in
+                self?.voiceLanguageOverrides = overrides
+            },
+            currentVoiceProviders: { [weak self] in
+                self?.voiceProviders ?? []
+            },
+            setVoiceProviders: { [weak self] providers in
+                self?.voiceProviders = providers
+            },
+            currentVoiceModels: { [weak self] in
+                self?.voiceModels ?? []
+            },
+            setVoiceModels: { [weak self] models in
+                self?.voiceModels = models
+            },
+            currentInstalledVoiceModelFileNames: { [weak self] in
+                self?.installedVoiceModelFileNames ?? []
+            },
+            setInstalledVoiceModelFileNames: { [weak self] fileNames in
+                self?.installedVoiceModelFileNames = fileNames
+            },
+            currentVoiceModelOperationInFlightIDs: { [weak self] in
+                self?.voiceModelOperationInFlightIDs ?? []
+            },
+            setVoiceModelOperationInFlightIDs: { [weak self] ids in
+                self?.voiceModelOperationInFlightIDs = ids
+            },
+            appendDiagnostic: { [weak self] line in
+                self?.appendDiagnostic(line)
+            }
+        )
+
         refreshVoiceModelCatalog()
         sanitizeAIProcessingSelections()
         sanitizeSpeechModelSelections()
@@ -1405,20 +1559,6 @@ final class MacAppState: ObservableObject {
 
     deinit {
         dockPolicySettingsReopenWorkItem?.cancel()
-        permissionPollTask?.cancel()
-        accessibilityStatusDebounceTask?.cancel()
-        if let didActivateApplicationObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(didActivateApplicationObserver)
-        }
-        if let didBecomeActiveObserver {
-            NotificationCenter.default.removeObserver(didBecomeActiveObserver)
-        }
-        if let didFinishLaunchingObserver {
-            NotificationCenter.default.removeObserver(didFinishLaunchingObserver)
-        }
-        if let didWakeObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(didWakeObserver)
-        }
     }
 
     func bindUpdater(_ updaterController: SparkleUpdaterController) {
@@ -1487,130 +1627,27 @@ final class MacAppState: ObservableObject {
     }
 
     func addRemoteProvider(preset: AIRemoteProviderPreset) {
-        if let existing = remoteProviders.first(where: { $0.preset == preset }) {
-            selectedRemoteProviderID = existing.id
-            appendDiagnostic(
-                "Anbieter \(existing.displayName) ist bereits in der Liste — Auswahl übernommen.")
-            return
-        }
-
-        var provider = AIRemoteProviderConfiguration.template(
-            for: preset,
-            appTitle: "WisprLocal",
-            appReferer: Bundle.main.bundleURL.absoluteString
-        )
-        if preset == .customOpenAICompatible {
-            provider.displayName = "Custom API"
-        }
-        remoteProviders.append(provider)
-        selectedRemoteProviderID = provider.id
-        if provider.requiresAPIKey {
-            appendDiagnostic(
-                "\(provider.displayName) wurde als API-Anbieter hinzugefügt und startet deaktiviert. Hinterlege jetzt den API-Key, speichere die Konfiguration und aktiviere den Anbieter danach bewusst."
-            )
-        } else {
-            appendDiagnostic(
-                "\(provider.displayName) wurde als API-Anbieter hinzugefügt und startet deaktiviert. Speichere die Konfiguration und aktiviere den Anbieter danach bewusst."
-            )
-        }
+        aiProviderController.addRemoteProvider(preset: preset)
     }
 
     func removeSelectedRemoteProvider() {
-        guard let selectedRemoteProviderID else { return }
-        remoteProviders.removeAll { $0.id == selectedRemoteProviderID }
-        aiRemoteProviderSecretStore.removeAPIKey(providerID: selectedRemoteProviderID)
-        self.selectedRemoteProviderID = remoteProviders.first?.id
-        rebuildAIProcessingStack(reason: "remote-provider-removed")
+        aiProviderController.removeSelectedRemoteProvider()
     }
 
     func updateSelectedRemoteProvider(_ update: (inout AIRemoteProviderConfiguration) -> Void) {
-        guard let selectedRemoteProviderID else { return }
-        updateRemoteProvider(id: selectedRemoteProviderID, update)
-    }
-
-    private func updateRemoteProvider(
-        id providerID: String,
-        _ update: (inout AIRemoteProviderConfiguration) -> Void
-    ) {
-        guard let index = remoteProviders.firstIndex(where: { $0.id == providerID }) else {
-            return
-        }
-
-        var provider = remoteProviders[index]
-        update(&provider)
-        remoteProviders[index] = provider
+        aiProviderController.updateSelectedRemoteProvider(update)
     }
 
     func saveSelectedRemoteProviderAPIKey() {
-        guard let selectedRemoteProviderID else { return }
-        let trimmed = remoteProviderAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if trimmed.isEmpty {
-            aiRemoteProviderSecretStore.removeAPIKey(providerID: selectedRemoteProviderID)
-            appendDiagnostic("API-Key für den gewählten Anbieter entfernt.")
-        } else {
-            do {
-                try aiRemoteProviderSecretStore.saveAPIKey(
-                    trimmed, providerID: selectedRemoteProviderID)
-                appendDiagnostic("API-Key für den gewählten Anbieter im Keychain gespeichert.")
-            } catch {
-                appendDiagnostic(
-                    "API-Key konnte nicht gespeichert werden: \(error.localizedDescription)")
-            }
-        }
-
-        rebuildAIProcessingStack(reason: "remote-provider-api-key")
+        aiProviderController.saveSelectedRemoteProviderAPIKey()
     }
 
     func saveSelectedRemoteProvider() {
-        guard let selectedRemoteProvider else { return }
-
-        saveSelectedRemoteProviderAPIKey()
-
-        let trimmedAPIKey = remoteProviderAPIKeyDraft.trimmingCharacters(
-            in: .whitespacesAndNewlines)
-        if selectedRemoteProvider.requiresAPIKey && trimmedAPIKey.isEmpty {
-            appendDiagnostic(
-                "Anbieter gespeichert. Hinterlege einen API-Key, um den Modellkatalog zu laden.")
-            return
-        }
-
-        refreshSelectedRemoteProviderModels()
+        aiProviderController.saveSelectedRemoteProvider()
     }
 
     func refreshSelectedRemoteProviderModels() {
-        guard let selectedRemoteProvider else { return }
-        let providerID = selectedRemoteProvider.id
-        let providerName = selectedRemoteProvider.displayName
-        let apiKey =
-            aiRemoteProviderSecretStore.loadAPIKey(providerID: selectedRemoteProvider.id) ?? ""
-        if selectedRemoteProvider.requiresAPIKey,
-            apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            appendDiagnostic("Für den gewählten API-Anbieter fehlt ein API-Key.")
-            return
-        }
-
-        appendDiagnostic("Lade Modellkatalog für \(providerName)...")
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                let models = try await OpenAICompatibleRemoteTextProcessor.discoverModels(
-                    configuration: selectedRemoteProvider,
-                    apiKey: apiKey
-                )
-                self.updateRemoteProvider(id: providerID) { provider in
-                    provider.discoveredModels = models
-                }
-                self.rebuildAIProcessingStack(reason: "remote-models-refreshed")
-                self.appendDiagnostic(
-                    "Modellkatalog für \(providerName) aktualisiert: \(models.count) Modelle.")
-            } catch {
-                self.appendDiagnostic(
-                    "Modellkatalog für \(providerName) konnte nicht geladen werden: \(error.localizedDescription)"
-                )
-            }
-        }
+        aiProviderController.refreshSelectedRemoteProviderModels()
     }
 
     func handleHoldShortcutPressed() {
@@ -1629,145 +1666,46 @@ final class MacAppState: ObservableObject {
         sessionEntryController.toggleTranscriptionFromMenuBar()
     }
 
-    private func startTranscriptionForShortcut() {
-        sessionEntryController.startTranscriptionForShortcut()
-    }
-
     func refreshVoiceModelCatalog() {
-        let providers = LocalVoiceModelCatalog.availableProviders()
-        voiceProviders = providers
-        voiceModels = LocalVoiceModelCatalog.availableModels(
-            includeParakeet: providers.contains(where: {
-                $0.id == VoiceProviderID.nvidiaParakeet.rawValue
-            }))
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                let installedFiles = try await self.voiceModelInstaller
-                    .installedWhisperModelFileNames()
-                self.installedVoiceModelFileNames = installedFiles
-            } catch {
-                self.installedVoiceModelFileNames = []
-                self.appendDiagnostic(
-                    "Speech-Model-Katalog konnte nicht vollständig geladen werden: \(error.localizedDescription)"
-                )
-            }
-
-            self.sanitizeSpeechModelSelections()
-        }
+        speechModelController.refreshVoiceModelCatalog()
     }
 
     func installVoiceModel(_ descriptor: VoiceModelDescriptor) {
-        guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
-            appendDiagnostic("Dieser Speech-Anbieter ist lokal aktuell nicht installierbar.")
-            return
-        }
-
-        voiceModelOperationInFlightIDs.insert(descriptor.id)
-        appendDiagnostic("Installiere Speech-Modell \(descriptor.displayName)...")
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.voiceModelOperationInFlightIDs.remove(descriptor.id) }
-
-            do {
-                let runtime = try await self.voiceModelInstaller.install(descriptor)
-                self.installedVoiceModelFileNames = Set(runtime.availableModelFileNames)
-                self.sanitizeSpeechModelSelections()
-                self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde installiert.")
-            } catch {
-                self.appendDiagnostic(
-                    "Speech-Modell \(descriptor.displayName) konnte nicht installiert werden: \(error.localizedDescription)"
-                )
-            }
-        }
+        speechModelController.installVoiceModel(descriptor)
     }
 
     func removeVoiceModel(_ descriptor: VoiceModelDescriptor) {
-        guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
-            appendDiagnostic("Dieser Speech-Anbieter ist lokal aktuell nicht entfernbar.")
-            return
-        }
-
-        voiceModelOperationInFlightIDs.insert(descriptor.id)
-        appendDiagnostic("Entferne Speech-Modell \(descriptor.displayName)...")
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.voiceModelOperationInFlightIDs.remove(descriptor.id) }
-
-            do {
-                let runtime = try await self.voiceModelInstaller.remove(descriptor)
-                self.installedVoiceModelFileNames = Set(runtime.availableModelFileNames)
-                self.voiceLanguageOverrides.removeAll { $0.modelID == descriptor.id }
-                self.sanitizeSpeechModelSelections()
-                self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde entfernt.")
-            } catch {
-                self.appendDiagnostic(
-                    "Speech-Modell \(descriptor.displayName) konnte nicht entfernt werden: \(error.localizedDescription)"
-                )
-            }
-        }
+        speechModelController.removeVoiceModel(descriptor)
     }
 
     func setSelectedVoiceModel(_ descriptor: VoiceModelDescriptor) {
-        selectedVoiceProviderID = descriptor.providerID
-        selectedVoiceModelID = descriptor.id
+        speechModelController.setSelectedVoiceModel(descriptor)
     }
 
     func assignSelectedVoiceModelToCurrentLanguage() {
-        guard selectedLanguage != .auto, let descriptor = selectedVoiceModel else { return }
-        voiceLanguageOverrides.removeAll { $0.languageCode == selectedLanguage.rawValue }
-        voiceLanguageOverrides.append(
-            VoiceLanguageOverride(languageCode: selectedLanguage.rawValue, modelID: descriptor.id)
-        )
-        sanitizeSpeechModelSelections()
-        appendDiagnostic(
-            "Für \(selectedLanguage.displayName) wird jetzt standardmäßig \(descriptor.displayName) verwendet."
-        )
+        speechModelController.assignSelectedVoiceModelToCurrentLanguage()
     }
 
     func clearSelectedLanguageVoiceOverride() {
-        guard selectedLanguage != .auto else { return }
-        voiceLanguageOverrides.removeAll { $0.languageCode == selectedLanguage.rawValue }
-        sanitizeSpeechModelSelections()
-        appendDiagnostic(
-            "Sprachspezifisches Speech-Modell für \(selectedLanguage.displayName) entfernt.")
+        speechModelController.clearSelectedLanguageVoiceOverride()
     }
 
     func isVoiceModelInstalled(_ descriptor: VoiceModelDescriptor) -> Bool {
-        guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
-            return descriptor.installState == .bundled
-        }
-        guard let localFileName = descriptor.localFileName else { return false }
-        return installedVoiceModelFileNames.contains(localFileName)
+        speechModelController.isVoiceModelInstalled(descriptor)
     }
 
     func isVoiceModelBusy(_ descriptor: VoiceModelDescriptor) -> Bool {
-        voiceModelOperationInFlightIDs.contains(descriptor.id)
+        speechModelController.isVoiceModelBusy(descriptor)
     }
 
     func canUseVoiceModel(_ descriptor: VoiceModelDescriptor, for language: DictationLanguage)
         -> Bool
     {
-        if descriptor.providerID != VoiceProviderID.whisperCpp.rawValue {
-            return false
-        }
-        if !isVoiceModelInstalled(descriptor) {
-            return false
-        }
-        guard let languageCode = descriptor.languageCode else { return true }
-        return language == .auto || language.rawValue == languageCode
+        speechModelController.canUseVoiceModel(descriptor, for: language)
     }
 
     func voiceLanguageOptions(for descriptor: VoiceModelDescriptor?) -> [DictationLanguage] {
-        guard let descriptor, let languageCode = descriptor.languageCode else {
-            return DictationLanguage.allCases
-        }
-
-        let fixedLanguage = DictationLanguage(rawValue: languageCode) ?? .english
-        return [.auto, fixedLanguage]
+        speechModelController.voiceLanguageOptions(for: descriptor)
     }
 
     private func sanitizeAIProcessingSelections() {
@@ -1792,57 +1730,7 @@ final class MacAppState: ObservableObject {
     }
 
     private func sanitizeSpeechModelSelections() {
-        if voiceProviders.isEmpty {
-            voiceProviders = LocalVoiceModelCatalog.availableProviders()
-        }
-        if voiceModels.isEmpty {
-            voiceModels = LocalVoiceModelCatalog.availableModels(includeParakeet: false)
-        }
-
-        if !voiceProviders.contains(where: { $0.id == selectedVoiceProviderID }) {
-            selectedVoiceProviderID = LocalVoiceModelCatalog.defaultProviderID
-        }
-
-        if let selectedVoiceModel,
-            selectedVoiceModel.providerID != selectedVoiceProviderID
-        {
-            selectedVoiceModelID =
-                voiceModels.first(where: { $0.providerID == selectedVoiceProviderID })?.id
-                ?? LocalVoiceModelCatalog.defaultModelID
-        }
-
-        if selectedVoiceModel == nil {
-            selectedVoiceModelID =
-                voiceModels.first(where: { $0.id == LocalVoiceModelCatalog.defaultModelID })?.id
-                ?? voiceModels.first(where: { $0.providerID == selectedVoiceProviderID })?.id
-                ?? LocalVoiceModelCatalog.defaultModelID
-        }
-
-        if let selectedVoiceModel {
-            let availableLanguages = Set(
-                voiceLanguageOptions(for: selectedVoiceModel).map(\.rawValue))
-            if !availableLanguages.contains(selectedLanguage.rawValue) {
-                selectedLanguage = .auto
-            }
-            if let languageCode = selectedVoiceModel.languageCode,
-                selectedLanguage == .auto
-            {
-                selectedLanguage = DictationLanguage(rawValue: languageCode) ?? .english
-            }
-        }
-
-        voiceLanguageOverrides.removeAll { overrideEntry in
-            guard let descriptor = voiceModels.first(where: { $0.id == overrideEntry.modelID })
-            else {
-                return true
-            }
-            let language = DictationLanguage(rawValue: overrideEntry.languageCode) ?? .auto
-            return !canUseVoiceModel(descriptor, for: language)
-        }
-
-        if !speechTranslationAvailable, translationOutputMode != .original {
-            translationOutputMode = .original
-        }
+        speechModelController.sanitizeSpeechModelSelections()
     }
 
     private func sanitizeVisibleMenuBarLanguages() {
@@ -1857,106 +1745,6 @@ final class MacAppState: ObservableObject {
         }
     }
 
-    private func shouldRestorePreviousApplicationBeforeStarting() -> Bool {
-        let ownBundleIdentifier = Bundle.main.bundleIdentifier
-        let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        return frontmostBundleIdentifier == ownBundleIdentifier
-    }
-
-    private func restorePreviousApplicationAndStart(
-        options: DictationStartOptions,
-        source: String,
-        preferredApplication: NSRunningApplication? = nil
-    ) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            let targetApplication = preferredApplication ?? self.lastExternalApplication
-            // #region agent log
-            AgentSessionDebugLog.append(
-                hypothesisId: "H1",
-                location: "MacAppState.restorePreviousApplicationAndStart",
-                message: "restore_begin",
-                data: [
-                    "source": source,
-                    "preferredBundle": preferredApplication?.bundleIdentifier ?? "nil",
-                    "lastExternalBundle": lastExternalApplication?.bundleIdentifier ?? "nil",
-                    "targetChosenBundle": targetApplication?.bundleIdentifier ?? "nil",
-                ]
-            )
-            // #endregion
-            if let targetApplication, let bundleIdentifier = targetApplication.bundleIdentifier {
-                self.appendDiagnostic(
-                    "Aktiviere die letzte App erneut, damit das Ziel-Textfeld fokussiert bleibt.")
-                targetApplication.activate(options: [.activateAllWindows])
-                let waitOk = await self.waitForFrontmostApplication(
-                    bundleIdentifier: bundleIdentifier)
-                // #region agent log
-                AgentSessionDebugLog.append(
-                    hypothesisId: "H2",
-                    location: "MacAppState.restorePreviousApplicationAndStart",
-                    message: "after_activate_target_app",
-                    data: [
-                        "expectedBundle": bundleIdentifier,
-                        "waitOk": "\(waitOk)",
-                        "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                            ?? "nil",
-                    ]
-                )
-                // #endregion
-            } else {
-                _ = await self.waitForMenuBarToClose()
-                // #region agent log
-                AgentSessionDebugLog.append(
-                    hypothesisId: "H1",
-                    location: "MacAppState.restorePreviousApplicationAndStart",
-                    message: "no_target_app_short_delay_only",
-                    data: [
-                        "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                            ?? "nil"
-                    ]
-                )
-                // #endregion
-            }
-
-            // #region agent log
-            AgentSessionDebugLog.append(
-                hypothesisId: "H4",
-                location: "MacAppState.restorePreviousApplicationAndStart",
-                message: "about_to_start_dictation",
-                data: [
-                    "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                        ?? "nil"
-                ]
-            )
-            // #endregion
-
-            self.appendAudit("session.restore_start source=\(source)")
-            self.dictationRuntime.start(options: options)
-        }
-    }
-
-    private func waitForMenuBarToClose() async -> Bool {
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        return true
-    }
-
-    private func waitForFrontmostApplication(
-        bundleIdentifier: String, timeoutNanoseconds: UInt64 = 1_500_000_000
-    ) async -> Bool {
-        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
-
-        while DispatchTime.now().uptimeNanoseconds < deadline {
-            if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleIdentifier {
-                return true
-            }
-
-            try? await Task.sleep(nanoseconds: 50_000_000)
-        }
-
-        return false
-    }
-
     func openMicrophoneSettings() {
         permissionCoordinator.openMicrophoneSettings()
     }
@@ -1966,74 +1754,19 @@ final class MacAppState: ObservableObject {
     }
 
     func addSnippet(trigger: String, replacement: String) {
-        let trimmedTrigger = trigger.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedReplacement = replacement.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmedTrigger.isEmpty, !trimmedReplacement.isEmpty else {
-            appendDiagnostic(
-                "Snippet wurde nicht gespeichert: Trigger/Replacement darf nicht leer sein.")
-            return
-        }
-
-        if snippetRules.contains(where: { rule in
-            rule.caseSensitive
-                ? rule.trigger == trimmedTrigger
-                : rule.trigger.lowercased() == trimmedTrigger.lowercased()
-        }) {
-            appendDiagnostic("Snippet wurde nicht gespeichert: Trigger existiert bereits.")
-            return
-        }
-
-        let rule = SnippetRule(
-            trigger: trimmedTrigger,
-            replacement: trimmedReplacement,
-            caseSensitive: false,
-            localeIdentifier: selectedLanguage.locale.identifier
-        )
-        snippetRules.append(rule)
-        persistSnippets()
+        snippetController.addSnippet(trigger: trigger, replacement: replacement)
     }
 
     func removeSnippet(ruleID: UUID) {
-        snippetRules.removeAll { $0.id == ruleID }
-        persistSnippets()
+        snippetController.removeSnippet(ruleID: ruleID)
     }
 
     func importSnippetsFromJSON() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.json]
-        Self.configureImportSnippetsPanel(panel)
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            snippetRules = try snippetStore.importRules(from: url)
-            appendDiagnostic("Snippets importiert: \(snippetRules.count)")
-            appendAudit("snippets.import path=\(url.path)")
-        } catch {
-            appendDiagnostic("Snippet-Import fehlgeschlagen: \(error.localizedDescription)")
-        }
+        snippetController.importSnippetsFromJSON()
     }
 
     func exportSnippetsToJSON() {
-        let panel = NSSavePanel()
-        panel.canCreateDirectories = true
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "wispr-snippets.json"
-        Self.configureSavePanel(panel, titleKey: "filepanel.export.snippets.title")
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            try snippetStore.exportRules(snippetRules, to: url)
-            appendDiagnostic("Snippets exportiert: \(snippetRules.count)")
-            appendAudit("snippets.export path=\(url.path)")
-        } catch {
-            appendDiagnostic("Snippet-Export fehlgeschlagen: \(error.localizedDescription)")
-        }
+        snippetController.exportSnippetsToJSON()
     }
 
     func copyHistoryEntry(_ entry: TranscriptHistoryEntry) {
@@ -2057,84 +1790,20 @@ final class MacAppState: ObservableObject {
     }
 
     func exportDiagnosticsReport() {
-        let panel = NSSavePanel()
-        panel.canCreateDirectories = true
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "wispr-diagnostics.txt"
-        Self.configureSavePanel(panel, titleKey: "filepanel.export.diagnostics.title")
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        let report = [
-            "WisprLocal Diagnostics",
-            "Status: \(recordingStatus)",
-            "Permissions: \(permissionSummary)",
-            "Capability: \(capabilitySummary)",
-            "Updater: \(updaterStatusText)",
-            "License: \(licenseStatusText)",
-            "Technical logging: \(debugModeEnabled ? "enabled" : "disabled")",
-            "",
-            diagnosticsText,
-            "",
-            "Technical Diagnostic Log",
-            debugLogText.isEmpty ? "No technical diagnostic events captured." : debugLogText,
-        ].joined(separator: "\n")
-
-        do {
-            try report.write(to: url, atomically: true, encoding: .utf8)
-            appendDiagnostic("Diagnose exportiert")
-            appendAudit("diagnostics.export path=\(url.path)")
-        } catch {
-            appendDiagnostic("Diagnose-Export fehlgeschlagen: \(error.localizedDescription)")
-        }
+        diagnosticsController.exportDiagnosticsReport()
     }
 
     func exportAuditLog() {
-        let panel = NSSavePanel()
-        panel.canCreateDirectories = true
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "wispr-audit.log"
-        Self.configureSavePanel(panel, titleKey: "filepanel.export.audit.title")
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            try auditLogger.export(to: url)
-            appendDiagnostic("Audit-Log exportiert")
-            appendAudit("audit.export path=\(url.path)")
-        } catch {
-            appendDiagnostic("Audit-Export fehlgeschlagen: \(error.localizedDescription)")
-        }
+        diagnosticsController.exportAuditLog()
     }
 
     /// Ein Block für die Zwischenablage: Diagnose + technisches Protokoll (z. B. Smoke-Test / Support).
     func diagnosticsAndDebugCombinedForClipboard() -> String {
-        [
-            "=== Diagnostics ===",
-            diagnosticsText,
-            "",
-            "=== Technical log ===",
-            debugLogText.isEmpty ? "(empty)" : debugLogText,
-        ].joined(separator: "\n")
+        diagnosticsController.diagnosticsAndDebugCombinedForClipboard()
     }
 
     func exportDebugLog() {
-        let panel = NSSavePanel()
-        panel.canCreateDirectories = true
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "wispr-diagnostic-log.txt"
-        Self.configureSavePanel(panel, titleKey: "filepanel.export.debug_log.title")
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            try debugLogger.export(to: url)
-            appendDiagnostic("Diagnoseprotokoll exportiert")
-            appendAudit("diagnostic-log.export path=\(url.path)")
-        } catch {
-            appendDiagnostic(
-                "Diagnoseprotokoll-Export fehlgeschlagen: \(error.localizedDescription)")
-        }
+        diagnosticsController.exportDebugLog()
     }
 
     func checkForUpdates() {
@@ -2165,10 +1834,6 @@ final class MacAppState: ObservableObject {
         applyLicenseSnapshot(snapshot, clearInput: true)
     }
 
-    private func handleFinalTranscript(_ event: FinalTranscriptEvent) {
-        transcriptHistoryController.handleFinalTranscript(event)
-    }
-
     private func applyLicenseSnapshot(_ snapshot: LicenseStatusSnapshot, clearInput: Bool) {
         if clearInput {
             licenseInput = ""
@@ -2194,26 +1859,11 @@ final class MacAppState: ObservableObject {
     }
 
     private func loadSnippets() {
-        do {
-            snippetRules = try snippetStore.load()
-            if snippetRules.isEmpty {
-                appendDiagnostic("Keine Snippets gespeichert.")
-            } else {
-                appendDiagnostic("Snippets geladen: \(snippetRules.count)")
-            }
-        } catch {
-            appendDiagnostic("Snippet-Load fehlgeschlagen: \(error.localizedDescription)")
-        }
+        snippetController.loadSnippets()
     }
 
     private func persistSnippets() {
-        do {
-            try snippetStore.save(snippetRules)
-            appendDiagnostic("Snippets gespeichert: \(snippetRules.count)")
-            appendAudit("snippets.save count=\(snippetRules.count)")
-        } catch {
-            appendDiagnostic("Snippet-Save fehlgeschlagen: \(error.localizedDescription)")
-        }
+        snippetController.persistSnippets()
     }
 
     private func loadHistory() {
@@ -2259,35 +1909,15 @@ final class MacAppState: ObservableObject {
     }
 
     private func appendDiagnostic(_ line: String) {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        diagnosticLines.append("[\(timestamp)] \(line)")
-        if diagnosticLines.count > 200 {
-            diagnosticLines = Array(diagnosticLines.suffix(200))
-        }
-        diagnosticsText = diagnosticLines.joined(separator: "\n")
-        appendAudit("diag \(line)")
+        diagnosticsController.appendDiagnostic(line)
     }
 
     private func appendDebug(_ line: String) {
-        guard debugModeEnabled else { return }
-
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let entry = "[\(timestamp)] \(line)"
-        debugLines.append(entry)
-        if debugLines.count > 400 {
-            debugLines = Array(debugLines.suffix(400))
-        }
-        debugLogText = debugLines.joined(separator: "\n")
-        debugLogger.append(line)
-        appendAudit("debug \(line)")
+        diagnosticsController.appendDebug(line)
     }
 
     private func appendAudit(_ line: String) {
-        auditLogger.append(line)
-    }
-
-    private func configureLifecycleObservers() {
-        appLifecycleCoordinator.start()
+        diagnosticsController.appendAudit(line)
     }
 
     private func currentStartOptions() -> DictationStartOptions {
@@ -2337,57 +1967,7 @@ final class MacAppState: ObservableObject {
     }
 
     private func rebuildAIProcessingStack(reason: String) {
-        aiProcessingService = AIProcessingService(providers: makeAIProviders())
-        dictationRuntime.setAIProcessingService(aiProcessingService)
-        let catalog = aiProcessingService.catalog()
-        aiModels = catalog.allModels
-        let fallbackModelID =
-            catalog.availableModels.first?.id
-            ?? catalog.allModels.first?.id
-
-        if catalog.model(id: selectedAIModelID) == nil,
-            selectedAIModelID != fallbackModelID
-        {
-            let previousSelection = selectedAIModelID
-            selectedAIModelID = fallbackModelID
-            if previousSelection != nil, fallbackModelID != nil {
-                appendDiagnostic(
-                    "Das zuvor gewählte AI-Modell ist nicht mehr verfügbar. Ein anderes verfügbares Modell wurde ausgewählt."
-                )
-            }
-        }
-
-        if aiProcessingEnabled,
-            let selectedAIModel,
-            !selectedAIModel.availability.isAvailable
-        {
-            aiProcessingEnabled = false
-            appendDiagnostic(
-                "AI-Verarbeitung wurde deaktiviert, weil das ausgewählte Modell aktuell nicht verfügbar ist."
-            )
-        }
-
-        appendAudit(
-            "ai.catalog.refresh reason=\(reason) models=\(aiModels.count) available=\(catalog.availableModels.count)"
-        )
-    }
-
-    private func makeAIProviders() -> [any AITextProcessingProviding] {
-        var providers: [any AITextProcessingProviding] = [AppleFoundationTextProcessor()]
-
-        for provider in remoteProviders where provider.isEnabled {
-            let apiKey = aiRemoteProviderSecretStore.loadAPIKey(providerID: provider.id) ?? ""
-            if provider.requiresAPIKey,
-                apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                continue
-            }
-
-            providers.append(
-                OpenAICompatibleRemoteTextProcessor(configuration: provider, apiKey: apiKey))
-        }
-
-        return providers
+        aiProviderController.rebuildAIProcessingStack(reason: reason)
     }
 
     private func registerSelectedHotkey(force: Bool) {
@@ -2585,21 +2165,6 @@ final class MacAppState: ObservableObject {
 
     private static func legacyLicenseCacheURL() -> URL {
         appSupportDirectory().appendingPathComponent("license-cache.json", isDirectory: false)
-    }
-
-    /// Bundle-Lokalisierung (nicht App-Sprache aus den Einstellungen): gleiche Auflösung wie Systemdialoge.
-    private static func localizedFilePanelString(_ key: String) -> String {
-        Bundle.main.localizedString(forKey: key, value: key, table: nil)
-    }
-
-    private static func configureImportSnippetsPanel(_ panel: NSOpenPanel) {
-        panel.title = localizedFilePanelString("filepanel.import.snippets.title")
-        panel.prompt = localizedFilePanelString("filepanel.open.prompt")
-    }
-
-    private static func configureSavePanel(_ panel: NSSavePanel, titleKey: String) {
-        panel.title = localizedFilePanelString(titleKey)
-        panel.prompt = localizedFilePanelString("filepanel.save.prompt")
     }
 
     private static func currentLaunchOnLoginEnabled() -> Bool {

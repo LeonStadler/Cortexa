@@ -10,7 +10,9 @@ Planned Xcode target composition:
 - `SettingsViewShell` (sidebar + search + detail shell for settings)
 - `MacAppState` (published UI state and orchestration)
 - `MacAppPreferencesStore`, `SessionConfigurationBuilder`, `PermissionCoordinator`, `AppLifecycleCoordinator`, `SessionEntryController`, `TranscriptHistoryController` (internal app-state support services)
+- `AIProviderController`, `SpeechModelController`, `SnippetController`, `DiagnosticsController` (remaining AppState feature clusters extracted behind the same published surface)
 - `DictationRuntimeServices` (permission, focused-target, streaming insertion, final delivery helpers behind `DictationRuntime`)
+- `SettingsSearchPresentation`, `SettingsFormPages`, `SearchResultsSettingsPage` (settings search/presentation and page composition helpers)
 - links to Swift packages from `/Sources/*`
 - entitlements: microphone + accessibility prompt UX
 - hardened runtime + notarization-ready signing settings
@@ -74,7 +76,7 @@ Operational notes:
 - Recoverable streaming target errors no longer push the whole runtime into a broken state; the runtime keeps the current transcript buffered and resumes insertion when a writable text target becomes available again.
 - Final-delivery diagnostics now record whether the result was written via direct AX value-set, clipboard paste fallback, or simulated keyboard input, and whether clipboard restore plus auto-send actually ran.
 - Clipboard restoration now snapshots and restores the full pasteboard item list for clipboard-based delivery instead of only restoring a plain string value.
-- AppShell refactors are guarded by a dedicated `AppShellSupport` SwiftPM target plus characterization tests so permission flows, history retention, session entry, and settings navigation can be validated without shipping behavior changes.
+- AppShell refactors are guarded by a dedicated `AppShellSupport` SwiftPM target plus characterization and controller tests so permission flows, history retention, session entry, provider editing, settings search, and the extracted AppShell controllers can be validated without shipping behavior changes.
 - Runtime start now guards against duplicate starts while initialization is in-flight and performs a full reset on audio push failures, reducing stuck `Diktat läuft bereits` error loops.
 - Version metadata is injected into the generated Xcode project from the repo `VERSION` file.
 - The macOS helper scripts look for `xcodegen` in common Homebrew locations and can reuse an already generated `WisprLocalMac.xcodeproj` if regeneration is not needed.

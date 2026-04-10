@@ -72,8 +72,9 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
   dedicated app-behavior, sound, text-input, history-retention, and model-visibility settings
 - internally, the macOS shell is now split into a thin `MacAppState` orchestration layer plus focused support types:
   `MacAppPreferencesStore` and `SessionConfigurationBuilder` for persisted settings and `DictationStartOptions`,
-  `PermissionCoordinator`, `AppLifecycleCoordinator`, `SessionEntryController`, and `TranscriptHistoryController` for stateful shell concerns,
-  `SettingsViewShell`, `MenuBarContentView`, and `SettingsWindowPresenter` for UI composition,
+  `PermissionCoordinator`, `AppLifecycleCoordinator`, `SessionEntryController`, `TranscriptHistoryController`,
+  `AIProviderController`, `SpeechModelController`, `SnippetController`, and `DiagnosticsController` for stateful shell concerns,
+  `SettingsViewShell`, page-based settings form helpers, `SettingsSearchPresentation`, `MenuBarContentView`, and `SettingsWindowPresenter` for UI composition,
   and `DictationRuntimeServices` for permission checks, focused target capture, streaming insertion, and final transcript delivery
 - sound feedback controls are app-local cues for start/stop/failure states and do not control the system microphone volume or any global playback-pausing behavior
 - local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
@@ -81,7 +82,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - persistent user settings (mode/language/performance/translation/AI processing) via `UserDefaults`
 - iOS shell now includes a host app backed by app-group storage and a keyboard extension
   that can insert the latest shared transcript and shared snippet replacements
-- an `AppShellSupport` test target freezes current macOS shell behavior through characterization tests for permission mapping, session entry, history retention, settings search, and remote-provider editing
+- an `AppShellSupport` test target freezes current macOS shell behavior through characterization, search-presentation, coordinator, and controller tests for permission mapping, session entry, history retention, settings search, remote-provider editing, diagnostics, snippets, and speech-model selection
 
 ## Data Flows
 

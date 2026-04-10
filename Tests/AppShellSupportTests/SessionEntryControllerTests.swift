@@ -1,0 +1,165 @@
+#if canImport(XCTest)
+import AIProcessingCore
+import ASRCore
+import AudioCore
+import AppKit
+import Foundation
+import SnippetCore
+import XCTest
+@testable import AppShellSupport
+
+@MainActor
+final class SessionEntryControllerTests: XCTestCase {
+    func testHoldShortcutStartsAndStopsWhenHoldModeIsEnabled() {
+        let runtime = AppShellTestDictationRuntime()
+        var refreshCount = 0
+        var sessionActive = false
+        var audits: [String] = []
+        let controller = makeController(
+            dictationRuntime: runtime,
+            refreshPermissionStates: { refreshCount += 1 },
+            dictationCapabilityAllowsDirectInsertion: { false },
+            appendAudit: { audits.append($0) },
+            appendDiagnostic: { _ in },
+            isSessionActive: { sessionActive },
+            holdToDictateEnabled: { true }
+        )
+
+        controller.handleHoldShortcutPressed()
+        sessionActive = true
+        controller.handleHoldShortcutReleased()
+
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(runtime.toggleCalls.count, 2)
+        XCTAssertEqual(runtime.startCalls.count, 0)
+        XCTAssertEqual(audits.first, "hotkey.hold.press recordingStatus=idle")
+        XCTAssertEqual(audits.last, "hotkey.hold.release recordingStatus=idle")
+    }
+
+    func testResetHoldSessionActivePreventsReleaseToggle() {
+        let runtime = AppShellTestDictationRuntime()
+        var sessionActive = false
+        let controller = makeController(
+            dictationRuntime: runtime,
+            dictationCapabilityAllowsDirectInsertion: { false },
+            isSessionActive: { sessionActive },
+            holdToDictateEnabled: { true }
+        )
+
+        controller.handleHoldShortcutPressed()
+        controller.resetHoldSessionActive()
+        sessionActive = true
+        controller.handleHoldShortcutReleased()
+
+        XCTAssertEqual(runtime.toggleCalls.count, 1)
+    }
+
+    func testToggleTranscriptionFromUIStopsAnActiveSession() {
+        let runtime = AppShellTestDictationRuntime()
+        let sessionActive = true
+        var audits: [String] = []
+        let controller = makeController(
+            dictationRuntime: runtime,
+            appendAudit: { audits.append($0) },
+            isSessionActive: { sessionActive },
+            holdToDictateEnabled: { false }
+        )
+
+        controller.toggleTranscriptionFromUI()
+
+        XCTAssertEqual(runtime.toggleCalls.count, 1)
+        XCTAssertEqual(runtime.startCalls.count, 0)
+        XCTAssertEqual(audits, ["session.toggle stop"])
+    }
+
+    func testToggleTranscriptionFromMenuBarStartsRuntimeWhenDirectInsertionIsUnavailable() {
+        let runtime = AppShellTestDictationRuntime()
+        var refreshCount = 0
+        var audits: [String] = []
+        let controller = makeController(
+            dictationRuntime: runtime,
+            refreshPermissionStates: { refreshCount += 1 },
+            dictationCapabilityAllowsDirectInsertion: { false },
+            appendAudit: { audits.append($0) }
+        )
+
+        controller.toggleTranscriptionFromMenuBar()
+
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertEqual(runtime.startCalls.count, 1)
+        XCTAssertEqual(runtime.toggleCalls.count, 0)
+        XCTAssertTrue(audits.first?.hasPrefix("session.toggle.menuBar start mode=") == true)
+    }
+
+    func testToggleTranscriptionFromMenuBarStopsAnActiveSession() {
+        let runtime = AppShellTestDictationRuntime()
+        let sessionActive = true
+        var refreshCount = 0
+        let controller = makeController(
+            dictationRuntime: runtime,
+            refreshPermissionStates: { refreshCount += 1 },
+            dictationCapabilityAllowsDirectInsertion: { false },
+            isSessionActive: { sessionActive }
+        )
+
+        controller.toggleTranscriptionFromMenuBar()
+
+        XCTAssertEqual(refreshCount, 0)
+        XCTAssertEqual(runtime.toggleCalls.count, 1)
+        XCTAssertEqual(runtime.startCalls.count, 0)
+    }
+
+    private func makeController(
+        dictationRuntime: DictationRuntimeControlling = AppShellTestDictationRuntime(),
+        currentStartOptions: @escaping () -> DictationStartOptions = makeStartOptions,
+        refreshPermissionStates: @escaping () -> Void = {},
+        dictationCapabilityAllowsDirectInsertion: @escaping () -> Bool = { false },
+        lastExternalApplication: @escaping () -> NSRunningApplication? = { nil },
+        appendAudit: @escaping (String) -> Void = { _ in },
+        appendDiagnostic: @escaping (String) -> Void = { _ in },
+        currentRecordingStatus: @escaping () -> String = { "idle" },
+        currentSelectedLanguageRawValue: @escaping () -> String = { "de" },
+        currentPerformanceProfileRawValue: @escaping () -> String = { "auto" },
+        currentDictationCapability: @escaping () -> DictationCapability = { .limitedTranscription },
+        isSessionActive: @escaping () -> Bool = { false },
+        holdToDictateEnabled: @escaping () -> Bool = { true }
+    ) -> SessionEntryController {
+        SessionEntryController(
+            dictationRuntime: dictationRuntime,
+            currentStartOptions: currentStartOptions,
+            refreshPermissionStates: refreshPermissionStates,
+            dictationCapabilityAllowsDirectInsertion: dictationCapabilityAllowsDirectInsertion,
+            lastExternalApplication: lastExternalApplication,
+            appendAudit: appendAudit,
+            appendDiagnostic: appendDiagnostic,
+            currentRecordingStatus: currentRecordingStatus,
+            currentSelectedLanguageRawValue: currentSelectedLanguageRawValue,
+            currentPerformanceProfileRawValue: currentPerformanceProfileRawValue,
+            currentDictationCapability: currentDictationCapability,
+            isSessionActive: isSessionActive,
+            holdToDictateEnabled: holdToDictateEnabled
+        )
+    }
+
+    private nonisolated static func makeStartOptions() -> DictationStartOptions {
+        DictationStartOptions(
+            mode: .streaming,
+            language: .german,
+            translationOutput: .original,
+            performance: .auto,
+            selectedVoiceProviderID: "provider",
+            selectedVoiceModelID: "model",
+            liveRewriteScope: .currentSentence,
+            snippetRules: [],
+            finalResultDeliveryMode: .insert,
+            clipboardFallbackWhenNoTarget: false,
+            simulateKeypresses: false,
+            restoreClipboardAfterPaste: false,
+            autoSendAfterPaste: false,
+            aiProcessing: AIProcessingConfiguration(enabled: false, selectedModelID: nil),
+            audioProcessing: AudioProcessingConfiguration(),
+            soundFeedback: SoundFeedbackConfiguration()
+        )
+    }
+}
+#endif

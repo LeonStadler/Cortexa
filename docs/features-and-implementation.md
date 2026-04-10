@@ -33,6 +33,7 @@ Tests: jeweils unter `Tests/<Module>Tests`.
 ## macOS AppShell — Funktionsgruppen
 
 Pfad: `apps/macos/AppShell/`. Zentrale Orchestrierung u. a. in `MacAppState.swift`, `DictationRuntime.swift`, `WisprLocalMacApp.swift`.
+Der Shell-Code ist inzwischen entlang von Runtime-Services, AppState-Controllern sowie seiten- und suchbasierten Settings-Helfern geschnitten, damit Refactors ohne sichtbare Verhaltensaenderung testbar bleiben.
 
 ### Diktat & Sprache
 
