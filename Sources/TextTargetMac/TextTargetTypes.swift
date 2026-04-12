@@ -8,12 +8,35 @@ public enum TextTargetPermissionState: Equatable, Sendable {
     case denied
 }
 
+public struct AccessibilityTrustSnapshot: Equatable, Sendable {
+    public let permissionState: TextTargetPermissionState
+    public let probeResult: FocusedTextTargetProbeResult
+    public let frontmostBundleIdentifier: String?
+
+    public init(
+        permissionState: TextTargetPermissionState,
+        probeResult: FocusedTextTargetProbeResult,
+        frontmostBundleIdentifier: String?
+    ) {
+        self.permissionState = permissionState
+        self.probeResult = probeResult
+        self.frontmostBundleIdentifier = frontmostBundleIdentifier
+    }
+}
+
 public enum FocusedTextTargetProbeResult: Equatable, Sendable {
     case target
     case noFocusedElement(frontmostBundleIdentifier: String?)
     case unsupportedTarget(frontmostBundleIdentifier: String?, role: String?, valueSettable: Bool)
     case apiDisabled(frontmostBundleIdentifier: String?)
     case unableToReadValue(frontmostBundleIdentifier: String?)
+    case probeFailed(frontmostBundleIdentifier: String?, reason: AXProbeFailureReason)
+}
+
+public enum AXProbeFailureReason: String, Equatable, Sendable {
+    case cannotComplete
+    case failure
+    case unknown
 }
 
 public struct TextTargetSnapshot {

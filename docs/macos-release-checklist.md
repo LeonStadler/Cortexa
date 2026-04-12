@@ -36,6 +36,8 @@ Erwartung:
 - kein dauerhaftes Dock-Icon
 - Menüleisten-Icon erscheint
 - die App wird einmal aktiviert und versucht, den Settings-Shortcut auszulösen
+- zwei aufeinanderfolgende Builds behalten nach Moeglichkeit eine stabile Signing-/Requirement-Identitaet
+- zwei Debug-Builds lassen sich mit `codesign -dvvv` vergleichen, ohne dass sich die relevante Requirement ungewollt aendert
 
 ## 4. Berechtigungen
 
@@ -47,6 +49,7 @@ In der laufenden App:
 Erwartung:
 - Permission-Hinweise verschwinden ohne Neustart
 - `Option + Space` bleibt nach Rückkehr aus den Systemeinstellungen funktionsfähig
+- wenn Bedienungshilfen sichtbar aktiv sind, aber das Einfügen nach einem Rebuild noch nicht klappt, die Accessibility-Entry einmal entfernen und neu hinzufügen
 
 ## 5. Funktionstests in realen Ziel-Apps
 
@@ -72,6 +75,7 @@ Erwartung:
 Prüfen:
 - Mikrofonrecht entziehen -> Aufnahme blockiert mit klarer UI
 - AX-Recht entziehen -> Insert blockiert mit klarer UI
+- Rebuild mit altem Accessibility-Eintrag -> Recovery-Hinweis führt zum Entfernen und erneuten Aktivieren
 - Sleep/Wake -> Hotkey funktioniert weiter
 - App-Neustart -> Runtime wird neu vorbereitet, Status bleibt konsistent
 

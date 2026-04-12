@@ -61,6 +61,7 @@ struct WisprLocalMacApp: App {
         _updaterController = StateObject(wrappedValue: updaterController)
         _appState = StateObject(wrappedValue: appState)
         self.settingsWindowPresenter = settingsWindowPresenter
+        BundleSigningDiagnostics.logStartupIdentityIfDebug()
 
         if WisprSmokeLaunch.shouldOpenSettingsAfterLaunch {
             SmokeOpenSettingsLaunchObserver.start(appState: appState)
