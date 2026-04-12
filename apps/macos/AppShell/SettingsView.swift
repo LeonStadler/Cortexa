@@ -741,8 +741,8 @@ struct SettingsView: View {
         ]) {
             Text(
                 text(
-                    "Freigaben kannst du hier prüfen. „Freigabe anfragen“ öffnet den Systemdialog; „Öffnen“ führt zu den Datenschutz-Einstellungen. Direkt nach einem App-Neustart kann der Status einmal kurz hinterherhängen. Wenn Bedienungshilfen nach einem Rebuild sichtbar aktiv sind, das Einfügen aber trotzdem nicht greift, den Eintrag einmal entfernen und neu hinzufügen.",
-                    "You can verify access here. “Request access” shows the system prompt; “Open” goes to Privacy settings. Right after launching the app, the status row can briefly lag. If Accessibility looks enabled after a rebuild but still does not work, remove the app once and add it again."
+                    "Freigaben kannst du hier prüfen. „Freigabe anfragen“ öffnet den Systemdialog; „Öffnen“ führt zu den Datenschutz-Einstellungen. Direkt nach einem App-Neustart kann der Status einmal kurz hinterherhängen – dann erneut öffnen oder kurz warten. Falls Bedienungshilfen nach einem Rebuild weiter blockieren, in den Systemeinstellungen WisprLocalMac einmal entfernen und neu hinzufügen.",
+                    "You can verify access here. “Request access” shows the system prompt; “Open” goes to Privacy settings. Right after launching the app, the status row can briefly lag—open again or wait a moment."
                 )
             )
             .font(.footnote)
@@ -771,30 +771,17 @@ struct SettingsView: View {
             PermissionStatusRow(
                 title: text("Bedienungshilfen", "Accessibility"),
                 status: appState.accessibilityPermissionStatus,
-                detail: effectiveLanguage.embeddedInterfaceCode == "en"
-                    ? (
-                        appState.accessibilityPermissionStatus == .stale
-                            ? "The Accessibility entry is visible, but this build still cannot use it reliably. Remove WisprLocal once and add it again."
-                            : "Required to insert into the active text field."
-                    )
-                    : appState.accessibilityPermissionDetailText,
-                actionTitle: effectiveLanguage.embeddedInterfaceCode == "en"
-                    ? (
-                        appState.accessibilityPermissionStatus == .granted
-                            ? "Open" : "Request access"
-                    )
-                    : appState.accessibilityPermissionActionTitle,
-                actionHint: effectiveLanguage.embeddedInterfaceCode == "en"
-                    ? (
-                        appState.accessibilityPermissionStatus == .stale
-                            ? "Re-check Accessibility and show recovery guidance"
-                            : (
-                                appState.accessibilityPermissionStatus == .granted
-                                    ? "Open accessibility settings"
-                                    : "System prompt for Accessibility"
-                            )
-                    )
-                    : appState.accessibilityPermissionActionHint,
+                detail: text(
+                    "Erforderlich zum Einfügen in das aktive Textfeld.",
+                    "Required to insert into the active text field."),
+                actionTitle: appState.accessibilityPermissionStatus != .granted
+                    ? text("Freigabe anfragen", "Request access")
+                    : text("Öffnen", "Open"),
+                actionHint: appState.accessibilityPermissionStatus != .granted
+                    ? text(
+                        "Systemdialog zu Bedienungshilfen",
+                        "System prompt for Accessibility")
+                    : text("Bedienungshilfen öffnen", "Open accessibility settings"),
                 action: {
                     if appState.accessibilityPermissionStatus != .granted {
                         appState.requestAccessibilityAccessFromSettings()
@@ -807,12 +794,6 @@ struct SettingsView: View {
             Text(appState.dictationCapability.localizedSummary)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-
-            if !appState.accessibilityPermissionHintText.isEmpty {
-                Text(appState.accessibilityPermissionHintText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 

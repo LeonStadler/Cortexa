@@ -105,6 +105,17 @@ internal struct FocusedTextTargetService {
                 ]
             )
             throw DictationRuntimeError.focusedElementUnavailable
+        case .probeFailed(let frontmostBundleIdentifier, let reason):
+            AgentSessionDebugLog.append(
+                hypothesisId: "H3",
+                location: "DictationRuntime.captureFocusedTextTarget",
+                message: "ax_probe_failed",
+                data: [
+                    "frontmostBundle": frontmostBundleIdentifier ?? "nil",
+                    "reason": reason.rawValue,
+                ]
+            )
+            throw DictationRuntimeError.accessibilityPermissionDenied
         }
     }
 
