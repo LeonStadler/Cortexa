@@ -7,6 +7,7 @@ import FoundationModels
 public struct AppleFoundationTextProcessor: AITextProcessingProviding {
     public let providerKind: AIProviderKind = .appleFoundation
     private let defaultModelID = "apple.ondevice"
+    private let promptBuilder = AppleFoundationPromptBuilder()
 
     public init() {}
 
@@ -43,7 +44,7 @@ public struct AppleFoundationTextProcessor: AITextProcessingProviding {
                 model: systemModel,
                 instructions: instructions(for: request.configuration)
             )
-            let response = try await session.respond(to: prompt(for: request))
+            let response = try await session.respond(to: promptBuilder.prompt(for: request))
             return response.content
         }
         #endif
@@ -105,14 +106,6 @@ public struct AppleFoundationTextProcessor: AITextProcessingProviding {
             salutationInstruction,
             "Return only the revised text without commentary."
         ].joined(separator: " ")
-    }
-
-    private func prompt(for request: AIProcessingRequest) -> String {
-        let stageInstruction = request.stage == .live
-            ? "This is a live dictation tail. Make the smallest useful rewrite."
-            : "This is the final dictated text. Polish it fully while preserving the meaning."
-
-        return "\(stageInstruction)\n\n\(request.text)"
     }
 
     private func unavailabilityReason(for availability: Any) -> String {

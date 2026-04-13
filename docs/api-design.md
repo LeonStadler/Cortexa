@@ -67,11 +67,17 @@ public protocol SnippetMatcher {
 struct DictationStartOptions {
     let mode: DictationMode            // .finalize | .streaming
     let language: DictationLanguage    // de | en | auto
+    let translationOutput: TranslationOutputMode
     let performance: DictationPerformance // auto | fast | balanced | accurate
     let liveRewriteScope: LiveRewriteScope
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
+    let aiProcessing: AIProcessingConfiguration
+    let muteMusicWhileDictating: Bool
+    let asrInitialPrompt: String?
+    let dictionaryTerms: [String]
+    let appContextText: String?
 }
 ```
 
@@ -79,5 +85,6 @@ The macOS app shell uses these options to:
 - select model/config dynamically before session start
 - apply stable streaming patching with a bounded mutable tail
 - apply snippet substitutions for streaming commits and final transcript
+- pass bounded dictionary/context hints into ASR and AI processing
 - choose whether the final transcript is inserted or copied, and whether clipboard fallback is allowed when no text target is available
 - expose clipboard fallback as an explicit privacy tradeoff rather than a silent background path

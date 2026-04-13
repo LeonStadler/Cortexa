@@ -48,10 +48,12 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - macOS menu bar app + settings
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
-  snippet persistence/import/export UI, language/performance selection, transcript history,
-  license activation UI, and hotkey control
+  snippet persistence/import/export UI, personal dictionary persistence/import/export UI,
+  language/performance selection, transcript history, license activation UI, and hotkey control
+- optional context-aware AI post-processing (`off`, `finalOnly`, `liveOnly`, `liveAndFinal`)
+- optional media auto-pause/resume during dictation (best effort for Apple Music and Spotify)
 - local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
-- persistent user settings (mode/language/performance) via `UserDefaults`
+- persistent user settings (mode/language/performance/context/media-mute) via `UserDefaults`
  - iOS shell now includes a host app backed by app-group storage and a keyboard extension
    that can insert the latest shared transcript and shared snippet replacements
 
@@ -62,10 +64,12 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 1. Hotkey starts session.
 2. AX target snapshot captured once (`bindingID` immutable).
 3. Audio captured and sent to ASR.
-4. Final transcript returned.
-5. Snippet replacement applied.
-6. Single deterministic insert into original target.
-7. Session transitions to completed.
+4. Optional ASR dictionary prompt hints are applied before decode.
+5. Final transcript returned.
+6. Optional AI receives bounded app-context and dictionary term preservation hints.
+7. Snippet replacement applied.
+8. Single deterministic insert into original target.
+9. Session transitions to completed.
 
 ### 2) Streaming Insert (macOS)
 

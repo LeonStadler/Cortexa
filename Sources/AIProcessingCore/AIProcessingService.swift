@@ -50,7 +50,11 @@ public struct AIModelCatalog: Sendable {
 public struct AIProcessingService: Sendable {
     private let providers: [AIProviderKind: any AITextProcessingProviding]
 
-    public init(providers: [AIProviderKind: any AITextProcessingProviding] = Self.makeDefaultProviders()) {
+    public init() {
+        self.providers = Self.makeDefaultProviders()
+    }
+
+    public init(providers: [AIProviderKind: any AITextProcessingProviding]) {
         self.providers = providers
     }
 
@@ -87,8 +91,10 @@ public struct AIProcessingService: Sendable {
             return .failedFallback(text: request.text, modelID: model.id, reason: "AI provider is not configured.")
         }
 
+        let effectiveRequest = sanitizeContextIfNeeded(in: request)
+
         do {
-            let processed = try await provider.process(request, model: model)
+            let processed = try await provider.process(effectiveRequest, model: model)
             let normalized = processed.trimmingCharacters(in: .whitespacesAndNewlines)
             if normalized.isEmpty {
                 return .failedFallback(text: request.text, modelID: model.id, reason: "AI processing returned an empty result. Keeping the original text.")
@@ -105,5 +111,37 @@ public struct AIProcessingService: Sendable {
 
     private static func makeDefaultProviders() -> [AIProviderKind: any AITextProcessingProviding] {
         [AppleFoundationTextProcessor().providerKind: AppleFoundationTextProcessor()]
+    }
+
+    private func sanitizeContextIfNeeded(in request: AIProcessingRequest) -> AIProcessingRequest {
+        guard let context = request.appContextText?.trimmingCharacters(in: .whitespacesAndNewlines), !context.isEmpty else {
+            return request
+        }
+
+        guard contextApplies(for: request.stage, mode: request.configuration.contextAwarenessMode) else {
+            return AIProcessingRequest(
+                text: request.text,
+                stage: request.stage,
+                locale: request.locale,
+                configuration: request.configuration,
+                appContextText: nil,
+                dictionaryTerms: request.dictionaryTerms
+            )
+        }
+
+        return request
+    }
+
+    private func contextApplies(for stage: AIProcessingStage, mode: ContextAwarenessMode) -> Bool {
+        switch mode {
+        case .off:
+            return false
+        case .finalOnly:
+            return stage == .final
+        case .liveOnly:
+            return stage == .live
+        case .liveAndFinal:
+            return true
+        }
     }
 }

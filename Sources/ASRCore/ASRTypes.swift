@@ -17,6 +17,7 @@ public enum ASRTranslationMode: String, Sendable, Codable, Equatable {
 
 public struct ASRConfig: Sendable, Codable, Equatable {
     public let languageHint: String?
+    public let initialPrompt: String?
     public let translationMode: ASRTranslationMode
     public let modelID: String
     public let backend: ASRBackend
@@ -27,6 +28,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
 
     public init(
         languageHint: String?,
+        initialPrompt: String? = nil,
         translationMode: ASRTranslationMode = .original,
         modelID: String,
         backend: ASRBackend,
@@ -36,6 +38,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
         chunkMilliseconds: Int? = nil
     ) {
         self.languageHint = languageHint
+        self.initialPrompt = initialPrompt
         self.translationMode = translationMode
         self.modelID = modelID
         self.backend = backend

@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 import SnippetCore
 import SwiftUI
+import AIProcessingCore
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: MacAppState
@@ -11,6 +12,8 @@ struct SettingsView: View {
     @State private var diagnosticsExpanded = false
     @State private var newSnippetTrigger: String = ""
     @State private var newSnippetReplacement: String = ""
+    @State private var newDictionaryTerm: String = ""
+    @State private var newDictionaryCategory: DictionaryTermCategory = .custom
     @State private var searchText: String = ""
 
     private let personalWebsiteURL = URL(string: "https://leon-stadler.com")!
@@ -97,9 +100,30 @@ struct SettingsView: View {
             "rueckwirkungsbereich",
             "rewrite",
             "kontext",
+            "formatierung",
+            "formatting",
+            "musik",
+            "music",
             "retroaktiv",
             "weit zurück"
         ])
+    }
+
+    private var dictionaryHasMatches: Bool {
+        matches([
+            "dictionary",
+            "wörterbuch",
+            "woerterbuch",
+            "term",
+            "name",
+            "jargon",
+            "client",
+            "kunde",
+            "industrie",
+            "review",
+            "auto add",
+            "vorschlag"
+        ]) || !appState.dictionaryTerms.isEmpty || !appState.dictionaryReviewQueue.isEmpty
     }
 
     private var shortcutsHasMatches: Bool {
@@ -216,6 +240,8 @@ struct SettingsView: View {
             generalForm
         case .dictation:
             dictationForm
+        case .dictionary:
+            dictionaryForm
         case .shortcuts:
             shortcutsForm
         case .history:
@@ -233,6 +259,9 @@ struct SettingsView: View {
         Form {
             Section(text("Erkennung", "Recognition")) {
                 dictationRecognitionContent
+            }
+            Section(text("Formatierung", "Formatting")) {
+                formattingContent
             }
             Section(text("Live-Anpassung", "Live rewriting")) {
                 liveRewriteContent
@@ -252,6 +281,19 @@ struct SettingsView: View {
             }
             Section(text("Halten zum Diktieren", "Hold to Dictate")) {
                 holdShortcutContent
+            }
+        }
+        .formStyle(.grouped)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+
+    private var dictionaryForm: some View {
+        Form {
+            Section(text("Dictionary", "Dictionary")) {
+                dictionaryManagementContent
+            }
+            Section(text("Review Queue", "Review Queue")) {
+                dictionaryQueueContent
             }
         }
         .formStyle(.grouped)
@@ -334,6 +376,13 @@ struct SettingsView: View {
                 }
             }
 
+            if dictionaryHasMatches {
+                Section(text("Dictionary", "Dictionary")) {
+                    dictionaryManagementContent
+                    dictionaryQueueContent
+                }
+            }
+
             if shortcutsHasMatches {
                 Section(text("Kurzbefehle", "Shortcuts")) {
                     startStopShortcutContent
@@ -374,7 +423,7 @@ struct SettingsView: View {
                 }
             }
 
-            if !generalHasMatches && !dictationHasMatches && !shortcutsHasMatches && !historyHasMatches && !aboutHasMatches && !snippetsHasMatches && !advancedHasMatches {
+            if !generalHasMatches && !dictationHasMatches && !dictionaryHasMatches && !shortcutsHasMatches && !historyHasMatches && !aboutHasMatches && !snippetsHasMatches && !advancedHasMatches {
                 Section {
                     Text(text("Keine passenden Einstellungen gefunden.", "No matching settings found."))
                         .foregroundStyle(.secondary)
@@ -598,6 +647,50 @@ struct SettingsView: View {
                 .labelsHidden()
                 .frame(minWidth: 170)
             }
+
+            Toggle(text("Musik während Diktat stummschalten", "Mute music while dictating"), isOn: $appState.muteMusicWhileDictating)
+
+            Text(text(
+                "Für die beste Endqualität: Live-Text deaktivieren und Formatierung auf finalen Text anwenden.",
+                "For the best final quality: disable live text and run formatting on final text."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var formattingContent: some View {
+        if matches(["formatierung", "formatting", "kontext", "context", "modus", "mode", "ai", "bereinigung", "cleanup"]) {
+            Toggle(text("Formatierung aktivieren", "Enable formatting"), isOn: $appState.formattingEnabled)
+
+            LabeledContent(text("Formatierung", "Formatting")) {
+                Picker(text("Formatierung", "Formatting"), selection: $appState.formattingScope) {
+                    Text(text("Nur final", "Final only")).tag(AIProcessingScope.finalOnly)
+                    Text(text("Live und final", "Live and final")).tag(AIProcessingScope.liveAndFinal)
+                }
+                .labelsHidden()
+                .frame(minWidth: 220)
+            }
+            .disabled(!appState.formattingEnabled)
+
+            LabeledContent(text("Context Awareness", "Context awareness")) {
+                Picker(text("Context Awareness", "Context awareness"), selection: $appState.contextAwarenessMode) {
+                    ForEach(ContextAwarenessMode.allCases) { mode in
+                        Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .frame(minWidth: 220)
+            }
+            .disabled(!appState.formattingEnabled)
+
+            Text(text(
+                "Hinweis: Deaktiviertes Live-Texting erhöht oft die Qualität. Zusätzliche AI-Bereinigung verbessert den finalen Output weiter.",
+                "Tip: Disabling live text often improves quality. Additional AI cleanup can further improve final output."
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -842,6 +935,98 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var dictionaryManagementContent: some View {
+        if matches(["dictionary", "wörterbuch", "woerterbuch", "term", "name", "jargon", "client", "kunde", "industrie", "auto add"]) {
+            Toggle(text("Auto Add to Dictionary", "Auto add to dictionary"), isOn: $appState.dictionaryAutoAddEnabled)
+
+            HStack(alignment: .center, spacing: 10) {
+                TextField(text("Begriff hinzufügen", "Add term"), text: $newDictionaryTerm)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(text("Dictionary Begriff", "Dictionary term"))
+
+                Picker(text("Kategorie", "Category"), selection: $newDictionaryCategory) {
+                    ForEach(DictionaryTermCategory.allCases) { category in
+                        Text(category.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(category)
+                    }
+                }
+                .frame(width: 190)
+
+                Button(text("Hinzufügen", "Add")) {
+                    appState.addDictionaryTerm(newDictionaryTerm, category: newDictionaryCategory, source: .manual)
+                    newDictionaryTerm = ""
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            HStack(alignment: .center, spacing: 10) {
+                Button(text("Dictionary JSON importieren", "Import dictionary JSON")) {
+                    appState.importDictionaryFromJSON()
+                }
+                .buttonStyle(.bordered)
+
+                Button(text("Dictionary JSON exportieren", "Export dictionary JSON")) {
+                    appState.exportDictionaryToJSON()
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if appState.dictionaryTerms.isEmpty {
+                Text(text("Noch keine Dictionary-Begriffe gespeichert.", "No dictionary terms saved yet."))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(appState.dictionaryTerms) { term in
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(term.term)
+                            Text(term.category.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(term.source.rawValue.uppercased())
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                        Button(text("Löschen", "Delete")) {
+                            appState.removeDictionaryTerm(termID: term.id)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dictionaryQueueContent: some View {
+        if matches(["review", "queue", "vorschlag", "candidate", "dictionary"]) {
+            if appState.dictionaryReviewQueue.isEmpty {
+                Text(text("Keine offenen Dictionary-Vorschläge.", "No pending dictionary suggestions."))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(appState.dictionaryReviewQueue) { candidate in
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(candidate.proposedTerm)
+                            Text(candidate.category.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(text("Übernehmen", "Approve")) {
+                            appState.approveDictionaryCandidate(candidate.id)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button(text("Ablehnen", "Reject")) {
+                            appState.rejectDictionaryCandidate(candidate.id)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
     private var diagnosticsContent: some View {
         if matches(["diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) {
             VStack(alignment: .leading, spacing: 12) {
@@ -926,6 +1111,7 @@ struct SettingsView: View {
 private enum SettingsTab: Hashable, CaseIterable {
     case general
     case dictation
+    case dictionary
     case shortcuts
     case history
     case about
@@ -936,6 +1122,7 @@ private enum SettingsTab: Hashable, CaseIterable {
         switch self {
         case .general: return "gearshape"
         case .dictation: return "mic"
+        case .dictionary: return "character.book.closed"
         case .shortcuts: return "command"
         case .history: return "clock.arrow.circlepath"
         case .about: return "person.crop.circle"
@@ -950,6 +1137,8 @@ private enum SettingsTab: Hashable, CaseIterable {
             return language.text("Allgemein", "General")
         case .dictation:
             return language.text("Diktat", "Dictation")
+        case .dictionary:
+            return language.text("Dictionary", "Dictionary")
         case .shortcuts:
             return language.text("Kurzbefehle", "Shortcuts")
         case .history:

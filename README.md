@@ -83,6 +83,10 @@ Features implemented in macOS app shell:
 - Snippet replacement + snippet import/export (JSON)
 - Transkript-History mit Copy/Delete/Clear + Export (TXT), lokal persistent
 - Language switch (`de`, `en`, `auto`) and profile presets (`auto`, `fast`, `balanced`, `accurate`)
+- Optional formatting/AI post-processing with configurable context awareness (`off`, `finalOnly`, `liveOnly`, `liveAndFinal`)
+- Personal dictionary with category-based terms, review queue, and JSON import/export
+- Dictionary-driven ASR prompt hints and dictionary-preservation hints for AI revisions
+- Optional best-effort music pause/resume while dictating (Apple Music, Spotify)
 - Offline licensing UI (key input, local verification, Keychain-only secret persistence with legacy cache cleanup)
 - Lokales Audit-Log mit Rotation (`~/Library/Application Support/WisprLocal/audit.log`)
 - Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI

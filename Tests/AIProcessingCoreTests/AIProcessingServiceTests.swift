@@ -128,5 +128,63 @@ final class AIProcessingServiceTests: XCTestCase {
 
         XCTAssertEqual(outcome, .processed(text: "Polished", modelID: "apple.ondevice"))
     }
+
+    func testContextRemovedForLiveWhenContextModeIsFinalOnly() async {
+        let provider = StubProvider(
+            providerKind: .appleFoundation,
+            descriptors: [AIModelDescriptor(id: "apple.ondevice", displayName: "Apple", providerKind: .appleFoundation, availability: .available, quickSettingsEligible: true)]
+        ) { request, _ in
+            XCTAssertNil(request.appContextText)
+            return "Polished"
+        }
+        let service = AIProcessingService(providers: [.appleFoundation: provider])
+
+        let outcome = await service.process(
+            AIProcessingRequest(
+                text: "draft",
+                stage: .live,
+                locale: Locale(identifier: "en_US"),
+                configuration: AIProcessingConfiguration(
+                    enabled: true,
+                    selectedModelID: "apple.ondevice",
+                    scope: .liveAndFinal,
+                    contextAwarenessMode: .finalOnly
+                ),
+                appContextText: "Nearby app text",
+                dictionaryTerms: []
+            )
+        )
+
+        XCTAssertEqual(outcome, .processed(text: "Polished", modelID: "apple.ondevice"))
+    }
+
+    func testContextKeptForFinalWhenContextModeIsFinalOnly() async {
+        let provider = StubProvider(
+            providerKind: .appleFoundation,
+            descriptors: [AIModelDescriptor(id: "apple.ondevice", displayName: "Apple", providerKind: .appleFoundation, availability: .available, quickSettingsEligible: true)]
+        ) { request, _ in
+            XCTAssertEqual(request.appContextText, "Nearby app text")
+            return "Polished"
+        }
+        let service = AIProcessingService(providers: [.appleFoundation: provider])
+
+        let outcome = await service.process(
+            AIProcessingRequest(
+                text: "draft",
+                stage: .final,
+                locale: Locale(identifier: "en_US"),
+                configuration: AIProcessingConfiguration(
+                    enabled: true,
+                    selectedModelID: "apple.ondevice",
+                    scope: .liveAndFinal,
+                    contextAwarenessMode: .finalOnly
+                ),
+                appContextText: "Nearby app text",
+                dictionaryTerms: []
+            )
+        )
+
+        XCTAssertEqual(outcome, .processed(text: "Polished", modelID: "apple.ondevice"))
+    }
 }
 #endif

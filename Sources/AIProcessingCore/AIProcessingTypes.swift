@@ -56,6 +56,15 @@ public enum AIProcessingScope: String, Codable, CaseIterable, Identifiable, Send
     public var id: String { rawValue }
 }
 
+public enum ContextAwarenessMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case off
+    case finalOnly
+    case liveOnly
+    case liveAndFinal
+
+    public var id: String { rawValue }
+}
+
 public enum AIWritingStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     case none
     case simple
@@ -81,6 +90,7 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
     public let enabled: Bool
     public let selectedModelID: String?
     public let scope: AIProcessingScope
+    public let contextAwarenessMode: ContextAwarenessMode
     public let style: AIWritingStyle
     public let salutation: AISalutation
 
@@ -88,12 +98,14 @@ public struct AIProcessingConfiguration: Codable, Equatable, Sendable {
         enabled: Bool,
         selectedModelID: String?,
         scope: AIProcessingScope = .finalOnly,
+        contextAwarenessMode: ContextAwarenessMode = .finalOnly,
         style: AIWritingStyle = .none,
         salutation: AISalutation = .none
     ) {
         self.enabled = enabled
         self.selectedModelID = selectedModelID
         self.scope = scope
+        self.contextAwarenessMode = contextAwarenessMode
         self.style = style
         self.salutation = salutation
     }
@@ -109,17 +121,23 @@ public struct AIProcessingRequest: Sendable {
     public let stage: AIProcessingStage
     public let locale: Locale
     public let configuration: AIProcessingConfiguration
+    public let appContextText: String?
+    public let dictionaryTerms: [String]
 
     public init(
         text: String,
         stage: AIProcessingStage,
         locale: Locale,
-        configuration: AIProcessingConfiguration
+        configuration: AIProcessingConfiguration,
+        appContextText: String? = nil,
+        dictionaryTerms: [String] = []
     ) {
         self.text = text
         self.stage = stage
         self.locale = locale
         self.configuration = configuration
+        self.appContextText = appContextText
+        self.dictionaryTerms = dictionaryTerms
     }
 }
 

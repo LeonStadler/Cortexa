@@ -9,6 +9,7 @@ final class WhisperCLIExecutorTests: XCTestCase {
             modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
             inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
             languageHint: "de",
+            initialPrompt: nil,
             translationMode: .original,
             threads: 4,
             beamSize: 5,
@@ -25,6 +26,7 @@ final class WhisperCLIExecutorTests: XCTestCase {
             modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
             inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
             languageHint: "auto",
+            initialPrompt: nil,
             translationMode: .toEnglish,
             threads: 4,
             beamSize: 2,
@@ -34,6 +36,67 @@ final class WhisperCLIExecutorTests: XCTestCase {
         XCTAssertTrue(arguments.contains("-l"))
         XCTAssertTrue(arguments.contains("auto"))
         XCTAssertTrue(arguments.contains("-tr"))
+    }
+
+    func testBuildArgumentsAddsPromptWhenProvided() {
+        let arguments = WhisperCLIExecutor.buildArguments(
+            modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
+            inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
+            languageHint: "de",
+            initialPrompt: "ProductName ACMEClient",
+            translationMode: .original,
+            threads: 2,
+            beamSize: 3,
+            outputBase: URL(fileURLWithPath: "/tmp/result")
+        )
+
+        guard let promptFlagIndex = arguments.firstIndex(of: "--prompt") else {
+            return XCTFail("Expected --prompt flag to be present")
+        }
+        XCTAssertLessThan(promptFlagIndex, arguments.count - 1)
+        XCTAssertEqual(arguments[promptFlagIndex + 1], "ProductName ACMEClient")
+    }
+
+    func testBuildArgumentsSkipsPromptWhenOnlyWhitespace() {
+        let arguments = WhisperCLIExecutor.buildArguments(
+            modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
+            inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
+            languageHint: "de",
+            initialPrompt: "  \n\t   ",
+            translationMode: .original,
+            threads: 2,
+            beamSize: 3,
+            outputBase: URL(fileURLWithPath: "/tmp/result")
+        )
+
+        XCTAssertFalse(arguments.contains("--prompt"))
+    }
+
+    func testBuildArgumentsSanitizesAndTruncatesPrompt() {
+        let rawPrompt = "  Kunde:\n\tACME    GmbH   \(String(repeating: "x", count: 700))   "
+        let arguments = WhisperCLIExecutor.buildArguments(
+            modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
+            inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
+            languageHint: "de",
+            initialPrompt: rawPrompt,
+            translationMode: .original,
+            threads: 2,
+            beamSize: 3,
+            outputBase: URL(fileURLWithPath: "/tmp/result")
+        )
+
+        guard let promptFlagIndex = arguments.firstIndex(of: "--prompt") else {
+            return XCTFail("Expected --prompt flag to be present")
+        }
+
+        let sanitizedPrompt = arguments[promptFlagIndex + 1]
+        XCTAssertEqual(sanitizedPrompt.count, 500)
+        XCTAssertFalse(sanitizedPrompt.hasPrefix(" "))
+        XCTAssertFalse(sanitizedPrompt.hasSuffix(" "))
+        XCTAssertFalse(sanitizedPrompt.contains("\n"))
+        XCTAssertFalse(sanitizedPrompt.contains("\t"))
+        XCTAssertFalse(sanitizedPrompt.contains("  "))
+        XCTAssertTrue(sanitizedPrompt.hasPrefix("Kunde: ACME GmbH "))
     }
 
     func testResolveCLIPathPrefersExplicitExecutablePath() throws {

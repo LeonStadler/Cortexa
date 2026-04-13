@@ -143,6 +143,10 @@ struct DictationStartOptions {
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
     let aiProcessing: AIProcessingConfiguration
+    let muteMusicWhileDictating: Bool
+    let asrInitialPrompt: String?
+    let dictionaryTerms: [String]
+    let appContextText: String?
 }
 
 enum FinalResultDeliveryMode: String, CaseIterable, Identifiable {
@@ -243,6 +247,7 @@ final class DictationRuntime: @unchecked Sendable {
     private var maxObservedRMS: Float = 0
     private var lastRecoverableInsertDiagnosticAt: Date?
     private var accessibilityPermissionGranted = false
+    private var pausedMediaAppIdentifiers: Set<String> = []
     private let focusedTargetRetryCount = 8
     private let focusedTargetRetryDelayNanoseconds: UInt64 = 150_000_000
     private let pendingInsertionTimeoutNanoseconds: UInt64 = 5_000_000_000
@@ -364,6 +369,9 @@ final class DictationRuntime: @unchecked Sendable {
                 let requiresDirectInsertion = options.mode == .streaming || options.finalResultDeliveryMode == .insert
                 let accessibilityGranted = requestAccessibilityPermission(promptIfNeeded: requiresDirectInsertion)
                 accessibilityPermissionGranted = accessibilityGranted
+                if options.muteMusicWhileDictating {
+                    pauseMediaPlaybackBestEffort()
+                }
                 try configureEngine(for: options)
 
                 let effectiveMode: DictationMode = accessibilityGranted ? options.mode : .finalize
@@ -440,7 +448,9 @@ final class DictationRuntime: @unchecked Sendable {
                     text: snippetAdjustedText,
                     stage: .final,
                     locale: effectiveLocale,
-                    configuration: currentAIProcessingConfiguration()
+                    configuration: currentAIProcessingConfiguration(),
+                    appContextText: withSessionLock { currentOptions?.appContextText },
+                    dictionaryTerms: withSessionLock { currentOptions?.dictionaryTerms ?? [] }
                 )
             )
             let finalText = finalProcessingOutcome.text
@@ -1207,6 +1217,7 @@ final class DictationRuntime: @unchecked Sendable {
         let latencyProfile = selectLatencyProfile(options: options, preset: preset)
         let config = ASRConfig(
             languageHint: options.language.asrHint,
+            initialPrompt: options.asrInitialPrompt,
             translationMode: options.translationOutput.asrTranslationMode,
             modelID: modelFile,
             backend: .whisperCpp,
@@ -1365,7 +1376,9 @@ final class DictationRuntime: @unchecked Sendable {
             text: text,
             stage: .live,
             locale: runningLocale,
-            configuration: currentAIProcessingConfiguration()
+            configuration: currentAIProcessingConfiguration(),
+            appContextText: withSessionLock { currentOptions?.appContextText },
+            dictionaryTerms: withSessionLock { currentOptions?.dictionaryTerms ?? [] }
         )
 
         let semaphore = DispatchSemaphore(value: 0)
@@ -1448,8 +1461,75 @@ final class DictationRuntime: @unchecked Sendable {
         audioEngine.reset()
         converter = nil
         whisperEngine.resetStreaming()
+        resumeMediaPlaybackBestEffort()
         stableCommitter.reset()
         publishSessionActivity(false)
+    }
+
+    private func pauseMediaPlaybackBestEffort() {
+        pauseMediaIfPlaying(appName: "Music", bundleIdentifier: "com.apple.Music")
+        pauseMediaIfPlaying(appName: "Spotify", bundleIdentifier: "com.spotify.client")
+    }
+
+    private func resumeMediaPlaybackBestEffort() {
+        let identifiers = pausedMediaAppIdentifiers
+        guard !identifiers.isEmpty else { return }
+
+        if identifiers.contains("com.apple.Music") {
+            runAppleScriptBestEffort("""
+            tell application "Music"
+                play
+            end tell
+            """)
+        }
+
+        if identifiers.contains("com.spotify.client") {
+            runAppleScriptBestEffort("""
+            tell application "Spotify"
+                play
+            end tell
+            """)
+        }
+
+        pausedMediaAppIdentifiers.removeAll()
+    }
+
+    private func pauseMediaIfPlaying(appName: String, bundleIdentifier: String) {
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty else {
+            return
+        }
+
+        let descriptor = runAppleScriptBestEffort("""
+        tell application "\(appName)"
+            if player state is playing then
+                pause
+                return "paused"
+            end if
+            return "noop"
+        end tell
+        """)
+
+        if descriptor?.stringValue == "paused" {
+            pausedMediaAppIdentifiers.insert(bundleIdentifier)
+        }
+    }
+
+    @discardableResult
+    private func runAppleScriptBestEffort(_ source: String) -> NSAppleEventDescriptor? {
+        guard let script = NSAppleScript(source: source) else {
+            return nil
+        }
+
+        var error: NSDictionary?
+        let descriptor = script.executeAndReturnError(&error)
+        if let error {
+            if let message = error[NSAppleScript.errorMessage] as? String {
+                publishDiagnostic("Media control skipped: \(message)")
+            }
+            return nil
+        }
+
+        return descriptor
     }
 
     private func abortSession(reason: String) {

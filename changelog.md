@@ -2,6 +2,10 @@
 
 ## Fixes
 
+- 2026-04-12: AI-Processing-Initialisierung bereinigt und Kontext-Gating pro Stage stabilisiert.
+  - Dateien: `Sources/AIProcessingCore/AIProcessingService.swift`, `Sources/AIProcessingCore/AIProcessingTypes.swift`, `Sources/AIProcessingCore/AppleFoundationTextProcessor.swift`, `Sources/AIProcessingCore/AppleFoundationPromptBuilder.swift`, `Tests/AIProcessingCoreTests/AIProcessingServiceTests.swift`, `Tests/AIProcessingCoreTests/AppleFoundationPromptBuilderTests.swift`
+  - Funktionalität: Der bisherige Initialisierungsfehler der AI-Processing-Defaults wurde behoben. Zusätzlich wird App-Kontext jetzt explizit nach `ContextAwarenessMode` (`off`, `finalOnly`, `liveOnly`, `liveAndFinal`) pro Live-/Final-Stage gefiltert, damit unerlaubter Kontext nicht versehentlich in Requests landet.
+
 - 2026-04-02: Sicherheitsrelevante Persistenzpfade gehärtet, Klartext-Lizenzcache entfernt und Clipboard-Tradeoff deutlicher gemacht.
   - Dateien: `Sources/LicenseCore/LicenseStore.swift`, `apps/macos/AppShell/LicenseController.swift`, `apps/ios/App/IOSAppState.swift`, `apps/ios/App/IOSSharedStorage.swift`, `apps/ios/KeyboardExtension/KeyboardViewController.swift`, `Sources/SnippetCore/SecurePersistence.swift`, `Sources/SnippetCore/SnippetStore.swift`, `apps/macos/AppShell/TranscriptHistoryStore.swift`, `apps/macos/AppShell/AuditLogger.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/ios/App/WisprLocaliOSApp.swift`, `docs/licensing.md`, `docs/api-design.md`, `docs/system-design.md`, `README.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
   - Funktionalität: Roh-Lizenzschlüssel werden jetzt nur noch im Keychain gehalten; der bisherige Klartext-Cache-Fallback auf macOS/iOS wird nicht mehr verwendet und alte Cache-Dateien werden bei Nutzung älterer Builds aktiv entfernt, auch wenn zuerst nur die iOS-Keyboard-Extension geöffnet wird. Zusätzlich werden lokale Snippet-, Verlauf-, Audit- und App-Group-Dateien jetzt mit gehärteten Dateirechten bzw. iOS-Dateischutz geschrieben, rotierte/quarantänisierte Dateien nach dem Verschieben erneut gehärtet und der iOS-Transkriptverlauf aus dem Shared-App-Group-Container in host-app-lokalen Speicher verlagert. Der Zwischenablage-Fallback bleibt als absichtlicher Zustellpfad erhalten, wird in der Oberfläche aber explizit als weniger privater Tradeoff kommuniziert.
@@ -11,6 +15,10 @@
   - Funktionalität: Streaming-Updates ersetzen jetzt nur noch den wirklich veränderlichen Textbereich statt den kompletten sichtbaren Satz bei jeder Partial-Antwort neu zu schreiben. Dadurch bleiben ältere Wörter und Sätze stabiler, während der neue `Blank Audio`-Filter leere oder placeholderartige Finals zuverlässig verwirft. Zusätzlich ist der Snippet-Matcher thread-sicherer und behandelt tokenisierte Ersetzungen robuster, damit finale Textersetzungen nicht unnötig an der laufenden Streaming-Logik hängen.
 
 ## Features
+
+- 2026-04-12: Dictionary-, Context-Awareness-, ASR-Prompt- und Media-Mute-Upgrade für den macOS-Diktierpfad umgesetzt.
+  - Dateien: `apps/macos/AppShell/PersonalDictionaryStore.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `Sources/ASRCore/ASRTypes.swift`, `Sources/ASRCore/WhisperCLIExecutor.swift`, `Sources/ASRCore/WhisperCppEngine.swift`, `Tests/ASRCoreTests/WhisperCLIExecutorTests.swift`, `VERSION`
+  - Funktionalität: Die App besitzt jetzt ein persönliches Dictionary mit Kategorien, Import/Export und Review-Queue für Auto-Add-Vorschläge. Dictionary-Terme werden sowohl in der AI-Nachbearbeitung (Begriffserhalt) als auch im ASR-Pfad über einen sicheren Initial-Prompt berücksichtigt. Zusätzlich gibt es einen konfigurierbaren Context-Awareness-Modus in den Settings sowie eine optionale `Mute music while dictating`-Funktion (best-effort Pause/Resume für Apple Music und Spotify). Die Qualitäts-/Formatierungs-Hinweise im Settings-UI wurden für den Live-vs-Final-Tradeoff geschärft.
 
 - 2026-04-02: macOS-Update-Flow für Sparkle + GitHub Releases konzeptionell geschärft und Status-Texte vereinheitlicht.
   - Dateien: `apps/macos/AppShell/SparkleUpdaterController.swift`, `apps/macos/AppShell/MacAppConfiguration.swift`, `apps/macos/README.md`, `VERSION`
@@ -26,6 +34,10 @@
   - Funktionalität: In den Einstellungen gibt es jetzt einen sichtbaren Live-Rewrite-Radius von `Nur aktueller Satz` bis `Ganzer aktueller Absatz`. Die Auswahl wird persistent in `UserDefaults` gespeichert und steuert, wie stark die laufende Eingabe bei neuen Partial-Ergebnissen noch umgeschrieben werden darf.
 
 ## Docs
+
+- 2026-04-12: API-, System- und README-Dokumentation um Dictionary, Context Awareness, ASR-Initial-Prompt und Media-Mute erweitert.
+  - Dateien: `docs/api-design.md`, `docs/system-design.md`, `README.md`, `VERSION`
+  - Funktionalität: Die Dokumentation beschreibt nun die erweiterten Dictation-Startoptionen (AI-Konfiguration, Dictionary-Hinweise, optionaler App-Kontext, Media-Mute) sowie die neuen Qualitäts- und Kontextpfade im macOS-AppShell.
 
 - 2026-04-01: API-, System-, Licensing- und README-Verträge an die aktuellen AppShell-Optionen und den manuellen Update-Flow angepasst, und das Repo auf `0.21.0` angehoben.
   - Dateien: `docs/api-design.md`, `docs/system-design.md`, `docs/licensing.md`, `README.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `Package.swift`
