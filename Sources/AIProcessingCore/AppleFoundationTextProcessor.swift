@@ -245,15 +245,55 @@ enum AppleFoundationPromptBuilder {
             request.stage == .live
             ? "This is a live dictation tail. Make only the smallest useful rewrite."
             : "This is the final dictated text. Polish it while preserving the meaning and the original language."
-
-        return [
+        var promptSections = [
             stageInstruction,
             "The text language is \(languageHint). Your answer must stay in \(languageHint).",
-            "Text to revise:",
-            "<input>",
-            request.text,
-            "</input>",
-        ].joined(separator: "\n")
+        ]
+
+        if !request.dictionaryTerms.isEmpty {
+            promptSections.append("Preferred names and terms to preserve exactly:")
+            promptSections.append("<dictionary>")
+            promptSections.append(limitedDictionaryTerms(from: request.dictionaryTerms))
+            promptSections.append("</dictionary>")
+        }
+
+        if let contextText = limitedContextText(request.appContextText) {
+            promptSections.append(
+                "Relevant surrounding app context. Use it only to preserve references, names, and jargon."
+            )
+            promptSections.append("<context>")
+            promptSections.append(contextText)
+            promptSections.append("</context>")
+        }
+
+        promptSections.append("Text to revise:")
+        promptSections.append("<input>")
+        promptSections.append(request.text)
+        promptSections.append("</input>")
+        return promptSections.joined(separator: "\n")
+    }
+
+    private static func limitedDictionaryTerms(from terms: [String], maxCharacters: Int = 320)
+        -> String
+    {
+        var lines: [String] = []
+        var currentLength = 0
+        for term in terms {
+            let bullet = "- \(term)"
+            let projectedLength = currentLength + bullet.count + (lines.isEmpty ? 0 : 1)
+            if projectedLength > maxCharacters { break }
+            lines.append(bullet)
+            currentLength = projectedLength
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func limitedContextText(_ text: String?, maxCharacters: Int = 600) -> String? {
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let limited = String(trimmed.prefix(maxCharacters))
+        return limited.isEmpty ? nil : limited
     }
 
     private static func languageHint(for locale: Locale) -> String {

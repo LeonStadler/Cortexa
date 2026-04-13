@@ -68,7 +68,7 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
   snippet persistence/import/export UI, explicit speech-provider/model selection, language/performance selection, translation selection,
-  transcript history, AI processing model/goal/format controls, license activation UI, hotkey control,
+  transcript history, AI processing model/goal/format controls, a personal dictionary with review queue, context-awareness controls, optional music-mute during dictation, license activation UI, hotkey control,
   dedicated app-behavior, sound, text-input, history-retention, and model-visibility settings
 - internally, the macOS shell is now split into a thin `MacAppState` orchestration layer plus focused support types:
   `MacAppPreferencesStore` and `SessionConfigurationBuilder` for persisted settings and `DictationStartOptions`,

@@ -23,8 +23,11 @@ The settings also warn when the chosen shortcut overlaps with common macOS/syste
 An optional hold-to-dictate shortcut can be configured separately from the normal toggle shortcut and can also be disabled independently.
 Final transcript delivery can be configured independently from recognition mode: insert into the current text target, or copy only to the clipboard.
 The dictation settings also include a live rewrite scope that limits how far back partial transcripts may be reshaped while you keep speaking, so older sentences stabilize sooner instead of being rewritten wholesale.
+Dictation behavior now also includes an optional music-mute toggle for Apple Music and Spotify, implemented as a best-effort pause/resume that only resumes players Wispr paused itself.
 Translation remains part of the dictation settings and is separate from language recognition: `Default` keeps the spoken language, `English` enables Whisper translation.
 The settings now also include a dedicated `AI` area for post-processing with provider/model selection, style/tone, salutation, and separate toggles for live insertion and the final result.
+The AI area now exposes context awareness explicitly, with a conservative default that applies surrounding-app context only to the final result so streaming stays responsive.
+The settings sidebar also includes a dedicated `Dictionary` tab for personal terms, names, jargon, import/export, and review-based auto-suggestions that feed both ASR prompts and AI rewrite prompts.
 The AI settings can host both Apple on-device processing and remote API providers without hardcoding a fixed model list; OpenRouter, OpenAI, Groq, Mistral, DeepSeek, Together AI, Fireworks AI, xAI, Ollama and LM Studio are available as presets, and custom OpenAI-compatible endpoints can be configured manually.
 The `Sound` tab covers app-internal input level compensation, silence removal, dynamic normalization, and sound effects with volume control; it intentionally avoids global system microphone volume control or ambiguous playback-pausing behavior.
 The settings now also split out a dedicated `Sound` tab plus separate app-behavior, text-input, model-warm-retention, and history-retention controls, so the sidebar reflects the app's own semantics instead of a copied foreign layout.

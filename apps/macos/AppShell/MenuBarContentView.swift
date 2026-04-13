@@ -523,7 +523,7 @@ struct MenuBarContentView: View {
         }
 
         if appState.aiShowsModeControls {
-            Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
+            Picker(text("Formatierung", "Formatting"), selection: $appState.aiFormattingMode) {
                 ForEach(AIFormattingMode.allCases) { mode in
                     Text(
                         mode.localizedDisplayName(

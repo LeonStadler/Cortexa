@@ -9,6 +9,7 @@ enum SettingsTab: Hashable, CaseIterable {
     case ai
     case history
     case about
+    case dictionary
     case snippets
     case advanced
 
@@ -22,6 +23,7 @@ enum SettingsTab: Hashable, CaseIterable {
         case .ai: return "sparkles"
         case .history: return "clock.arrow.circlepath"
         case .about: return "person.crop.circle"
+        case .dictionary: return "text.book.closed"
         case .snippets: return "text.badge.plus"
         case .advanced: return "wrench.and.screwdriver"
         }
@@ -45,6 +47,8 @@ enum SettingsTab: Hashable, CaseIterable {
             return language.text("Verlauf", "History")
         case .about:
             return language.text("About", "About")
+        case .dictionary:
+            return language.text("Dictionary", "Dictionary")
         case .snippets:
             return language.text("Snippets", "Snippets")
         case .advanced:
@@ -93,6 +97,11 @@ enum SettingsTab: Hashable, CaseIterable {
             return language.text(
                 "Produktinformationen, Credits und Versionsdetails ansehen.",
                 "View product information, credits, and version details."
+            )
+        case .dictionary:
+            return language.text(
+                "Persönliche Begriffe, Namen und Fachsprache für ASR und AI pflegen.",
+                "Manage personal terms, names, and jargon for ASR and AI."
             )
         case .snippets:
             return language.text(

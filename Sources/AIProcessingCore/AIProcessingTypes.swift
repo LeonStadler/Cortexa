@@ -449,17 +449,26 @@ public struct AIProcessingRequest: Sendable {
     public let stage: AIProcessingStage
     public let locale: Locale
     public let configuration: AIProcessingConfiguration
+    public let appContextText: String?
+    public let dictionaryTerms: [String]
 
     public init(
         text: String,
         stage: AIProcessingStage,
         locale: Locale,
-        configuration: AIProcessingConfiguration
+        configuration: AIProcessingConfiguration,
+        appContextText: String? = nil,
+        dictionaryTerms: [String] = []
     ) {
         self.text = text
         self.stage = stage
         self.locale = locale
         self.configuration = configuration
+        self.appContextText = appContextText?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.dictionaryTerms = dictionaryTerms
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }
 

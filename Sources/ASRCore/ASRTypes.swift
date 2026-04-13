@@ -17,6 +17,7 @@ public enum ASRTranslationMode: String, Sendable, Codable, Equatable {
 
 public struct ASRConfig: Sendable, Codable, Equatable {
     public let languageHint: String?
+    public let initialPrompt: String?
     public let translationMode: ASRTranslationMode
     public let providerID: String
     public let catalogModelID: String
@@ -29,6 +30,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
 
     public init(
         languageHint: String?,
+        initialPrompt: String? = nil,
         translationMode: ASRTranslationMode = .original,
         providerID: String = VoiceProviderID.whisperCpp.rawValue,
         catalogModelID: String = LocalVoiceModelCatalog.defaultModelID,
@@ -40,6 +42,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
         chunkMilliseconds: Int? = nil
     ) {
         self.languageHint = languageHint
+        self.initialPrompt = initialPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.translationMode = translationMode
         self.providerID = providerID
         self.catalogModelID = catalogModelID

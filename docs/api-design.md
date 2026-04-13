@@ -236,6 +236,11 @@ struct DictationStartOptions {
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
+    let muteMusicWhileDictating: Bool
+    let asrInitialPrompt: String?
+    let dictionaryTerms: [String]
+    let liveContextText: String?
+    let finalContextText: String?
 }
 ```
 
@@ -260,6 +265,9 @@ The macOS app shell uses these options to:
 - apply snippet substitutions before optional translation and optional AI processing
 - optionally translate Whisper output to English only when `translationOutput == .english` and the selected voice model supports it
 - optionally run AI processing separately for live insertion updates and for the final result
+- optionally feed Whisper with a bounded preferred-terms prompt derived from the personal dictionary
+- optionally pass bounded app context and dictionary terms into AI prompt construction for live and/or final processing
+- optionally pause Apple Music and Spotify during dictation and resume only players paused by Wispr itself
 - maintain one provider-agnostic AI model picker across Apple on-device and remote API-backed providers
 - maintain a separate local speech-model picker with provider/model IDs, install state, and language-specific defaults
 - expose optional technical diagnostic logging that captures detailed runtime diagnostics plus ASR subprocess lifecycle events for support cases

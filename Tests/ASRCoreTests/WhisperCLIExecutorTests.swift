@@ -9,6 +9,7 @@ final class WhisperCLIExecutorTests: XCTestCase {
             modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
             inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
             languageHint: "de",
+            initialPrompt: nil,
             translationMode: .original,
             threads: 4,
             beamSize: 5,
@@ -25,6 +26,7 @@ final class WhisperCLIExecutorTests: XCTestCase {
             modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
             inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
             languageHint: "auto",
+            initialPrompt: nil,
             translationMode: .toEnglish,
             threads: 4,
             beamSize: 2,
@@ -41,6 +43,7 @@ final class WhisperCLIExecutorTests: XCTestCase {
             modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
             inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
             languageHint: "de",
+            initialPrompt: nil,
             translationMode: .original,
             threads: 2,
             beamSize: 2,
@@ -50,6 +53,22 @@ final class WhisperCLIExecutorTests: XCTestCase {
         XCTAssertFalse(arguments.contains("-tr"))
         XCTAssertFalse(arguments.contains("translate"))
         XCTAssertTrue(arguments.contains("de"))
+    }
+
+    func testBuildArgumentsIncludeSanitizedPromptWhenProvided() {
+        let arguments = WhisperCLIExecutor.buildArguments(
+            modelPath: URL(fileURLWithPath: "/tmp/model.bin"),
+            inputWav: URL(fileURLWithPath: "/tmp/input.wav"),
+            languageHint: "de",
+            initialPrompt: "  Preferred   terms:\nWisprLocal  ",
+            translationMode: .original,
+            threads: 2,
+            beamSize: 2,
+            outputBase: URL(fileURLWithPath: "/tmp/result")
+        )
+
+        XCTAssertTrue(arguments.contains("--prompt"))
+        XCTAssertTrue(arguments.contains("Preferred terms: WisprLocal"))
     }
 
     func testResolveCLIPathPrefersExplicitExecutablePath() throws {

@@ -97,10 +97,33 @@ final class SessionConfigurationBuilderTests: XCTestCase {
         XCTAssertEqual(result.selectedVoiceModelID, selectedModel.id)
     }
 
+    func testBuildPassesDictionaryContextAndMediaOptionsThrough() {
+        let result = SessionConfigurationBuilder().build(
+            from: makeInput(
+                muteMusicWhileDictating: true,
+                asrInitialPrompt: "Preferred terms: WisprLocal",
+                dictionaryTerms: ["WisprLocal", "OpenRouter"],
+                liveContextText: "Current sentence context",
+                finalContextText: "Longer final context"
+            )
+        )
+
+        XCTAssertTrue(result.muteMusicWhileDictating)
+        XCTAssertEqual(result.asrInitialPrompt, "Preferred terms: WisprLocal")
+        XCTAssertEqual(result.dictionaryTerms, ["WisprLocal", "OpenRouter"])
+        XCTAssertEqual(result.liveContextText, "Current sentence context")
+        XCTAssertEqual(result.finalContextText, "Longer final context")
+    }
+
     private func makeInput(
         streamingEnabled: Bool = true,
         selectedLanguage: DictationLanguage = .german,
         finalResultDeliveryMode: FinalResultDeliveryMode = .insert,
+        muteMusicWhileDictating: Bool = false,
+        asrInitialPrompt: String? = nil,
+        dictionaryTerms: [String] = [],
+        liveContextText: String? = nil,
+        finalContextText: String? = nil,
         selectedVoiceProviderID: String = LocalVoiceModelCatalog.defaultProviderID,
         selectedVoiceModelID: String = LocalVoiceModelCatalog.defaultModelID,
         voiceLanguageOverrides: [VoiceLanguageOverride] = [],
@@ -124,6 +147,11 @@ final class SessionConfigurationBuilderTests: XCTestCase {
             simulateKeypresses: false,
             restoreClipboardAfterPaste: false,
             autoSendAfterPaste: false,
+            muteMusicWhileDictating: muteMusicWhileDictating,
+            asrInitialPrompt: asrInitialPrompt,
+            dictionaryTerms: dictionaryTerms,
+            liveContextText: liveContextText,
+            finalContextText: finalContextText,
             aiProcessing: AIProcessingConfiguration(
                 enabled: false,
                 selectedModelID: nil,

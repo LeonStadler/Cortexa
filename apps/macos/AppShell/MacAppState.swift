@@ -2,6 +2,7 @@ import AIProcessingCore
 import ASRCore
 import AVFoundation
 import AppKit
+import ApplicationServices
 import AudioCore
 import CapabilityCore
 import Carbon
@@ -10,6 +11,7 @@ import LicenseCore
 import ServiceManagement
 import SnippetCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TranscriptHistoryEntry: Identifiable, Codable, Equatable {
     let id: UUID
@@ -664,6 +666,27 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var muteMusicWhileDictating: Bool {
+        didSet {
+            userDefaults.set(
+                muteMusicWhileDictating, forKey: UserDefaultsKeys.muteMusicWhileDictating)
+        }
+    }
+
+    @Published var contextAwarenessMode: ContextAwarenessMode {
+        didSet {
+            userDefaults.set(
+                contextAwarenessMode.rawValue, forKey: UserDefaultsKeys.contextAwarenessMode)
+        }
+    }
+
+    @Published var dictionaryAutoAddEnabled: Bool {
+        didSet {
+            userDefaults.set(
+                dictionaryAutoAddEnabled, forKey: UserDefaultsKeys.dictionaryAutoAddEnabled)
+        }
+    }
+
     @Published var remoteProviders: [AIRemoteProviderConfiguration] = [] {
         didSet {
             persistRemoteProviders()
@@ -686,6 +709,8 @@ final class MacAppState: ObservableObject {
     @Published var selectedSettingsTab: SettingsTab = .general
 
     @Published var snippetRules: [SnippetRule] = []
+    @Published var dictionaryTerms: [DictionaryTerm] = []
+    @Published var dictionaryReviewQueue: [DictionaryReviewCandidate] = []
     @Published var transcriptHistory: [TranscriptHistoryEntry] = []
     @Published private(set) var aiModels: [AIModelDescriptor] = []
     @Published private(set) var voiceProviders: [VoiceProviderDescriptor] = []
@@ -1091,6 +1116,9 @@ final class MacAppState: ObservableObject {
         static let autoSendAfterPaste = "wispr.settings.autoSendAfterPaste"
         static let restoreClipboardAfterPaste = "wispr.settings.restoreClipboardAfterPaste"
         static let simulateKeypresses = "wispr.settings.simulateKeypresses"
+        static let muteMusicWhileDictating = "wispr.settings.muteMusicWhileDictating"
+        static let contextAwarenessMode = "wispr.settings.contextAwarenessMode"
+        static let dictionaryAutoAddEnabled = "wispr.settings.dictionaryAutoAddEnabled"
         static let remoteProviders = "wispr.settings.ai.remoteProviders"
         static let selectedRemoteProviderID = "wispr.settings.ai.selectedRemoteProviderID"
     }
@@ -1101,6 +1129,7 @@ final class MacAppState: ObservableObject {
     private let hotkeyManager: GlobalHotkeyRegistering
     private let dictationRuntime: DictationRuntimeControlling
     private let snippetStore: SnippetStore
+    private let dictionaryStore: PersonalDictionaryStoring
     private let historyStore: TranscriptHistoryStoring
     private let auditLogger: AuditLogging
     private let debugLogger: AuditLogging
@@ -1196,10 +1225,14 @@ final class MacAppState: ObservableObject {
         self.autoSendAfterPaste = preferences.autoSendAfterPaste
         self.restoreClipboardAfterPaste = preferences.restoreClipboardAfterPaste
         self.simulateKeypresses = preferences.simulateKeypresses
+        self.muteMusicWhileDictating = preferences.muteMusicWhileDictating
+        self.contextAwarenessMode = preferences.contextAwarenessMode
+        self.dictionaryAutoAddEnabled = preferences.dictionaryAutoAddEnabled
         self.remoteProviders = preferences.remoteProviders
         self.selectedRemoteProviderID = preferences.selectedRemoteProviderID
 
         self.snippetStore = SnippetStore(fileURL: Self.snippetStorageURL())
+        self.dictionaryStore = PersonalDictionaryStore(fileURL: Self.dictionaryStorageURL())
         self.historyStore = historyStore ?? TranscriptHistoryStore(fileURL: Self.historyStorageURL())
         self.auditLogger = AuditLogger(fileURL: Self.auditLogStorageURL())
         self.debugLogger = AuditLogger(fileURL: Self.debugLogStorageURL())
@@ -1304,6 +1337,11 @@ final class MacAppState: ObservableObject {
                     simulateKeypresses: false,
                     restoreClipboardAfterPaste: false,
                     autoSendAfterPaste: false,
+                    muteMusicWhileDictating: false,
+                    asrInitialPrompt: nil,
+                    dictionaryTerms: [],
+                    liveContextText: nil,
+                    finalContextText: nil,
                     aiProcessing: AIProcessingConfiguration(enabled: false, selectedModelID: nil),
                     audioProcessing: AudioProcessingConfiguration(),
                     soundFeedback: SoundFeedbackConfiguration()
@@ -1516,6 +1554,7 @@ final class MacAppState: ObservableObject {
         }
         dictationRuntime.onFinalTranscript = { [weak self] event in
             self?.transcriptHistoryController.handleFinalTranscript(event)
+            self?.handleDictionaryCandidatesIfNeeded(from: event)
         }
         dictationRuntime.onPermissionInteractionFinished = { [weak self] in
             self?.permissionCoordinator.refreshPermissionStatesAfterUserFacingPermissionStep()
@@ -1539,6 +1578,7 @@ final class MacAppState: ObservableObject {
         registerSelectedHotkey(force: true)
 
         loadSnippets()
+        loadDictionary()
         transcriptHistoryController.loadHistory()
         updateCapabilitySummary()
         rebuildAIProcessingStack(reason: "initial-load")
@@ -1866,12 +1906,167 @@ final class MacAppState: ObservableObject {
         snippetController.persistSnippets()
     }
 
+    func addDictionaryTerm(
+        _ rawTerm: String,
+        category: DictionaryTermCategory,
+        source: DictionaryTermSource = .manual,
+        languageCode: String? = nil
+    ) {
+        let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else {
+            appendDiagnostic("Dictionary: Begriff wurde nicht gespeichert (leer).")
+            return
+        }
+
+        let key = normalizedDictionaryKey(term, languageCode: languageCode)
+        if dictionaryTerms.contains(where: {
+            normalizedDictionaryKey($0.term, languageCode: $0.languageCode) == key
+        }) {
+            appendDiagnostic("Dictionary: Begriff bereits vorhanden.")
+            return
+        }
+
+        dictionaryTerms.append(
+            DictionaryTerm(
+                term: term,
+                category: category,
+                source: source,
+                languageCode: languageCode
+            )
+        )
+
+        dictionaryReviewQueue.removeAll {
+            normalizedDictionaryKey($0.proposedTerm, languageCode: $0.languageCode) == key
+        }
+        persistDictionary()
+    }
+
+    func removeDictionaryTerm(termID: UUID) {
+        dictionaryTerms.removeAll { $0.id == termID }
+        persistDictionary()
+    }
+
+    func queueDictionaryCandidate(
+        _ rawTerm: String,
+        category: DictionaryTermCategory = .custom,
+        languageCode: String? = nil
+    ) {
+        let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return }
+
+        let key = normalizedDictionaryKey(term, languageCode: languageCode)
+        guard !dictionaryTerms.contains(where: {
+            normalizedDictionaryKey($0.term, languageCode: $0.languageCode) == key
+        }) else { return }
+        guard !dictionaryReviewQueue.contains(where: {
+            normalizedDictionaryKey($0.proposedTerm, languageCode: $0.languageCode) == key
+        }) else { return }
+
+        dictionaryReviewQueue.insert(
+            DictionaryReviewCandidate(
+                proposedTerm: term,
+                category: category,
+                languageCode: languageCode
+            ),
+            at: 0
+        )
+        persistDictionary()
+    }
+
+    func approveDictionaryCandidate(_ candidateID: UUID) {
+        guard let candidate = dictionaryReviewQueue.first(where: { $0.id == candidateID }) else {
+            return
+        }
+        addDictionaryTerm(
+            candidate.proposedTerm,
+            category: candidate.category,
+            source: .auto,
+            languageCode: candidate.languageCode
+        )
+    }
+
+    func rejectDictionaryCandidate(_ candidateID: UUID) {
+        dictionaryReviewQueue.removeAll { $0.id == candidateID }
+        persistDictionary()
+    }
+
+    func importDictionaryFromJSON() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let snapshot = try dictionaryStore.importSnapshot(from: url)
+            dictionaryTerms = snapshot.terms
+            dictionaryReviewQueue = snapshot.reviewQueue
+            appendDiagnostic(
+                "Dictionary importiert: \(dictionaryTerms.count) Begriffe, \(dictionaryReviewQueue.count) Vorschläge"
+            )
+            appendAudit("dictionary.import path=\(url.path)")
+        } catch {
+            appendDiagnostic("Dictionary-Import fehlgeschlagen: \(error.localizedDescription)")
+        }
+    }
+
+    func exportDictionaryToJSON() {
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "wispr-dictionary.json"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try dictionaryStore.exportSnapshot(
+                PersonalDictionarySnapshot(
+                    terms: dictionaryTerms,
+                    reviewQueue: dictionaryReviewQueue
+                ),
+                to: url
+            )
+            appendDiagnostic("Dictionary exportiert: \(dictionaryTerms.count) Begriffe")
+            appendAudit("dictionary.export path=\(url.path)")
+        } catch {
+            appendDiagnostic("Dictionary-Export fehlgeschlagen: \(error.localizedDescription)")
+        }
+    }
+
     private func loadHistory() {
         transcriptHistoryController.loadHistory()
     }
 
     private func persistHistory() {
         transcriptHistoryController.persistHistory()
+    }
+
+    private func loadDictionary() {
+        do {
+            let snapshot = try dictionaryStore.load()
+            dictionaryTerms = snapshot.terms
+            dictionaryReviewQueue = snapshot.reviewQueue
+            appendDiagnostic(
+                "Dictionary geladen: \(dictionaryTerms.count) Begriffe, \(dictionaryReviewQueue.count) Vorschläge"
+            )
+        } catch {
+            appendDiagnostic("Dictionary-Load fehlgeschlagen: \(error.localizedDescription)")
+            dictionaryTerms = []
+            dictionaryReviewQueue = []
+        }
+    }
+
+    private func persistDictionary() {
+        do {
+            try dictionaryStore.save(terms: dictionaryTerms, reviewQueue: dictionaryReviewQueue)
+            appendAudit(
+                "dictionary.save terms=\(dictionaryTerms.count) queue=\(dictionaryReviewQueue.count)"
+            )
+        } catch {
+            appendDiagnostic("Dictionary-Save fehlgeschlagen: \(error.localizedDescription)")
+        }
     }
 
     private func pruneHistoryIfNeeded() {
@@ -1925,7 +2120,14 @@ final class MacAppState: ObservableObject {
     }
 
     private func sessionConfigurationInput() -> SessionConfigurationInput {
-        SessionConfigurationInput(
+        let liveContextText = contextAwarenessMode.appliesToLive
+            ? bestEffortFocusedContextText(maxLength: 220)
+            : nil
+        let finalContextText = contextAwarenessMode.appliesToFinal
+            ? bestEffortFocusedContextText(maxLength: 600)
+            : nil
+
+        return SessionConfigurationInput(
             streamingEnabled: streamingEnabled,
             selectedLanguage: selectedLanguage,
             translationOutputMode: translationOutputMode,
@@ -1942,6 +2144,11 @@ final class MacAppState: ObservableObject {
             simulateKeypresses: simulateKeypresses,
             restoreClipboardAfterPaste: restoreClipboardAfterPaste,
             autoSendAfterPaste: autoSendAfterPaste,
+            muteMusicWhileDictating: muteMusicWhileDictating,
+            asrInitialPrompt: buildDictionaryHintPrompt(),
+            dictionaryTerms: dictionaryTerms.map(\.term),
+            liveContextText: liveContextText,
+            finalContextText: finalContextText,
             aiProcessing: aiProcessingConfiguration,
             audioProcessing: audioProcessingConfiguration,
             soundFeedback: soundFeedbackConfiguration
@@ -2135,6 +2342,253 @@ final class MacAppState: ObservableObject {
             .map(String.init) ?? diagnostics
     }
 
+    private func handleDictionaryCandidatesIfNeeded(from event: FinalTranscriptEvent) {
+        guard dictionaryAutoAddEnabled else { return }
+        let added = autoQueueDictionaryCandidates(from: event.text, languageCode: event.languageCode)
+        if added > 0 {
+            appendDiagnostic("Dictionary-Vorschläge ergänzt: \(added)")
+        }
+    }
+
+    private func autoQueueDictionaryCandidates(from text: String, languageCode: String) -> Int {
+        let before = dictionaryReviewQueue.count
+        let normalizedLanguage = languageCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scopedLanguage = normalizedLanguage.isEmpty ? nil : normalizedLanguage
+        let maxNewCandidates = 8
+        var added = 0
+        var seenInTranscript = Set<String>()
+
+        for phrase in matchedTerms(
+            in: text,
+            pattern: #"\b[A-ZÄÖÜ][\p{L}]{2,}\s+[A-ZÄÖÜ][\p{L}]{2,}\b"#
+        ) {
+            guard shouldAutoSuggestPersonPhrase(phrase) else { continue }
+            let key = normalizedDictionaryKey(phrase, languageCode: scopedLanguage)
+            guard !seenInTranscript.contains(key) else { continue }
+            seenInTranscript.insert(key)
+            let queueCountBefore = dictionaryReviewQueue.count
+            queueDictionaryCandidate(phrase, category: .personName, languageCode: scopedLanguage)
+            if dictionaryReviewQueue.count > queueCountBefore {
+                added += 1
+            }
+            if added >= maxNewCandidates {
+                return max(0, dictionaryReviewQueue.count - before)
+            }
+        }
+
+        for token in matchedTerms(in: text, pattern: #"\b[\p{L}\d][\p{L}\d\-\._]{2,}\b"#) {
+            let normalizedToken = normalizeDictionaryCandidate(token)
+            guard shouldAutoSuggestDictionaryToken(normalizedToken) else { continue }
+            let key = normalizedDictionaryKey(normalizedToken, languageCode: scopedLanguage)
+            guard !seenInTranscript.contains(key) else { continue }
+            seenInTranscript.insert(key)
+            let category: DictionaryTermCategory =
+                if normalizedToken.contains(where: { $0.isNumber }) || isUppercaseAcronym(normalizedToken) {
+                    .industryLanguage
+                } else {
+                    .custom
+                }
+            let queueCountBefore = dictionaryReviewQueue.count
+            queueDictionaryCandidate(
+                normalizedToken,
+                category: category,
+                languageCode: scopedLanguage
+            )
+            if dictionaryReviewQueue.count > queueCountBefore {
+                added += 1
+            }
+            if added >= maxNewCandidates {
+                break
+            }
+        }
+
+        return max(0, dictionaryReviewQueue.count - before)
+    }
+
+    private func matchedTerms(in text: String, pattern: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return []
+        }
+
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = regex.matches(in: text, options: [], range: nsRange)
+        return matches.compactMap { match in
+            guard let range = Range(match.range, in: text) else { return nil }
+            return String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func shouldAutoSuggestDictionaryToken(_ token: String) -> Bool {
+        guard token.count >= 3, token.count <= 40 else { return false }
+        guard !isLikelyCommonWord(token) else { return false }
+
+        if isUppercaseAcronym(token) {
+            return true
+        }
+        if token.contains(where: { $0.isNumber }) && token.contains(where: { $0.isLetter }) {
+            return true
+        }
+        guard let first = token.first, first.isUppercase else {
+            return false
+        }
+        return token.dropFirst().contains(where: { $0.isUppercase })
+    }
+
+    private func isUppercaseAcronym(_ token: String) -> Bool {
+        let letters = token.filter(\.isLetter)
+        guard letters.count >= 2 else { return false }
+        return letters == letters.uppercased()
+    }
+
+    private func shouldAutoSuggestPersonPhrase(_ phrase: String) -> Bool {
+        let components = phrase.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard components.count == 2 else { return false }
+        guard components.allSatisfy({ !$0.isEmpty && !$0.contains(where: { $0.isNumber }) }) else {
+            return false
+        }
+        guard components.allSatisfy({ !isLikelyCommonWord($0) }) else { return false }
+        return true
+    }
+
+    private func normalizeDictionaryCandidate(_ candidate: String) -> String {
+        candidate.trimmingCharacters(
+            in: CharacterSet(charactersIn: " \t\n\r.,;:!?()[]{}\"'")
+        )
+    }
+
+    private func isLikelyCommonWord(_ token: String) -> Bool {
+        let normalized = token
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+        return Self.commonAutoAddStopwords.contains(normalized)
+    }
+
+    private func normalizedDictionaryKey(_ term: String, languageCode: String?) -> String {
+        let normalizedTerm = term
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let normalizedLanguage = languageCode?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? "*"
+        return "\(normalizedLanguage)|\(normalizedTerm)"
+    }
+
+    private func buildDictionaryHintPrompt(maxCharacters: Int = 320) -> String? {
+        let currentLanguageCode = selectedLanguage == .auto ? nil : selectedLanguage.rawValue
+        let filtered = dictionaryTerms
+            .filter { term in
+                guard
+                    let languageCode = term.languageCode?
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !languageCode.isEmpty
+                else {
+                    return true
+                }
+                guard let currentLanguageCode else { return true }
+                return languageCode.caseInsensitiveCompare(currentLanguageCode) == .orderedSame
+            }
+            .map(\.term)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !filtered.isEmpty else { return nil }
+
+        var result = "Preferred terms: "
+        for term in filtered {
+            let candidate = result == "Preferred terms: " ? "\(result)\(term)" : "\(result), \(term)"
+            if candidate.count > maxCharacters { break }
+            result = candidate
+        }
+
+        return result == "Preferred terms: " ? nil : result
+    }
+
+    private func bestEffortFocusedContextText(maxLength: Int) -> String? {
+        guard accessibilityPermissionStatus == .granted else { return nil }
+
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        let focusedResult = AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        )
+
+        guard focusedResult == .success, let focusedRef else {
+            return nil
+        }
+        let focusedElement = unsafeBitCast(focusedRef, to: AXUIElement.self)
+
+        var valueRef: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(
+                focusedElement,
+                kAXValueAttribute as CFString,
+                &valueRef
+            ) == .success,
+            let fullText = valueRef as? String
+        else {
+            return nil
+        }
+
+        let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var selectedRangeRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(
+            focusedElement,
+            kAXSelectedTextRangeAttribute as CFString,
+            &selectedRangeRef
+        ) == .success,
+            let axValue = selectedRangeRef,
+            CFGetTypeID(axValue) == AXValueGetTypeID()
+        {
+            let selectedRangeValue = axValue as! AXValue
+            var range = CFRange(location: 0, length: 0)
+            if AXValueGetType(selectedRangeValue) == .cfRange,
+                AXValueGetValue(selectedRangeValue, .cfRange, &range)
+            {
+                return contextWindow(
+                    in: fullText,
+                    cursorLocation: max(0, range.location),
+                    maxLength: maxLength
+                )
+            }
+        }
+
+        if trimmed.count <= maxLength {
+            return trimmed
+        }
+        return String(trimmed.suffix(maxLength))
+    }
+
+    private func contextWindow(in text: String, cursorLocation: Int, maxLength: Int) -> String? {
+        guard !text.isEmpty else { return nil }
+        let safeCursor = min(max(0, cursorLocation), text.count)
+        let beforeLength = maxLength / 2
+        let afterLength = maxLength - beforeLength
+
+        let startOffset = max(0, safeCursor - beforeLength)
+        let endOffset = min(text.count, safeCursor + afterLength)
+
+        let startIndex = text.index(text.startIndex, offsetBy: startOffset)
+        let endIndex = text.index(text.startIndex, offsetBy: endOffset)
+        let window = String(text[startIndex..<endIndex]).trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        return window.isEmpty ? nil : window
+    }
+
+    private static let commonAutoAddStopwords: Set<String> = [
+        "aber", "als", "am", "an", "auch", "auf", "aus", "bei", "bin", "bist", "da", "dann",
+        "das", "dein", "der", "des", "die", "dir", "doch", "du", "ein", "eine", "einer", "eines",
+        "er", "es", "für", "hat", "hast", "hier", "ich", "im", "in", "ist", "ja", "kein", "mit",
+        "nach", "nicht", "noch", "oder", "schon", "sein", "sind", "so", "und", "vom", "von",
+        "war", "was", "wenn", "wie", "wir", "wird", "you", "your", "the", "this", "that", "and",
+        "for", "from", "with", "have", "has", "are", "was", "were", "not", "but", "what", "when",
+        "where", "which", "who", "why", "can", "could", "would", "should", "will",
+    ]
+
     private static func appSupportDirectory() -> URL {
         let fileManager = FileManager.default
         let base =
@@ -2153,6 +2607,10 @@ final class MacAppState: ObservableObject {
 
     private static func historyStorageURL() -> URL {
         appSupportDirectory().appendingPathComponent("transcript-history.json", isDirectory: false)
+    }
+
+    private static func dictionaryStorageURL() -> URL {
+        appSupportDirectory().appendingPathComponent("personal-dictionary.json", isDirectory: false)
     }
 
     private static func auditLogStorageURL() -> URL {

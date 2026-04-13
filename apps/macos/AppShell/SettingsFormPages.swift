@@ -283,6 +283,37 @@ struct SnippetsSettingsPage: View {
     }
 }
 
+struct DictionarySettingsPage: View {
+    let newEntrySectionTitle: String
+    let reviewQueueSectionTitle: String
+    let savedTermsSectionTitle: String
+    let newEntryContent: AnyView
+    let reviewQueueContent: AnyView
+    let savedTermsContent: AnyView
+
+    var body: some View {
+        SettingsFormPage(
+            sections: [
+                SettingsPageSection(
+                    id: "new-entry",
+                    title: newEntrySectionTitle,
+                    content: newEntryContent
+                ),
+                SettingsPageSection(
+                    id: "review-queue",
+                    title: reviewQueueSectionTitle,
+                    content: reviewQueueContent
+                ),
+                SettingsPageSection(
+                    id: "saved-terms",
+                    title: savedTermsSectionTitle,
+                    content: savedTermsContent
+                ),
+            ]
+        )
+    }
+}
+
 struct AdvancedSettingsPage: View {
     let appSectionTitle: String
     let modelRuntimeSectionTitle: String

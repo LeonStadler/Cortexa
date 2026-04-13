@@ -63,6 +63,11 @@ final class DictationRuntimeServicesTests: XCTestCase {
             simulateKeypresses: false,
             restoreClipboardAfterPaste: true,
             autoSendAfterPaste: false,
+            muteMusicWhileDictating: false,
+            asrInitialPrompt: nil,
+            dictionaryTerms: [],
+            liveContextText: nil,
+            finalContextText: nil,
             aiProcessing: AIProcessingConfiguration(enabled: false, selectedModelID: nil),
             audioProcessing: AudioProcessingConfiguration(),
             soundFeedback: SoundFeedbackConfiguration()
