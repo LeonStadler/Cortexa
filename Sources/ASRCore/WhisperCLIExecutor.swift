@@ -109,7 +109,7 @@ enum WhisperCLIExecutor {
 
         if process.terminationStatus != 0 {
             debugLog?(
-                "whisper-cli.exit pid=\(process.processIdentifier) status=\(process.terminationStatus) duration=\(duration)s stderr=\(truncate(stderrText))"
+                "whisper-cli.exit pid=\(process.processIdentifier) status=\(process.terminationStatus) duration=\(duration)s stderr=\(truncatedLogText(stderrText))"
             )
             let errorText = stderrText.isEmpty ? "Unknown whisper-cli error" : stderrText
             throw NSError(
@@ -120,10 +120,10 @@ enum WhisperCLIExecutor {
         }
 
         if !stderrText.isEmpty {
-            debugLog?("whisper-cli.stderr pid=\(process.processIdentifier) text=\(truncate(stderrText))")
+            debugLog?("whisper-cli.stderr pid=\(process.processIdentifier) text=\(truncatedLogText(stderrText))")
         }
         if !stdoutText.isEmpty {
-            debugLog?("whisper-cli.stdout pid=\(process.processIdentifier) text=\(truncate(stdoutText))")
+            debugLog?("whisper-cli.stdout pid=\(process.processIdentifier) text=\(truncatedLogText(stdoutText))")
         }
         debugLog?(
             "whisper-cli.exit pid=\(process.processIdentifier) status=0 duration=\(duration)s output=\(outputBase.lastPathComponent).json"
@@ -193,5 +193,10 @@ enum WhisperCLIExecutor {
 
         let limited = String(collapsed.prefix(500))
         return limited.isEmpty ? nil : limited
+    }
+
+    private static func truncatedLogText(_ text: String, maxLength: Int = 400) -> String {
+        guard text.count > maxLength else { return text }
+        return "\(text.prefix(maxLength))…"
     }
 }

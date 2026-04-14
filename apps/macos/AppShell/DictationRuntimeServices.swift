@@ -88,7 +88,7 @@ internal struct FocusedTextTargetService {
                     ]
                 )
                 throw DictationRuntimeError.unsupportedTextTarget
-            case .unableToReadValue:
+            case .unableToReadValue, .focusedElementUnavailable:
                 AgentSessionDebugLog.append(
                     hypothesisId: "H4",
                     location: "DictationRuntime.captureFocusedTextTarget",
