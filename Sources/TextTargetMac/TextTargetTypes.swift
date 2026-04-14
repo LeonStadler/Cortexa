@@ -11,7 +11,7 @@ public struct TextTargetSnapshot {
     public let fallbackBundleIdentifier: String?
 
     #if os(macOS)
-    let element: AXUIElement
+    public let element: AXUIElement
     #endif
 
     #if os(macOS)

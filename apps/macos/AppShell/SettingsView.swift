@@ -1,152 +1,229 @@
+import AIProcessingCore
+import ASRCore
 import AppKit
-import Carbon
 import SnippetCore
 import SwiftUI
-import AIProcessingCore
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: MacAppState
-    @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.german.rawValue
+    @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.system.rawValue
 
-    @State private var selectedTab: SettingsTab = .general
     @State private var diagnosticsExpanded = false
     @State private var newSnippetTrigger: String = ""
     @State private var newSnippetReplacement: String = ""
-    @State private var newDictionaryTerm: String = ""
-    @State private var newDictionaryCategory: DictionaryTermCategory = .custom
     @State private var searchText: String = ""
+    @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
+    @State private var showsTabInfoPopover = false
+    @State private var selectedRemoteProviderPreset: AIRemoteProviderPreset?
+    @State private var addProviderDisclosureExpanded = false
+    @State private var newDictionaryTerm: String = ""
+    @State private var newDictionaryLanguageCode: String = ""
+    @State private var newDictionaryCategory: DictionaryTermCategory = .personalTerm
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     private let personalWebsiteURL = URL(string: "https://leon-stadler.com")!
 
-    private static let historyDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .medium
-        return formatter
-    }()
-
-    private var appLanguage: AppLanguage {
-        AppLanguage(rawValue: uiLanguageRaw) ?? .german
+    private var appMarketingVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
     }
 
-    private func text(_ german: String, _ english: String) -> String {
-        appLanguage.text(german, english)
+    private var appBuildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
     }
 
-    private var searchQuery: String {
-        searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    private var isSearching: Bool {
-        !searchQuery.isEmpty
-    }
-
-    private func matches(_ keywords: [String]) -> Bool {
-        guard isSearching else { return true }
-        return keywords.contains { $0.lowercased().contains(searchQuery) }
-    }
-
-    private var filteredHistory: [TranscriptHistoryEntry] {
-        guard isSearching else {
-            return appState.transcriptHistory
-        }
-        return appState.transcriptHistory.filter {
-            $0.text.lowercased().contains(searchQuery) ||
-            $0.languageCode.lowercased().contains(searchQuery) ||
-            $0.mode.lowercased().contains(searchQuery)
-        }
-    }
-
-    private var compactHistoryEntries: [TranscriptHistoryEntry] {
-        if isSearching {
-            return filteredHistory
-        }
-        return Array(filteredHistory.prefix(12))
-    }
-
-    private var filteredSnippets: [SnippetRule] {
-        guard isSearching else {
-            return appState.snippetRules
-        }
-        return appState.snippetRules.filter {
-            $0.trigger.lowercased().contains(searchQuery) ||
-            $0.replacement.lowercased().contains(searchQuery)
-        }
-    }
-
-    private var generalHasMatches: Bool {
-        matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints", "zugriff", "permissions", "berechtigungen", "mikrofon", "accessibility", "bedienungshilfen"])
-    }
-
-    private var dictationHasMatches: Bool {
+    /// Suchergebnisse: App-Metadaten nur bei passenden Suchbegriffen, damit die Liste nicht aufgebläht wird.
+    private var aboutAppMetadataMatchesSearch: Bool {
         matches([
-            "sprache",
-            "language",
-            "qualität",
-            "quality",
-            "streaming",
-            "clipboard",
-            "zwischenablage",
-            "insert",
-            "delivery",
-            "anpassung",
-            "anpassungsradius",
-            "anpassen",
-            "rückwirkung",
-            "rückwirkend",
-            "rückwirkungsbereich",
-            "rueckwirkung",
-            "rueckwirkend",
-            "rueckwirkungsbereich",
-            "rewrite",
-            "kontext",
-            "formatierung",
-            "formatting",
-            "musik",
-            "music",
-            "retroaktiv",
-            "weit zurück"
+            "version", "build", "app", "wispr", "wisprlocal", "bundle", "cfbundle",
         ])
     }
 
-    private var dictionaryHasMatches: Bool {
-        matches([
-            "dictionary",
-            "wörterbuch",
-            "woerterbuch",
-            "term",
-            "name",
-            "jargon",
-            "client",
-            "kunde",
-            "industrie",
-            "review",
-            "auto add",
-            "vorschlag"
-        ]) || !appState.dictionaryTerms.isEmpty || !appState.dictionaryReviewQueue.isEmpty
+    private var trimmedNewSnippetTrigger: String {
+        newSnippetTrigger.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedNewSnippetReplacement: String {
+        newSnippetReplacement.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var newSnippetTriggerIsDuplicate: Bool {
+        let trigger = trimmedNewSnippetTrigger
+        guard !trigger.isEmpty else { return false }
+        return appState.snippetRules.contains { rule in
+            rule.caseSensitive
+                ? rule.trigger == trigger
+                : rule.trigger.lowercased() == trigger.lowercased()
+        }
+    }
+
+    private var canCommitNewSnippet: Bool {
+        !trimmedNewSnippetTrigger.isEmpty
+            && !trimmedNewSnippetReplacement.isEmpty
+            && !newSnippetTriggerIsDuplicate
+    }
+
+    private func commitNewSnippet() {
+        guard canCommitNewSnippet else { return }
+        appState.addSnippet(
+            trigger: trimmedNewSnippetTrigger,
+            replacement: trimmedNewSnippetReplacement
+        )
+        newSnippetTrigger = ""
+        newSnippetReplacement = ""
+    }
+
+    private var trimmedNewDictionaryTerm: String {
+        newDictionaryTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedNewDictionaryLanguageCode: String {
+        newDictionaryLanguageCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canCommitNewDictionaryTerm: Bool {
+        !trimmedNewDictionaryTerm.isEmpty
+    }
+
+    private func commitNewDictionaryTerm() {
+        guard canCommitNewDictionaryTerm else { return }
+        appState.addDictionaryTerm(
+            trimmedNewDictionaryTerm,
+            category: newDictionaryCategory,
+            languageCode: trimmedNewDictionaryLanguageCode.isEmpty
+                ? nil
+                : trimmedNewDictionaryLanguageCode
+        )
+        newDictionaryTerm = ""
+        newDictionaryLanguageCode = ""
+        newDictionaryCategory = .personalTerm
+    }
+
+    private var storedLanguage: AppLanguage {
+        AppLanguage(rawValue: uiLanguageRaw) ?? .system
+    }
+
+    private var effectiveLanguage: AppLanguage {
+        storedLanguage.contentLanguage
+    }
+
+    private func text(_ german: String, _ english: String) -> String {
+        storedLanguage.text(german, english)
+    }
+
+    private func formattedHistoryDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = storedLanguage.localeForFormatting
+        formatter.dateStyle = .short
+        formatter.timeStyle = .medium
+        return formatter.string(from: date)
+    }
+
+    private var settingsSearchPresentation: SettingsSearchPresentation {
+        SettingsSearchPresentation(
+            searchText: searchText,
+            transcriptHistory: appState.transcriptHistory,
+            dictionaryTerms: appState.dictionaryTerms,
+            dictionaryReviewQueue: appState.dictionaryReviewQueue,
+            snippetRules: appState.snippetRules,
+            diagnosticsText: appState.diagnosticsText,
+            capabilitySummary: appState.capabilitySummary,
+            updaterStatusText: appState.updaterStatusText
+        )
+    }
+
+    private var isSearching: Bool {
+        settingsSearchPresentation.isSearching
+    }
+
+    /// Live rewrite / adjustment radius affects streaming partials only.
+    private var isLiveRewriteScopeApplicable: Bool {
+        appState.streamingEnabled
+            && appState.finalResultDeliveryMode != .clipboardOnly
+            && appState.dictationCapability.allowsDirectInsertion
+    }
+
+    private func matches(_ keywords: [String]) -> Bool {
+        settingsSearchPresentation.matches(keywords)
+    }
+
+    private func selectedRemoteProviderBinding<T>(
+        _ keyPath: WritableKeyPath<AIRemoteProviderConfiguration, T>,
+        default defaultValue: T
+    ) -> Binding<T> {
+        Binding(
+            get: {
+                appState.selectedRemoteProvider?[keyPath: keyPath] ?? defaultValue
+            },
+            set: { newValue in
+                appState.updateSelectedRemoteProvider { provider in
+                    provider[keyPath: keyPath] = newValue
+                }
+            }
+        )
+    }
+
+    private var filteredHistory: [TranscriptHistoryEntry] {
+        settingsSearchPresentation.filteredHistory
+    }
+
+    private var compactHistoryEntries: [TranscriptHistoryEntry] {
+        settingsSearchPresentation.compactHistoryEntries()
+    }
+
+    private var filteredSnippets: [SnippetRule] {
+        settingsSearchPresentation.filteredSnippets
+    }
+
+    private var filteredDictionaryTerms: [DictionaryTerm] {
+        settingsSearchPresentation.filteredDictionaryTerms
+    }
+
+    private var filteredDictionaryReviewQueue: [DictionaryReviewCandidate] {
+        settingsSearchPresentation.filteredDictionaryReviewQueue
+    }
+
+    private var generalHasMatches: Bool {
+        settingsSearchPresentation.generalHasMatches
+    }
+
+    private var dictationHasMatches: Bool {
+        settingsSearchPresentation.dictationHasMatches
+    }
+
+    private var speechHasMatches: Bool {
+        settingsSearchPresentation.speechHasMatches
     }
 
     private var shortcutsHasMatches: Bool {
-        matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) 
+        settingsSearchPresentation.shortcutsHasMatches
+    }
+
+    private var aiHasMatches: Bool {
+        settingsSearchPresentation.aiHasMatches
     }
 
     private var historyHasMatches: Bool {
-        matches(["history", "verlauf", "transkript", "dictation", "diktat"]) || !filteredHistory.isEmpty
+        settingsSearchPresentation.historyHasMatches
     }
 
     private var aboutHasMatches: Bool {
-        matches(["about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource", "open source", "intermedia", "design", "fotografie", "vorarlberg"])
+        settingsSearchPresentation.aboutHasMatches
     }
 
     private var snippetsHasMatches: Bool {
-        matches(["snippet", "textbaustein", "replacement", "trigger"]) || !filteredSnippets.isEmpty
+        settingsSearchPresentation.snippetsHasMatches
+    }
+
+    private var dictionaryHasMatches: Bool {
+        settingsSearchPresentation.dictionaryHasMatches
     }
 
     private var advancedHasMatches: Bool {
-        matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit"]) ||
-            appState.diagnosticsText.lowercased().contains(searchQuery) ||
-            appState.capabilitySummary.lowercased().contains(searchQuery) ||
-            appState.updaterStatusText.lowercased().contains(searchQuery)
+        settingsSearchPresentation.advancedHasMatches
+    }
+
+    private var soundHasMatches: Bool {
+        settingsSearchPresentation.soundHasMatches
     }
 
     private var compressedDiagnosticsText: String {
@@ -158,323 +235,455 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
-                List(selection: $selectedTab) {
-                    Section {
-                        ForEach(SettingsTab.allCases, id: \.self) { tab in
-                            Label(tab.title(language: appLanguage), systemImage: tab.symbolName)
-                                .tag(tab)
-                                .font(.system(size: 14, weight: .medium))
-                        }
-                    }
-                }
-                .listStyle(.sidebar)
-                .environment(\.defaultMinListRowHeight, 32)
-                .scrollContentBackground(.hidden)
-                .safeAreaPadding(.top, 8)
-                .padding(.horizontal, 6)
+        SettingsViewShell(
+            splitColumnVisibility: $splitColumnVisibility,
+            showsTabInfoPopover: $showsTabInfoPopover,
+            searchText: $searchText,
+            storedLanguage: storedLanguage,
+            selectedTabSelection: selectedTabSelection,
+            currentSelectedTab: currentSelectedTab,
+            selectedForm: AnyView(selectedForm),
+            searchResultsForm: AnyView(searchResultsForm),
+            accessibilityReduceMotion: accessibilityReduceMotion,
+            onRefreshPermissionStates: {
+                appState.refreshPermissionStates()
             }
-            .frame(width: 260)
-            .background(.regularMaterial)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 14) {
-                Text(isSearching ? text("Suchergebnisse", "Search Results") : selectedTab.title(language: appLanguage))
-                    .font(.title2.weight(.semibold))
-                    .frame(maxWidth: 780, alignment: .leading)
-
-                NativeSearchField(
-                    placeholder: text("Einstellungen durchsuchen", "Search settings"),
-                    text: $searchText
-                )
-                .frame(width: 360)
-                .frame(maxWidth: 780, alignment: .leading)
-
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.62))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-
-                    Group {
-                        if isSearching {
-                            searchResultsForm
-                        } else {
-                            selectedForm
-                        }
-                    }
-                    .padding(8)
-                }
-                .frame(maxWidth: 780, maxHeight: .infinity, alignment: .topLeading)
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .environment(\.locale, appLanguage.locale)
-        .frame(width: 1000, height: 650)
-        .controlSize(.regular)
-        .background(.ultraThinMaterial)
-    }
-
-    private var generalForm: some View {
-        Form {
-            Section(text("App", "App")) {
-                generalAppearanceContent
-            }
-            Section(text("Zugriff", "Access")) {
-                generalPermissionsContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
+        )
     }
 
     @ViewBuilder
     private var selectedForm: some View {
-        switch selectedTab {
+        switch currentSelectedTab {
         case .general:
-            generalForm
+            GeneralSettingsPage(
+                appSectionTitle: text("App", "App"),
+                menuBarSectionTitle: text("Menüleiste", "Menu bar"),
+                accessSectionTitle: text("Zugriff", "Access"),
+                appContent: erasedView { generalAppearanceContent },
+                menuBarContent: erasedView { generalMenuBarContent },
+                accessContent: erasedView { generalPermissionsContent }
+            )
+        case .speech:
+            SpeechSettingsPage(
+                quickExplainerSectionTitle: text("Kurz erklärt", "Quick explainer"),
+                providersSectionTitle: text("Anbieter", "Providers"),
+                modelSectionTitle: text("Modell", "Model"),
+                languageSectionTitle: text("Sprache", "Language"),
+                qualitySectionTitle: text("Qualität", "Quality"),
+                translationSectionTitle: text("Übersetzung", "Translation"),
+                installedModelsSectionTitle: text("Installierte Modelle", "Installed models"),
+                overviewContent: erasedView { speechOverviewContent },
+                providerContent: erasedView { speechProviderContent },
+                modelSelectionContent: erasedView { speechModelSelectionContent },
+                languageContent: erasedView { speechLanguageContent },
+                qualityContent: erasedView { speechQualityContent },
+                translationContent: erasedView { translationContent },
+                installedModelsContent: erasedView { installedSpeechModelsContent }
+            )
         case .dictation:
-            dictationForm
-        case .dictionary:
-            dictionaryForm
+            DictationSettingsPage(
+                liveRewritingSectionTitle: text("Live-Anpassung", "Live rewriting"),
+                textInputSectionTitle: text("Texteingabe", "Text input"),
+                liveRewriteContent: erasedView { liveRewriteContent },
+                deliveryContent: erasedView { dictationDeliveryContent }
+            )
+        case .sound:
+            SoundSettingsPage(
+                inputSectionTitle: text("Eingang", "Input"),
+                feedbackSectionTitle: text("Rückmeldung", "Feedback"),
+                inputContent: erasedView { soundInputContent },
+                feedbackContent: erasedView { soundFeedbackContent }
+            )
         case .shortcuts:
-            shortcutsForm
+            ShortcutsSettingsPage(
+                startStopSectionTitle: text("Start / Stopp", "Start / Stop"),
+                holdSectionTitle: text("Halten zum Diktieren", "Hold to Dictate"),
+                cancelSectionTitle: text("Abbrechen", "Cancel"),
+                modeSwitchSectionTitle: text("Moduswechsel", "Mode switch"),
+                startStopContent: erasedView { startStopShortcutContent },
+                holdContent: erasedView { holdShortcutContent },
+                cancelContent: erasedView { cancelShortcutContent },
+                modeSwitchContent: erasedView { modeSwitchShortcutContent }
+            )
+        case .ai:
+            AISettingsPage(
+                processingSectionTitle: text("Verarbeitung", "Processing"),
+                providersSectionTitle: text("Anbieter", "Providers"),
+                modelsSectionTitle: text("Modelle", "Models"),
+                processingContent: erasedView { aiProcessingContent },
+                providerContent: erasedView { aiProviderContent },
+                modelContent: erasedView { aiModelContent }
+            )
         case .history:
-            historyForm
+            HistorySettingsPage(
+                actionsSectionTitle: text("Aktionen", "Actions"),
+                retentionSectionTitle: text("Aufbewahrung", "Retention"),
+                entriesSectionTitle: text("Transkriptverlauf", "Transcript History"),
+                actionsContent: erasedView { historyActionContent },
+                retentionContent: erasedView { historyRetentionContent },
+                entriesContent: erasedView { historyEntriesContent }
+            )
         case .about:
-            aboutForm
+            AboutSettingsPage(
+                aboutMeSectionTitle: text("Über mich", "About me"),
+                changelogSectionTitle: text("Changelog", "Changelog"),
+                supportSectionTitle: text("Support", "Support"),
+                developerContent: erasedView { aboutDeveloperRows },
+                changelogContent: erasedView { aboutChangelogContent },
+                supportContent: appState.isLicenseUIEnabledForDevelopment
+                    ? erasedView { aboutSupportContent } : nil
+            )
+        case .dictionary:
+            DictionarySettingsPage(
+                newEntrySectionTitle: text("Neuer Begriff", "New term"),
+                reviewQueueSectionTitle: text("Vorschläge", "Review queue"),
+                savedTermsSectionTitle: text("Gespeicherte Begriffe", "Saved terms"),
+                newEntryContent: erasedView { dictionaryNewEntryRows },
+                reviewQueueContent: erasedView { dictionaryReviewQueueRows },
+                savedTermsContent: erasedView { dictionarySavedRows }
+            )
         case .snippets:
-            snippetsForm
+            SnippetsSettingsPage(
+                newSnippetSectionTitle: text("Neues Snippet", "New snippet"),
+                importExportSectionTitle: text("Import und Export", "Import and export"),
+                savedSnippetsSectionTitle: text("Gespeicherte Snippets", "Saved snippets"),
+                newSnippetContent: erasedView { snippetNewEntryRows },
+                importExportContent: erasedView { snippetImportExportRows },
+                savedContent: erasedView { snippetSavedRows }
+            )
         case .advanced:
-            advancedForm
+            AdvancedSettingsPage(
+                appSectionTitle: text("App", "App"),
+                modelRuntimeSectionTitle: text("Modelllaufzeit", "Model runtime"),
+                storageLocationSectionTitle: text("Speicherort", "Storage location"),
+                updatesSectionTitle: text("Updates", "Updates"),
+                diagnosticsSectionTitle: text("Diagnose", "Diagnostics"),
+                licenseSectionTitle: text("Lizenz", "License"),
+                overviewContent: erasedView { advancedOverviewContent },
+                appInfoContent: erasedView { aboutAppInfoRows },
+                runtimeContent: erasedView { voiceModelRuntimeContent },
+                storageContent: erasedView { advancedStorageContent },
+                updatesContent: erasedView { updatesContent },
+                diagnosticsContent: erasedView { diagnosticsContent },
+                licenseContent: appState.isLicenseUIEnabledForDevelopment
+                    ? erasedView { licenseContent } : nil
+            )
         }
     }
 
-    private var dictationForm: some View {
-        Form {
-            Section(text("Erkennung", "Recognition")) {
-                dictationRecognitionContent
-            }
-            Section(text("Formatierung", "Formatting")) {
-                formattingContent
-            }
-            Section(text("Live-Anpassung", "Live rewriting")) {
-                liveRewriteContent
-            }
-            Section(text("Ablage", "Delivery")) {
-                dictationDeliveryContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var shortcutsForm: some View {
-        Form {
-            Section(text("Start / Stopp", "Start / Stop")) {
-                startStopShortcutContent
-            }
-            Section(text("Halten zum Diktieren", "Hold to Dictate")) {
-                holdShortcutContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var dictionaryForm: some View {
-        Form {
-            Section(text("Dictionary", "Dictionary")) {
-                dictionaryManagementContent
-            }
-            Section(text("Review Queue", "Review Queue")) {
-                dictionaryQueueContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var historyForm: some View {
-        Form {
-            Section(text("Aktionen", "Actions")) {
-                historyActionContent
-            }
-            Section(text("Transkriptverlauf", "Transcript History")) {
-                historyEntriesContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
-
-    private var aboutForm: some View {
-        Form {
-            Section(text("Über mich", "About me")) {
-                aboutProfileContent
-            }
-            if appState.isLicenseUIEnabledForDevelopment {
-                Section(text("Support", "Support")) {
-                    aboutSupportContent
+    private var selectedTabSelection: Binding<SettingsTab> {
+        Binding(
+            get: { appState.selectedSettingsTab },
+            set: { newValue in
+                // List(selection:) schreibt während View-Updates; @Published sofort zu setzen löst
+                // „Publishing changes from within view updates“ aus.
+                DispatchQueue.main.async {
+                    appState.selectedSettingsTab = newValue
                 }
             }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
+        )
     }
 
-    private var snippetsForm: some View {
-        Form {
-            Section(text("Snippets", "Snippets")) {
-                snippetsContent
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
+    private var currentSelectedTab: SettingsTab {
+        appState.selectedSettingsTab
     }
 
-    private var advancedForm: some View {
-        Form {
-            Section {
-                advancedOverviewContent
-            }
-            Section(text("Updates", "Updates")) {
-                updatesContent
-            }
-            Section(text("Diagnose", "Diagnostics")) {
-                diagnosticsContent
-            }
-            if appState.isLicenseUIEnabledForDevelopment {
-                Section(text("Lizenz", "License")) {
-                    licenseContent
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
-    }
+    private var searchResultsSections: [SettingsPageSection] {
+        var sections: [SettingsPageSection] = []
 
-    private var searchResultsForm: some View {
-        Form {
-            if generalHasMatches {
-                Section(text("Allgemein", "General")) {
+        if generalHasMatches {
+            sections.append(
+                pageSection(id: "general", title: text("Allgemein", "General")) {
                     generalAppearanceContent
+                    generalMenuBarContent
                     generalPermissionsContent
                 }
-            }
+            )
+        }
 
-            if dictationHasMatches {
-                Section(text("Diktat", "Dictation")) {
-                    dictationRecognitionContent
+        if dictationHasMatches {
+            sections.append(
+                pageSection(id: "dictation", title: text("Diktat", "Dictation")) {
                     liveRewriteContent
                     dictationDeliveryContent
                 }
-            }
+            )
+        }
 
-            if dictionaryHasMatches {
-                Section(text("Dictionary", "Dictionary")) {
-                    dictionaryManagementContent
-                    dictionaryQueueContent
+        if speechHasMatches {
+            sections.append(
+                pageSection(id: "speech", title: text("Speech", "Speech")) {
+                    speechOverviewContent
+                    speechProviderContent
+                    speechModelSelectionContent
+                    speechLanguageContent
+                    speechQualityContent
+                    translationContent
+                    installedSpeechModelsContent
                 }
-            }
+            )
+        }
 
-            if shortcutsHasMatches {
-                Section(text("Kurzbefehle", "Shortcuts")) {
+        if soundHasMatches {
+            sections.append(
+                pageSection(id: "sound", title: text("Sound", "Sound")) {
+                    soundInputContent
+                    soundFeedbackContent
+                }
+            )
+        }
+
+        if shortcutsHasMatches {
+            sections.append(
+                pageSection(id: "shortcuts", title: text("Kurzbefehle", "Shortcuts")) {
                     startStopShortcutContent
                     holdShortcutContent
+                    cancelShortcutContent
+                    modeSwitchShortcutContent
                 }
-            }
+            )
+        }
 
-            if historyHasMatches {
-                Section(text("Verlauf", "History")) {
+        if aiHasMatches {
+            sections.append(
+                pageSection(id: "ai", title: text("AI", "AI")) {
+                    aiProcessingContent
+                    aiProviderContent
+                    aiModelContent
+                }
+            )
+        }
+
+        if historyHasMatches {
+            sections.append(
+                pageSection(id: "history", title: text("Verlauf", "History")) {
                     historyActionContent
+                    historyRetentionContent
                     historyEntriesContent
                 }
-            }
+            )
+        }
 
-            if aboutHasMatches {
-                Section(text("About", "About")) {
-                    aboutProfileContent
+        if aboutHasMatches {
+            sections.append(
+                pageSection(id: "about", title: text("About", "About")) {
+                    aboutDeveloperRows
+                    aboutChangelogContent
                     if appState.isLicenseUIEnabledForDevelopment {
                         aboutSupportContent
                     }
                 }
-            }
+            )
+        }
 
-            if snippetsHasMatches {
-                Section(text("Snippets", "Snippets")) {
-                    snippetsContent
+        if snippetsHasMatches {
+            sections.append(
+                pageSection(id: "snippets", title: text("Snippets", "Snippets")) {
+                    snippetNewEntryRows
+                    snippetImportExportRows
+                    snippetSavedRows
                 }
-            }
+            )
+        }
 
-            if advancedHasMatches {
-                Section(text("Erweitert", "Advanced")) {
+        if dictionaryHasMatches {
+            sections.append(
+                pageSection(id: "dictionary", title: text("Dictionary", "Dictionary")) {
+                    dictionaryNewEntryRows
+                    dictionaryReviewQueueRows
+                    dictionarySavedRows
+                }
+            )
+        }
+
+        if advancedHasMatches {
+            sections.append(
+                pageSection(id: "advanced", title: text("Erweitert", "Advanced")) {
+                    if aboutAppMetadataMatchesSearch {
+                        aboutAppInfoRows
+                    }
                     advancedOverviewContent
+                    voiceModelRuntimeContent
                     updatesContent
                     diagnosticsContent
                     if appState.isLicenseUIEnabledForDevelopment {
                         licenseContent
                     }
                 }
-            }
-
-            if !generalHasMatches && !dictationHasMatches && !dictionaryHasMatches && !shortcutsHasMatches && !historyHasMatches && !aboutHasMatches && !snippetsHasMatches && !advancedHasMatches {
-                Section {
-                    Text(text("Keine passenden Einstellungen gefunden.", "No matching settings found."))
-                        .foregroundStyle(.secondary)
-                }
-            }
+            )
         }
-        .formStyle(.grouped)
-        .frame(maxWidth: 760, alignment: .leading)
+
+        if sections.isEmpty {
+            sections.append(
+                pageSection(id: "empty") {
+                    Text(
+                        text(
+                            "Keine passenden Einstellungen gefunden.",
+                            "No matching settings found."
+                        )
+                    )
+                    .foregroundStyle(.secondary)
+                }
+            )
+        }
+
+        return sections
+    }
+
+    private var searchResultsForm: some View {
+        SearchResultsSettingsPage(sections: searchResultsSections)
+    }
+
+    private func pageSection<Content: View>(
+        id: String,
+        title: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> SettingsPageSection {
+        SettingsPageSection(id: id, title: title, content: erasedView(content))
+    }
+
+    private func erasedView<Content: View>(@ViewBuilder _ content: () -> Content) -> AnyView {
+        AnyView(content())
     }
 
     @ViewBuilder
     private var generalAppearanceContent: some View {
-        if matches(["language", "sprache", "menüleiste", "menu bar", "shortcut hints"]) {
-            LabeledContent(text("App-Sprache", "App language")) {
+        if matches(["language", "sprache", "dock", "launch on login", "updates"]) {
+            LabeledContent {
                 Picker(text("App-Sprache", "App Language"), selection: $uiLanguageRaw) {
                     ForEach(AppLanguage.allCases) { language in
-                        Text(language.displayName).tag(language.rawValue)
+                        Text(language.pickerDisplayName(uiContentLanguage: effectiveLanguage)).tag(
+                            language.rawValue)
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 170)
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 170)
+            } label: {
+                SettingsFieldLabel(title: text("App-Sprache", "App language"))
             }
 
-            Toggle(text("Kurzbefehl-Hinweise im Menü anzeigen", "Show shortcut hints in menu"), isOn: $appState.showMenuBarShortcutHints)
+            Toggle(text("Im Dock anzeigen", "Show in Dock"), isOn: $appState.showInDock)
 
-            Text(text(
-                "Diese Option zeigt Tastenkombinationen direkt neben passenden Einträgen im Dropdown-Menü an.",
-                "This option shows keyboard shortcuts next to matching items in the dropdown menu."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            Toggle(isOn: $appState.launchOnLoginEnabled) {
+                SettingsFieldLabel(
+                    title: text("Beim Anmelden starten", "Launch on login"),
+                    helpText: text(
+                        "Startet WisprLocal automatisch nach der macOS-Anmeldung.",
+                        "Starts WisprLocal automatically after you sign in to macOS."
+                    )
+                )
+            }
+
+            Toggle(isOn: $appState.automaticallyCheckForUpdates) {
+                SettingsFieldLabel(
+                    title: text("Updates automatisch prüfen", "Automatically check for updates"),
+                    helpText: text(
+                        "Prüft im Hintergrund regelmäßig über Sparkle, ob eine neuere Version verfügbar ist.",
+                        "Checks in the background via Sparkle to see whether a newer version is available."
+                    )
+                )
+            }
         }
     }
 
     @ViewBuilder
-    private var advancedOverviewContent: some View {
-        if matches(["update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability", "audit"]) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(text(
-                    "Hier bündelt WisprLocal alles, was eher administrativ ist: Update-Status, technische Diagnose und interne Prüfpfade.",
-                    "This section groups the more administrative parts of WisprLocal: update status, technical diagnostics, and internal inspection paths."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+    private var generalMenuBarContent: some View {
+        if matches(["menüleiste", "menu bar", "shortcut hints", "compact", "kompakt"]) {
+            Toggle(isOn: $appState.compactMenuBarDesign) {
+                SettingsFieldLabel(
+                    title: text("Kompaktes Menüleisten-Design", "Compact menu bar design"),
+                    helpText: text(
+                        "Macht das Menüleisten-Popup schmaler und ruhiger, lässt aber Verlauf, Kopieren und Trennlinien sichtbar.",
+                        "Makes the menu bar popup narrower and calmer while keeping history, copy actions, and separators visible."
+                    )
+                )
+            }
 
-                Text(text(
-                    "Updates laufen im Hintergrund über Sparkle; manuelle Checks bleiben hier erreichbar.",
-                    "Updates run in the background through Sparkle; manual checks remain available here."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Toggle(isOn: $appState.showMenuBarShortcutHints) {
+                SettingsFieldLabel(
+                    title: text(
+                        "Kurzbefehl-Hinweise im Menü anzeigen", "Show shortcut hints in menu"),
+                    helpText: text(
+                        "Zeigt Tastenkombinationen direkt neben passenden Einträgen im Menüleisten-Menü an.",
+                        "Shows keyboard shortcuts directly next to matching menu bar items."
+                    )
+                )
+            }
+        }
+    }
+
+    private var advancedOverviewContent: some View {
+        Text(
+            text(
+                "Hier liegen Laufzeitoptionen, Speicherort, Updates und technische Diagnose. Nur ändern, wenn du weißt, warum du es brauchst.",
+                "Model runtime, storage location, updates, and technical diagnostics live here. Change these only when you know why you need them."
+            )
+        )
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var advancedStorageContent: some View {
+        if matches([
+            "storage", "folder", "app support", "speicherort", "datenordner", "app folder", "logs",
+            "protokolle",
+        ]) {
+            LabeledContent {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(appState.appSupportDirectoryPathText)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+
+                    Button(text("Ordner im Finder öffnen", "Open folder in Finder")) {
+                        appState.revealAppDataFolder()
+                    }
+                    .liquidGlassSecondaryButtonStyle()
+                }
+            } label: {
+                SettingsFieldLabel(
+                    title: text("App-Datenordner", "App data folder"),
+                    helpText: text(
+                        "Hier liegen Verlauf, Snippets, Logs und weitere lokale App-Daten.",
+                        "This folder stores history, snippets, logs, and other local app data."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var voiceModelRuntimeContent: some View {
+        if matches([
+            "voice", "sprachmodell", "model runtime", "runtime", "duration", "dauer", "warm",
+            "speicher halten", "modelllaufzeit",
+        ]) {
+            LabeledContent {
+                Picker(
+                    text("Sprachmodell im Speicher halten", "Keep voice model in memory"),
+                    selection: $appState.voiceModelActiveDuration
+                ) {
+                    ForEach(VoiceModelActiveDuration.allCases) { duration in
+                        Text(
+                            duration.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        ).tag(duration)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 220)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Sprachmodell im Speicher halten", "Keep voice model in memory"),
+                    helpText: text(
+                        "Längere Laufzeiten machen den nächsten Start schneller, kürzere sparen Speicher.",
+                        "Longer durations make the next start faster, shorter ones save memory."
+                    )
+                )
             }
         }
     }
@@ -483,18 +692,11 @@ struct SettingsView: View {
     private var updatesContent: some View {
         if matches(["update", "updates", "aktualisierung"]) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(text(
-                    "WisprLocal nutzt Sparkle direkt in der App und sucht automatisch im Hintergrund nach Aktualisierungen.",
-                    "WisprLocal uses Sparkle directly inside the app and checks for updates automatically in the background."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
                 HStack(alignment: .center, spacing: 10) {
                     Button(text("Nach Updates suchen", "Check for updates")) {
                         appState.checkForUpdates()
                     }
-                    .buttonStyle(.bordered)
+                    .liquidGlassSecondaryButtonStyle()
                     .disabled(!appState.updaterConfigured)
 
                     if !appState.updaterStatusText.isEmpty {
@@ -516,72 +718,73 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var aboutProfileContent: some View {
-        if matches(["about", "über", "ueber", "leon", "stadler", "website", "webseite", "opensource", "open source", "intermedia", "design", "fotografie", "vorarlberg"]) {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .center, spacing: 14) {
-                    ZStack {
-                        Circle()
-                            .fill(.quaternary.opacity(0.55))
-                            .frame(width: 52, height: 52)
+    private var aboutAppInfoRows: some View {
+        LabeledContent(text("App", "App")) {
+            Text("WisprLocal")
+        }
+        LabeledContent(text("Version", "Version")) {
+            Text("\(appMarketingVersion) (\(appBuildNumber))")
+                .monospacedDigit()
+                .textSelection(.enabled)
+        }
+    }
 
-                        Text("LS")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                    }
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Leon Stadler")
-                            .font(.title3.weight(.semibold))
-
-                        Text(text(
-                            "Kommunikationsdesigner, Entwickler und Intermedia-Student",
-                            "Communication designer, developer, and Intermedia student"
-                        ))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                Text(text(
-                    "Ich bin in München aufgewachsen, lebe heute am Bodensee und arbeite an zeitgemäßen digitalen Produkten zwischen Design, Technik und kreativer Problemlösung. WisprLocal ist aus genau diesem Zusammenspiel entstanden: eine lokale Offline-Diktierlösung für den Mac, die ruhig, nativ und alltagstauglich wirkt.",
-                    "I grew up in Munich, now live near Lake Constance, and work on contemporary digital products across design, technology, and creative problem-solving. WisprLocal grew out of exactly that intersection: a local offline dictation tool for the Mac that aims to feel calm, native, and genuinely useful in everyday work."
-                ))
-                .fixedSize(horizontal: false, vertical: true)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 10) {
-                    AboutFactRow(
-                        title: text("Schwerpunkte", "Focus"),
-                        detail: text("Webdesign, UX/UI, Prototyping, Fotografie und kreative technische Systeme", "Web design, UX/UI, prototyping, photography, and creative technical systems")
-                    )
-                    AboutFactRow(
-                        title: text("Standort", "Location"),
-                        detail: text("Bodensee / Dornbirn, Vorarlberg", "Lake Constance / Dornbirn, Vorarlberg")
-                    )
-                    AboutFactRow(
-                        title: text("Projektgedanke", "Project intent"),
-                        detail: text("Lokale, datensparsame Tools mit klarer nativer Benutzerführung", "Local, privacy-conscious tools with clear native user experience")
-                    )
-                }
-
-                Link(destination: personalWebsiteURL) {
-                    Label(text("Mehr über mich", "Learn more about me"), systemImage: "globe")
-                }
-                .buttonStyle(.bordered)
+    @ViewBuilder
+    private var aboutDeveloperRows: some View {
+        if matches([
+            "about", "über", "ueber", "leon", "stadler", "website", "webseite", "proprietär",
+            "proprietary", "lizenz", "intermedia", "design", "fotografie", "vorarlberg",
+        ]) {
+            LabeledContent(text("Entwickler", "Developer")) {
+                Text("Leon Stadler")
             }
-            .padding(.vertical, 4)
+            Text(
+                text(
+                    "Ich bin in München aufgewachsen, lebe heute am Bodensee und arbeite an digitalen Produkten, die Design, Technik und Alltag sinnvoll verbinden. Schwerpunkte sind Webdesign, UX/UI, Prototyping und kreative technische Systeme — mit einem starken Blick auf ruhige, native Oberflächen.",
+                    "I grew up in Munich and now live near Lake Constance, building digital products that connect design, technology, and everyday work. My focus is web design, UX/UI, prototyping, and creative technical systems — with a strong preference for calm, native-feeling interfaces."
+                )
+            )
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Text(
+                text(
+                    "WisprLocal ist daraus entstanden: eine lokale, datensparsame Diktierlösung für den Mac, die sich nicht aufdrängt, sondern zuverlässig im Hintergrund mitarbeitet.",
+                    "WisprLocal grew out of that mindset: a local, privacy-conscious dictation tool for the Mac that stays out of the way while remaining dependable."
+                )
+            )
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Link(destination: personalWebsiteURL) {
+                Text(text("Website besuchen", "Visit website"))
+            }
+            .liquidGlassPrimaryButtonStyle()
+        }
+    }
+
+    @ViewBuilder
+    private var aboutChangelogContent: some View {
+        if matches([
+            "changelog", "neuigkeiten", "release", "release notes", "änderungen", "aenderungen",
+            "features", "fixes",
+        ]) {
+            ChangelogSectionView(
+                entries: AppChangelogCatalog.latestEntries, language: effectiveLanguage)
         }
     }
 
     @ViewBuilder
     private var aboutSupportContent: some View {
         if matches(["support", "spenden", "donate", "website", "webseite"]) {
-            Text(text(
-                "Die App bleibt offen und frei nutzbar. Wenn du das Projekt unterstützen möchtest, findest du über die Website künftig weitere Möglichkeiten dafür.",
-                "The app stays open and free to use. If you want to support the project, the website will later be the place for additional support options."
-            ))
+            Text(
+                text(
+                    "WisprLocal ist proprietäre Software und wird nicht als Open Source veröffentlicht. Support, Lizenzierung und Hintergrund zum Projekt findest du auf der Website.",
+                    "WisprLocal is proprietary software and is not distributed as open source. Visit the website for support, licensing, and project information."
+                )
+            )
             .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -589,35 +792,66 @@ struct SettingsView: View {
             Link(destination: personalWebsiteURL) {
                 Label(text("Projekt unterstützen", "Support the project"), systemImage: "heart")
             }
-            .buttonStyle(.borderedProminent)
+            .liquidGlassPrimaryButtonStyle()
         }
     }
 
     @ViewBuilder
     private var generalPermissionsContent: some View {
-        if matches(["mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen"]) {
+        if matches([
+            "mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen",
+        ]) {
+            Text(
+                text(
+                    "Freigaben kannst du hier prüfen. „Freigabe anfragen“ öffnet den Systemdialog; „Öffnen“ führt zu den Datenschutz-Einstellungen. Direkt nach einem App-Neustart kann der Status einmal kurz hinterherhängen – dann erneut öffnen oder kurz warten. Falls Bedienungshilfen nach einem Rebuild weiter blockieren, in den Systemeinstellungen WisprLocalMac einmal entfernen und neu hinzufügen.",
+                    "You can verify access here. “Request access” shows the system prompt; “Open” goes to Privacy settings. Right after launching the app, the status row can briefly lag—open again or wait a moment."
+                )
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
             PermissionStatusRow(
                 title: text("Mikrofon", "Microphone"),
                 status: appState.microphonePermissionStatus,
-                detail: text("Erforderlich für die Audioaufnahme.", "Required for audio capture.")
+                detail: text("Erforderlich für die Audioaufnahme.", "Required for audio capture."),
+                actionTitle: appState.microphonePermissionStatus == .notDetermined
+                    ? text("Freigabe anfragen", "Request access")
+                    : text("Öffnen", "Open"),
+                actionHint: appState.microphonePermissionStatus == .notDetermined
+                    ? text("Systemdialog zur Mikrofonfreigabe", "System prompt for microphone access")
+                    : text("Mikrofon-Einstellungen öffnen", "Open microphone settings"),
+                action: {
+                    if appState.microphonePermissionStatus == .notDetermined {
+                        appState.requestMicrophoneAccessFromSettings()
+                    } else {
+                        appState.openMicrophoneSettings()
+                    }
+                }
             )
 
             PermissionStatusRow(
                 title: text("Bedienungshilfen", "Accessibility"),
                 status: appState.accessibilityPermissionStatus,
-                detail: text("Erforderlich zum Einfügen in das aktive Textfeld.", "Required to insert into the active text field.")
+                detail: text(
+                    "Erforderlich zum Einfügen in das aktive Textfeld.",
+                    "Required to insert into the active text field."),
+                actionTitle: appState.accessibilityPermissionStatus != .granted
+                    ? text("Freigabe anfragen", "Request access")
+                    : text("Öffnen", "Open"),
+                actionHint: appState.accessibilityPermissionStatus != .granted
+                    ? text(
+                        "Systemdialog zu Bedienungshilfen",
+                        "System prompt for Accessibility")
+                    : text("Bedienungshilfen öffnen", "Open accessibility settings"),
+                action: {
+                    if appState.accessibilityPermissionStatus != .granted {
+                        appState.requestAccessibilityAccessFromSettings()
+                    } else {
+                        appState.openAccessibilitySettings()
+                    }
+                }
             )
-
-            HStack(alignment: .center, spacing: 10) {
-                Button(text("Mikrofon öffnen", "Open microphone settings")) {
-                    appState.openMicrophoneSettings()
-                }
-                .buttonStyle(.bordered)
-                Button(text("Bedienungshilfen öffnen", "Open accessibility settings")) {
-                    appState.openAccessibilitySettings()
-                }
-                .buttonStyle(.bordered)
-            }
 
             Text(appState.dictationCapability.localizedSummary)
                 .font(.footnote)
@@ -626,71 +860,384 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var dictationRecognitionContent: some View {
-        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert"]) {
-            LabeledContent(text("Diktatsprache", "Dictation language")) {
-                Picker(text("Diktatsprache", "Dictation language"), selection: $appState.selectedLanguage) {
-                    ForEach(DictationLanguage.allCases) { language in
-                        Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
+    private var soundInputContent: some View {
+        if soundHasMatches {
+            Toggle(isOn: $appState.automaticMicrophoneGainBoost) {
+                SettingsFieldLabel(
+                    title: text("Leise Eingänge verstärken", "Boost quiet input"),
+                    helpText: text(
+                        "Hebt ein schwaches Eingangssignal an, bevor die Erkennung startet. Das ändert nicht die systemweite Mikrofonlautstärke.",
+                        "Boosts a weak input signal before recognition begins. This does not change the system-wide microphone volume."
+                    )
+                )
+            }
+            Toggle(isOn: $appState.silenceRemovalEnabled) {
+                SettingsFieldLabel(
+                    title: text("Stille entfernen", "Silence removal"),
+                    helpText: text(
+                        "Filtert ruhige Abschnitte und schwache Störgeräusche vor der Erkennung. Das hilft besonders bei Live-Einfügen gegen Atem-, Raum- oder Tastaturreste.",
+                        "Filters quiet passages and weak background noise before recognition. This is especially useful during live insertion against breathing, room, or keyboard residue."
+                    )
+                )
+            }
+
+            LabeledContent {
+                VStack(alignment: .trailing, spacing: 6) {
+                    Slider(value: $appState.noiseSuppressionLevel, in: 0...1, step: 0.05)
+                        .frame(maxWidth: 300)
+                    Text(
+                        text("Filterstärke", "Filter strength")
+                            + ": \(Int((appState.noiseSuppressionLevel * 100).rounded()))%"
+                    )
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 300, alignment: .trailing)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Störgeräusche filtern", "Filter background noise"),
+                    helpText: text(
+                        "Steuert, wie aggressiv leise Nebengeräusche und kurze Nicht-Sprachsignale unterdrückt werden. Höher hilft bei Husten, Atemgeräuschen oder Raumrauschen, kann aber sehr leise Sprache früher abschneiden.",
+                        "Controls how aggressively quiet background noise and short non-speech signals are suppressed. Higher values help with coughing, breathing, or room noise, but may cut very quiet speech earlier."
+                    )
+                )
+            }
+            .disabled(!appState.silenceRemovalEnabled)
+
+            Toggle(isOn: $appState.dynamicNormalizationEnabled) {
+                SettingsFieldLabel(
+                    title: text("Dynamische Normalisierung", "Dynamic normalization"),
+                    helpText: text(
+                        "Gleicht Lautstärkeunterschiede innerhalb des laufenden Signals aus. Anders als die Eingangsverstärkung reagiert diese Option auf wechselnde Pegel während der Aufnahme.",
+                        "Balances loudness differences inside the live signal. Unlike quiet-input boosting, this reacts to changing levels while recording."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var soundFeedbackContent: some View {
+        if soundHasMatches {
+            Toggle(isOn: $appState.soundEffectsEnabled) {
+                SettingsFieldLabel(
+                    title: text("Soundeffekte aktivieren", "Enable sound effects"),
+                    helpText: text(
+                        "Spielt kurze Statussignale beim Starten, Stoppen oder bei wichtigen Zustandswechseln ab.",
+                        "Plays short status cues when starting, stopping, or when important states change."
+                    )
+                )
+            }
+
+            LabeledContent {
+                VStack(alignment: .trailing, spacing: 6) {
+                    Slider(value: $appState.soundEffectsVolume, in: 0...100, step: 5)
+                        .frame(maxWidth: 300)
+                    Text(
+                        text("Lautstärke", "Volume")
+                            + ": \(Int(appState.soundEffectsVolume.rounded()))%"
+                    )
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 300, alignment: .trailing)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Lautstärke", "Volume"),
+                    helpText: text(
+                        "Regelt nur die internen App-Sounds, nicht die Systemlautstärke.",
+                        "Controls only the app's internal sounds, not the system volume."
+                    )
+                )
+            }
+            .disabled(!appState.soundEffectsEnabled)
+        }
+    }
+
+    @ViewBuilder
+    private var speechProviderContent: some View {
+        if speechHasMatches {
+            LabeledContent {
+                Picker(
+                    text("Voice-Anbieter", "Voice provider"),
+                    selection: $appState.selectedVoiceProviderID
+                ) {
+                    ForEach(appState.voiceProviders) { provider in
+                        Text(provider.displayName).tag(provider.id)
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 170)
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 240)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Voice-Anbieter", "Voice provider"),
+                    helpText: text(
+                        "V1 bleibt komplett lokal. Zusätzliche Anbieter erscheinen nur, wenn ihr lokales Backend wirklich vorhanden ist.",
+                        "V1 stays fully local. Additional providers only appear when their local backend is actually available."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var speechOverviewContent: some View {
+        if speechHasMatches {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(
+                    text(
+                        "Modell, Sprache und Übersetzung sind getrennt. Das Modell bestimmt Größe, Tempo und Fähigkeiten. Die Sprache begrenzt nur die sinnvollen Eingaben.",
+                        "Model, language, and translation are separate. The model defines size, speed, and capabilities. Language only limits the sensible input choices."
+                    )
+                )
+                .font(.subheadline)
+
+                Text(
+                    text(
+                        "Qualität steuert Beam-Search, Chunking und Threads. Sie ändert nicht mehr das eigentliche Modell.",
+                        "Quality controls beam search, chunking, and threads. It no longer changes the actual model."
+                    )
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var speechModelSelectionContent: some View {
+        if speechHasMatches {
+            LabeledContent {
+                Picker(
+                    text("Voice-Modell", "Voice model"), selection: $appState.selectedVoiceModelID
+                ) {
+                    ForEach(appState.visibleVoiceModels) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 240)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Voice-Modell", "Voice model"),
+                    helpText: text(
+                        "Das Modell bestimmt die tatsächliche Transkriptions-Engine.",
+                        "The model defines the actual transcription engine."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var speechLanguageContent: some View {
+        if speechHasMatches {
+            LabeledContent {
+                Picker(
+                    text("Eingabesprache", "Input language"), selection: $appState.selectedLanguage
+                ) {
+                    ForEach(appState.selectedVoiceModelLanguageOptions) { language in
+                        Text(
+                            language.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        ).tag(language)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 180)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Eingabesprache", "Input language"),
+                    helpText: text(
+                        "Bei multilingualen Modellen kann die Sprache frei gewählt werden. Bei rein englischen Modellen reduziert sich die Auswahl automatisch.",
+                        "For multilingual models you can choose freely. For English-only models the picker is reduced automatically."
+                    )
+                )
             }
 
-            LabeledContent(text("Erkennungsqualität", "Recognition quality")) {
-                Picker(text("Erkennungsqualität", "Recognition quality"), selection: $appState.performanceProfile) {
+            if let selectedModel = appState.selectedVoiceModel {
+                Text(
+                    selectedModel.languageCode == nil
+                        ? text(
+                            "Multilinguales Modell: alle Sprachen verfügbar.",
+                            "Multilingual model: all languages available.")
+                        : text(
+                            "Sprache ist an das Modell gebunden.", "Language is bound to the model."
+                        )
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+                if let hint = appState.selectedVoiceModelLanguageHintText {
+                    Text(hint)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var speechQualityContent: some View {
+        if speechHasMatches {
+            LabeledContent {
+                Picker(
+                    text("Qualitätsprofil", "Quality profile"),
+                    selection: $appState.performanceProfile
+                ) {
                     ForEach(DictationPerformance.allCases) { mode in
-                        Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
+                        Text(
+                            mode.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                        .tag(mode)
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 170)
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 180)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Qualitätsprofil", "Quality profile"),
+                    helpText: text(
+                        "Steuert Laufzeitparameter wie Beam-Search, Chunking und Threads.",
+                        "Controls runtime parameters like beam search, chunking, and threads."
+                    )
+                )
             }
 
-            Toggle(text("Musik während Diktat stummschalten", "Mute music while dictating"), isOn: $appState.muteMusicWhileDictating)
+            Text(
+                text(
+                    "Auto passt das Preset an Gerät und Laufzeit an. Schnell priorisiert Reaktionszeit, Ausgeglichen balanciert Stabilität und Tempo, Präzise investiert mehr in die finale Erkennung.",
+                    "Auto adapts the preset to the device and runtime. Fast prioritizes responsiveness, Balanced trades speed for stability, and Accurate spends more on the final recognition pass."
+                )
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
 
-            Text(text(
-                "Für die beste Endqualität: Live-Text deaktivieren und Formatierung auf finalen Text anwenden.",
-                "For the best final quality: disable live text and run formatting on final text."
-            ))
+            if let selectedModel = appState.selectedVoiceModel {
+                LabeledContent(text("Modell-Details", "Model details")) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(
+                            "\(text("Bereich", "Scope")): \(selectedModel.languageCode?.uppercased() ?? "ALL")"
+                        )
+                        Text(
+                            "\(text("Übersetzung", "Translation")): \(selectedModel.supportsTranslationToEnglish ? text("Ja", "Yes") : text("Nein", "No"))"
+                        )
+                        Text(
+                            "\(text("Geschwindigkeit", "Speed")) \(selectedModel.speedScore)/10  \(text("Genauigkeit", "Accuracy")) \(selectedModel.accuracyScore)/10  \(selectedModel.sizeLabel)"
+                        )
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var translationContent: some View {
+        if speechHasMatches, appState.speechTranslationAvailable {
+            LabeledContent {
+                Picker(
+                    text("Übersetzen nach", "Translate to"),
+                    selection: $appState.translationOutputMode
+                ) {
+                    ForEach(TranslationOutputMode.allCases) { mode in
+                        Text(
+                            mode.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                        .tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 170)
+                .disabled(!appState.speechTranslationAvailable)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Übersetzen nach", "Translate to"),
+                    helpText: text(
+                        "Die Option \"Keine Übersetzung\" gibt die gesprochene Sprache zurück. Die Option \"Nach Englisch\" aktiviert ausschließlich die lokale Whisper-Übersetzung. Sprachspezifische English-Modelle unterstützen das nicht.",
+                        "The Option \"No translation\" returns the spoken language. The Option \"To English\" enables only local Whisper translation. Language-specific English models do not support this."
+                    )
+                )
+            }
+        } else if speechHasMatches {
+            Text(
+                text(
+                    "Dieses Modell unterstützt keine Übersetzung.",
+                    "This model does not support translation."
+                )
+            )
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
-    private var formattingContent: some View {
-        if matches(["formatierung", "formatting", "kontext", "context", "modus", "mode", "ai", "bereinigung", "cleanup"]) {
-            Toggle(text("Formatierung aktivieren", "Enable formatting"), isOn: $appState.formattingEnabled)
+    private var installedSpeechModelsContent: some View {
+        if speechHasMatches {
+            ForEach(appState.visibleVoiceModels) { model in
+                LabeledContent {
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.displayName)
+                            Text(
+                                "\(model.languageCode?.uppercased() ?? "ALL") • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)"
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 12)
+                        Text(
+                            appState.isVoiceModelInstalled(model)
+                                ? text("Installiert", "Installed")
+                                : text("Nicht installiert", "Not installed")
+                        )
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(
+                            appState.isVoiceModelInstalled(model) ? .secondary : .tertiary)
+                        if appState.isVoiceModelInstalled(model) {
+                            Button(text("Als Standard verwenden", "Use as default")) {
+                                appState.setSelectedVoiceModel(model)
+                            }
+                            .liquidGlassSecondaryButtonStyle()
+                            .disabled(
+                                appState.selectedVoiceModelID == model.id
+                                    || appState.isVoiceModelBusy(model))
 
-            LabeledContent(text("Formatierung", "Formatting")) {
-                Picker(text("Formatierung", "Formatting"), selection: $appState.formattingScope) {
-                    Text(text("Nur final", "Final only")).tag(AIProcessingScope.finalOnly)
-                    Text(text("Live und final", "Live and final")).tag(AIProcessingScope.liveAndFinal)
-                }
-                .labelsHidden()
-                .frame(minWidth: 220)
-            }
-            .disabled(!appState.formattingEnabled)
-
-            LabeledContent(text("Context Awareness", "Context awareness")) {
-                Picker(text("Context Awareness", "Context awareness"), selection: $appState.contextAwarenessMode) {
-                    ForEach(ContextAwarenessMode.allCases) { mode in
-                        Text(mode.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(mode)
+                            if model.installState != .bundled {
+                                Button(role: .destructive) {
+                                    appState.removeVoiceModel(model)
+                                } label: {
+                                    Text(text("Entfernen", "Remove"))
+                                }
+                                .liquidGlassDestructiveButtonStyle()
+                                .disabled(appState.isVoiceModelBusy(model))
+                            }
+                        } else {
+                            Button(text("Installieren", "Install")) {
+                                appState.installVoiceModel(model)
+                            }
+                            .liquidGlassPrimaryButtonStyle()
+                            .disabled(
+                                model.installState == .unavailable
+                                    || appState.isVoiceModelBusy(model))
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } label: {
+                    EmptyView()
                 }
-                .labelsHidden()
-                .frame(minWidth: 220)
             }
-            .disabled(!appState.formattingEnabled)
-
-            Text(text(
-                "Hinweis: Deaktiviertes Live-Texting erhöht oft die Qualität. Zusätzliche AI-Bereinigung verbessert den finalen Output weiter.",
-                "Tip: Disabling live text often improves quality. Additional AI cleanup can further improve final output."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
         }
     }
 
@@ -710,75 +1257,758 @@ struct SettingsView: View {
             "kontext",
             "retroaktiv",
             "weit zurück",
-            "live"
+            "live",
         ]) {
-            LabeledContent(text("Anpassungsradius", "Adjustment radius")) {
-                Picker(text("Anpassungsradius", "Adjustment radius"), selection: $appState.liveRewriteScope) {
+            LabeledContent {
+                Picker(
+                    text("Anpassungsradius", "Adjustment radius"),
+                    selection: $appState.liveRewriteScope
+                ) {
                     ForEach(LiveRewriteScope.allCases) { scope in
-                        Text(scope.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(scope)
+                        Text(
+                            scope.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        ).tag(scope)
                     }
                 }
                 .labelsHidden()
-                .frame(minWidth: 260)
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 260)
+                .disabled(!isLiveRewriteScopeApplicable)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Anpassungsradius", "Adjustment radius"),
+                    helpText: text(
+                        "Wirkt nur, wenn „Live-Text einfügen“ aktiv ist und nicht „Nur Zwischenablage“ gewählt ist. Kleinere Bereiche sind stabiler. Größere Bereiche glätten stärker, dürfen aber weiter zurückliegende Wörter noch einmal anfassen.",
+                        "Only applies when Insert live text is on and delivery is not clipboard-only. Smaller scopes are more stable. Larger scopes smooth more aggressively but may revisit words further back."
+                    )
+                )
             }
-
-            Text(text(
-                "Kleinere Bereiche sind stabiler und greifen nur am aktuellen Satz an; größere Bereiche glätten stärker, können aber weiter zurückliegende Wörter erneut anfassen.",
-                "Smaller scopes are more stable and only touch the current sentence; larger scopes smooth more aggressively and can revisit words further back."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
     private var dictationDeliveryContent: some View {
-        if matches(["sprache", "language", "qualität", "quality", "streaming", "clipboard", "zwischenablage", "insert"]) {
-            LabeledContent(text("Finales Ergebnis", "Final result")) {
-                Picker(text("Finales Ergebnis", "Final result"), selection: $appState.finalResultDeliveryMode) {
-                    Text(text("In Textfeld einfügen", "Insert into text field")).tag(FinalResultDeliveryMode.insert)
-                    Text(text("Nur in Zwischenablage kopieren", "Copy to clipboard only")).tag(FinalResultDeliveryMode.clipboardOnly)
+        if matches([
+            "sprache", "language", "qualität", "quality", "streaming", "clipboard",
+            "zwischenablage", "insert", "translation", "übersetzung", "uebersetzung", "paste",
+            "auto-send", "keypress",
+        ]) {
+            LabeledContent {
+                Picker(
+                    text("Finales Ergebnis", "Final result"),
+                    selection: $appState.finalResultDeliveryMode
+                ) {
+                    Text(text("In Textfeld einfügen", "Insert into text field")).tag(
+                        FinalResultDeliveryMode.insert)
+                    Text(text("Nur in Zwischenablage kopieren", "Copy to clipboard only")).tag(
+                        FinalResultDeliveryMode.clipboardOnly)
                 }
                 .labelsHidden()
-                .frame(minWidth: 220)
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 220)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Finales Ergebnis", "Final result"),
+                    helpText: text(
+                        "Legt fest, wie das abgeschlossene Diktat ausgeliefert wird: direkt ins aktive Textfeld oder nur über die Zwischenablage.",
+                        "Controls how the finished dictation is delivered: directly into the active text field or only through the clipboard."
+                    )
+                )
             }
 
-            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
-                .disabled(appState.finalResultDeliveryMode == .clipboardOnly || !appState.dictationCapability.allowsDirectInsertion)
+            Toggle(isOn: $appState.streamingEnabled) {
+                SettingsFieldLabel(
+                    title: text("Live-Text einfügen", "Insert live text"),
+                    helpText: text(
+                        "Zeigt laufende Zwischenergebnisse direkt im Zieltextfeld an, solange gestreamt wird.",
+                        "Shows live intermediate results directly in the target text field while streaming is active."
+                    )
+                )
+            }
+            .disabled(
+                appState.finalResultDeliveryMode == .clipboardOnly
+                    || !appState.dictationCapability.allowsDirectInsertion)
 
-            Toggle(text("Wenn kein Textfeld aktiv ist: Ergebnis in Zwischenablage kopieren", "If no text field is active: copy result to clipboard"), isOn: $appState.clipboardFallbackWhenNoTarget)
-                .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
+            Text(
+                text(
+                    "Für die beste Endqualität: Live-Text deaktivieren und die finale Formatierung aktiviert lassen. Das gibt ASR und AI mehr Ruhe für den letzten Pass.",
+                    "For the best final quality, disable live text and keep final formatting enabled. That gives ASR and AI more headroom for the last pass."
+                )
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
 
-            if appState.finalResultDeliveryMode == .clipboardOnly {
-                Text(text(
-                    "Nur Zwischenablage verwendet immer den Abschluss-Pfad. Live-Einfügen wird in diesem Modus deaktiviert.",
-                    "Clipboard-only always uses the finalize path. Live insert is disabled in this mode."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Toggle(isOn: $appState.muteMusicWhileDictating) {
+                SettingsFieldLabel(
+                    title: text("Musik während des Diktats pausieren", "Pause music while dictating"),
+                    helpText: text(
+                        "Pausiert Apple Music und Spotify best-effort beim Start und setzt nur Player fort, die Wispr selbst pausiert hat.",
+                        "Best-effort pauses Apple Music and Spotify on start and resumes only players that Wispr paused itself."
+                    )
+                )
+            }
 
-                Text(text(
-                    "Datenschutzhinweis: Zwischenablage ist absichtlich global. Andere Apps oder Clipboard-Tools können kopierten Text kurzfristig sehen.",
-                    "Privacy note: the clipboard is intentionally global. Other apps or clipboard tools may briefly observe copied text."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            } else if !appState.dictationCapability.allowsDirectInsertion {
-                Text(text(
-                    "Ohne Bedienungshilfen startet die Aufnahme weiterhin, aber direktes Einfügen bleibt deaktiviert.",
-                    "Without Accessibility, recording still starts, but direct insertion remains disabled."
-                ))
+            Toggle(isOn: $appState.clipboardFallbackWhenNoTarget) {
+                SettingsFieldLabel(
+                    title: text(
+                        "Wenn kein Textfeld aktiv ist: Ergebnis in Zwischenablage kopieren",
+                        "If no text field is active: copy result to clipboard"),
+                    helpText: text(
+                        "Verwendet die Zwischenablage als Fallback, wenn macOS gerade kein direkt beschreibbares Textziel meldet.",
+                        "Uses the clipboard as a fallback when macOS does not currently report a directly writable text target."
+                    )
+                )
+            }
+            .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
+
+            Toggle(isOn: $appState.autoSendAfterPaste) {
+                SettingsFieldLabel(
+                    title: text("Nach dem Einfügen automatisch senden", "Auto-send after paste"),
+                    helpText: text(
+                        "Sendet nach dem finalen Einfügen eine Eingabetaste (Return), auch wenn der Text direkt ins Feld geschrieben wurde – nicht nur bei Einfügen über die Zwischenablage. Nützlich in Chats oder Formularen.",
+                        "Sends Return after final text is inserted, including when text is written directly into the field—not only when pasting from the clipboard. Useful in chats or forms."
+                    )
+                )
+            }
+            Toggle(isOn: $appState.restoreClipboardAfterPaste) {
+                SettingsFieldLabel(
+                    title: text(
+                        "Zwischenablage nach dem Einfügen wiederherstellen",
+                        "Restore clipboard after paste"),
+                    helpText: text(
+                        "Stellt den vorherigen Inhalt der Zwischenablage nach dem finalen Einfügen wieder her.",
+                        "Restores the previous clipboard contents after final insertion."
+                    )
+                )
+            }
+            Toggle(isOn: $appState.simulateKeypresses) {
+                SettingsFieldLabel(
+                    title: text("Tastatureingaben simulieren", "Simulate keypresses"),
+                    helpText: text(
+                        "Gilt nur für das finale Einfügen am Ende der Aufnahme und für Einfüge-Fallbacks per Tastatur. Laufende Live-Zwischenergebnisse werden weiterhin direkt im Zieltextfeld aktualisiert.",
+                        "Applies only to final insertion at the end of recording and to keyboard-based fallbacks. Live streaming updates still go directly into the target field."
+                    )
+                )
+            }
+
+            if !appState.dictationCapability.allowsDirectInsertion {
+                Text(
+                    text(
+                        "Ohne Bedienungshilfen startet die Aufnahme weiterhin, aber direktes Einfügen bleibt deaktiviert.",
+                        "Without Accessibility, recording still starts, but direct insertion remains disabled."
+                    )
+                )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
+        }
+    }
 
-            if appState.clipboardFallbackWhenNoTarget && appState.finalResultDeliveryMode != .clipboardOnly {
-                Text(text(
-                    "Wenn kein Textfeld aktiv ist, wird der finale Text über die globale Zwischenablage zugestellt. Das ist gewollt, aber weniger privat als direktes Einfügen.",
-                    "When no text field is active, the final text is delivered through the global clipboard. This is intentional, but less private than direct insertion."
-                ))
+    @ViewBuilder
+    private var aiProcessingContent: some View {
+        if aiHasMatches {
+            Toggle(
+                text("AI-Verarbeitung aktivieren", "Enable AI processing"),
+                isOn: $appState.aiProcessingEnabled
+            )
+            .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+            if !appState.aiProcessingEnabled {
+                Text(
+                    text(
+                        "Richte weiter unten Anbieter und Modell ein, dann aktiviere die Verarbeitung. In der Menüleiste erscheinen LLM und Feinsteuerung erst nach Aktivierung.",
+                        "Configure a provider and model below, then enable processing. The menu bar shows the LLM and fine controls only after processing is enabled."
+                    )
+                )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if appState.aiProcessingEnabled {
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Toggle(
+                            text("Inhaltsstreaming", "Content streaming"),
+                            isOn: $appState.aiProcessingApplyDuringLiveInsertion
+                        )
+                        .disabled(!appState.streamingEnabled)
+
+                        Toggle(
+                            text("Endergebnis einfügen", "Insert final result"),
+                            isOn: $appState.aiProcessingApplyToFinalResult
+                        )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("AI anwenden bei", "Apply AI for"),
+                        helpText: text(
+                            "Steuert, ob das Modell schon auf Live-Zwischenergebnisse, erst auf das finale Ergebnis oder auf beides angewendet wird.",
+                            "Controls whether the model is applied to live intermediate text, only to the final result, or to both."
+                        )
+                    )
+                }
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Toggle(
+                            text("Stil / Ton", "Style / Tone"),
+                            isOn: $appState.aiTaskToneEnabled
+                        )
+                        Toggle(
+                            text("Anrede", "Salutation"),
+                            isOn: $appState.aiTaskSalutationEnabled
+                        )
+                        Toggle(
+                            text("Format / Modus", "Format / Mode"),
+                            isOn: $appState.aiTaskFormatEnabled
+                        )
+                        Toggle(
+                            text("Bereinigen", "Clean up"),
+                            isOn: $appState.aiTaskCleanupEnabled
+                        )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("AI-Aufgaben", "AI tasks"),
+                        helpText: text(
+                            "Reihenfolge wie in der Menüleiste: Stil, Anrede, Format, Bereinigung. Kombinierbar; „Wie gesprochen“ bei Format oder Stil/Anrede bedeutet: kein Zusatzaufwand in dieser Dimension.",
+                            "Same order as the menu bar: style, salutation, format, cleanup. “As spoken” for format or style/salutation means no extra work in that dimension."
+                        )
+                    )
+                }
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+                if appState.aiShowsWritingStyleControls {
+                    LabeledContent {
+                        Picker(
+                            text("Stil / Ton", "Style / Tone"),
+                            selection: $appState.aiWritingStyle
+                        ) {
+                            ForEach(appState.availableAIWritingStyles) { style in
+                                Text(
+                                    style.localizedDisplayName(
+                                        interfaceLanguageCode: effectiveLanguage
+                                            .embeddedInterfaceCode)
+                                ).tag(style)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .settingsFormMenuPickerSlot(minWidth: 220)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Stil / Ton", "Style / Tone"),
+                            helpText: text(
+                                "Zeigt nur Stile an, die zum gewählten Modus passen. Für Dokumentation oder wissenschaftliche Texte bleiben zum Beispiel nur sachliche Varianten übrig.",
+                                "Shows only styles that fit the selected mode. For documentation or scientific text, only fitting formal variants remain available."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
+
+                if appState.aiShowsSalutationControls {
+                    LabeledContent {
+                        Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                            ForEach(AISalutation.allCases) { salutation in
+                                Text(
+                                    salutation.localizedDisplayName(
+                                        interfaceLanguageCode: effectiveLanguage
+                                            .embeddedInterfaceCode)
+                                ).tag(salutation)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .settingsFormMenuPickerSlot(minWidth: 220)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Anrede", "Salutation"),
+                            helpText: text(
+                                "Die Anrede wird nur dort angeboten, wo sie sinnvoll ist, etwa bei E-Mails, Nachrichten oder WhatsApp.",
+                                "Salutation is shown only where it makes sense, such as email, messages, or WhatsApp."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
+
+                if appState.aiShowsModeControls {
+                    LabeledContent {
+                        Picker(text("Formatierung", "Formatting"), selection: $appState.aiFormattingMode) {
+                            ForEach(AIFormattingMode.allCases) { mode in
+                                Text(
+                                    mode.localizedDisplayName(
+                                        interfaceLanguageCode: effectiveLanguage
+                                            .embeddedInterfaceCode)
+                                ).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .settingsFormMenuPickerSlot(minWidth: 220)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Formatierung", "Formatting"),
+                            helpText: text(
+                                "„Wie gesprochen“: keine aufgezwungene Struktur. „Automatische Formatierung“: aus dem Gesprochenen Listen und Absätze ableiten. Weitere Modi richten Text an E-Mail, Chat usw. aus.",
+                                "“As spoken”: no imposed structure. “Automatic formatting” infers lists and paragraphs from speech. Other modes target email, chat, and similar shapes."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
+
+                LabeledContent {
+                    Picker(
+                        text("Kontextbewusstsein", "Context awareness"),
+                        selection: $appState.contextAwarenessMode
+                    ) {
+                        ForEach(ContextAwarenessMode.allCases) { mode in
+                            Text(
+                                mode.localizedDisplayName(
+                                    interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                                )
+                            )
+                            .tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .settingsFormMenuPickerSlot(minWidth: 220)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("Kontextbewusstsein", "Context awareness"),
+                        helpText: text(
+                            "Standard ist nur das Endergebnis. Live-Kontext bleibt optional und klein, damit Streaming stabil bleibt. Zusätzliche AI-Bereinigung verbessert den finalen Output weiter.",
+                            "The default is final result only. Live context stays optional and small to keep streaming stable. Additional AI cleanup can further improve the final output."
+                        )
+                    )
+                }
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+
+                if appState.aiTaskCleanupEnabled {
+                    LabeledContent {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            Slider(
+                                value: $appState.aiCleanupIntensity,
+                                in: 0...1,
+                                label: {
+                                    Text(text("Bereinigungsstärke", "Cleanup strength"))
+                                }
+                            )
+                            .frame(maxWidth: 280)
+                            Text(
+                                text(
+                                    "Ganz links: praktisch keine Bereinigung (kein Modellaufruf, wenn sonst nichts aktiv ist). Rechts: kräftigere Korrektur.",
+                                    "Far left: almost no cleanup (and no model call if nothing else is active). Right: stronger cleanup."
+                                )
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 280, alignment: .trailing)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    } label: {
+                        SettingsFieldLabel(
+                            title: text("Bereinigung", "Cleanup"),
+                            helpText: text(
+                                "Nur in den Einstellungen; steuert, wie aggressiv erkannt wird und korrigiert wird.",
+                                "Settings only; controls how aggressively recognition issues are fixed."
+                            )
+                        )
+                    }
+                    .disabled(appState.selectedAIModel?.availability.isAvailable != true)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var aiProviderContent: some View {
+        if aiHasMatches {
+            VStack(alignment: .leading, spacing: 14) {
+                DisclosureGroup(
+                    isExpanded: $addProviderDisclosureExpanded,
+                    content: {
+                        providerPresetGrid
+                        providerPresetAddConfirmationRow
+                    },
+                    label: {
+                        Text(text("Anbieter hinzufügen", "Add provider"))
+                            .font(.headline)
+                    }
+                )
+
+                if !appState.remoteProviders.isEmpty {
+                    Text(text("Aktiver Anbieter", "Active provider"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                    providerSelectionRow
+                    providerEditorCard
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var providerPresetAddConfirmationRow: some View {
+        if let preset = selectedRemoteProviderPreset {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(
+                    text(
+                        "Ausgewählt: \(preset.localizedDisplayName(interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)). Mit „Hinzufügen“ in die Liste übernehmen.",
+                        "Selected: \(preset.localizedDisplayName(interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)). Use “Add” to add it to the list."
+                    )
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    Button(text("Abbrechen", "Cancel")) {
+                        selectedRemoteProviderPreset = nil
+                    }
+                    .liquidGlassSecondaryButtonStyle()
+                    Button(text("Hinzufügen", "Add")) {
+                        appState.addRemoteProvider(preset: preset)
+                        selectedRemoteProviderPreset = nil
+                    }
+                    .liquidGlassPrimaryButtonStyle()
+                }
+            }
+            .padding(.top, 6)
+        }
+    }
+
+    @ViewBuilder
+    private var providerPresetGrid: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            providerPresetGroup(
+                title: text("Cloud-APIs", "Cloud APIs"),
+                presets: [
+                    .openRouter, .openAI, .groq, .mistral, .deepSeek, .togetherAI, .fireworksAI,
+                    .xAI,
+                ]
+            )
+
+            providerPresetGroup(
+                title: text("Lokale Server", "Local servers"),
+                presets: [.ollama, .lmStudio]
+            )
+
+            providerPresetGroup(
+                title: text("Eigenes Setup", "Custom setup"),
+                presets: [.customOpenAICompatible]
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func providerPresetGroup(title: String, presets: [AIRemoteProviderPreset]) -> some View
+    {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(presets) { preset in
+                    let isSelected = selectedRemoteProviderPreset == preset
+                    Button {
+                        selectedRemoteProviderPreset = preset
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(
+                                preset.localizedDisplayName(
+                                    interfaceLanguageCode: effectiveLanguage
+                                        .embeddedInterfaceCode)
+                            )
+                            .font(.body.weight(.semibold))
+                            Text(providerPresetDescription(for: preset))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(
+                                    Color(nsColor: .controlBackgroundColor).opacity(
+                                        isSelected ? 0.55 : 0.2))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(
+                                    isSelected
+                                        ? Color.accentColor : Color.primary.opacity(0.08),
+                                    lineWidth: isSelected ? 2 : 1
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func providerPresetDescription(for preset: AIRemoteProviderPreset) -> String {
+        switch preset {
+        case .openRouter:
+            return text(
+                "Viele Modelle über einen zentralen Zugang.",
+                "Many models through one unified gateway.")
+        case .openAI:
+            return text("Offizielle OpenAI-API.", "Official OpenAI API.")
+        case .groq:
+            return text(
+                "Schnelle OpenAI-kompatible Cloud-API.", "Fast OpenAI-compatible cloud API.")
+        case .mistral:
+            return text(
+                "Mistral über die OpenAI-kompatible Schnittstelle.",
+                "Mistral via the OpenAI-compatible surface.")
+        case .deepSeek:
+            return text("DeepSeek mit Standard-Endpunkten.", "DeepSeek with standard endpoints.")
+        case .togetherAI:
+            return text("Modellvielfalt für Remote-Setups.", "Model variety for remote setups.")
+        case .fireworksAI:
+            return text(
+                "Gehostete Modelle mit klaren Endpunkten.", "Hosted models with clear endpoints.")
+        case .xAI:
+            return text("xAI über OpenAI-kompatible Calls.", "xAI over OpenAI-compatible calls.")
+        case .ollama:
+            return text("Lokale Modelle ohne API-Key.", "Local models without an API key.")
+        case .lmStudio:
+            return text("Lokaler Server für eigene Modelle.", "Local server for your own models.")
+        case .customOpenAICompatible:
+            return text(
+                "Eigene Base-URL und Endpunkte definieren.",
+                "Define your own base URL and endpoints.")
+        }
+    }
+
+    @ViewBuilder
+    private var providerSelectionRow: some View {
+        LabeledContent(text("Aktiver Anbieter", "Active provider")) {
+            Picker(
+                text("Aktiver Anbieter", "Active provider"),
+                selection: Binding(
+                    get: { appState.selectedRemoteProviderID ?? "" },
+                    set: { appState.selectedRemoteProviderID = $0.isEmpty ? nil : $0 }
+                )
+            ) {
+                ForEach(appState.remoteProviders) { provider in
+                    Text(provider.displayName).tag(provider.id)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .settingsFormMenuPickerSlot(minWidth: 240)
+        }
+    }
+
+    @ViewBuilder
+    private var providerEditorCard: some View {
+        if let provider = appState.selectedRemoteProvider {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(provider.displayName)
+                            .font(.headline)
+                        Text(
+                            provider.preset.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Toggle(
+                        text("Aktiv", "Enabled"),
+                        isOn: selectedRemoteProviderBinding(\.isEnabled, default: false)
+                    )
+                    .toggleStyle(.switch)
+                }
+
+                Divider()
+
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
+                    GridRow {
+                        Text(text("Name", "Name"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        TextField(
+                            text("Name", "Name"),
+                            text: selectedRemoteProviderBinding(\.displayName, default: "")
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
+
+                    GridRow {
+                        Text(text("Base URL", "Base URL"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        TextField(
+                            "", text: selectedRemoteProviderBinding(\.baseURLString, default: "")
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
+
+                    GridRow {
+                        Text(text("Modelle", "Models"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        TextField(
+                            "",
+                            text: selectedRemoteProviderBinding(\.modelsPath, default: "/models")
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
+
+                    GridRow {
+                        Text(text("Text-API", "Text API"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        TextField(
+                            "",
+                            text: selectedRemoteProviderBinding(
+                                \.chatCompletionsPath, default: "/chat/completions")
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
+
+                    GridRow {
+                        Text(text("API-Key nötig", "API key required"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Toggle(
+                            text("Ja", "Yes"),
+                            isOn: selectedRemoteProviderBinding(\.requiresAPIKey, default: true)
+                        )
+                        .toggleStyle(.switch)
+                    }
+
+                    GridRow {
+                        Text(text("API-Key", "API key"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        SecureField("", text: $appState.remoteProviderAPIKeyDraft)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Button(text("Speichern", "Save")) {
+                        appState.saveSelectedRemoteProvider()
+                    }
+                    .liquidGlassPrimaryButtonStyle()
+
+                    Spacer()
+
+                    Button(role: .destructive) {
+                        appState.removeSelectedRemoteProvider()
+                    } label: {
+                        Text(text("Anbieter entfernen", "Remove provider"))
+                    }
+                    .liquidGlassDestructiveButtonStyle()
+                }
+
+                if !provider.discoveredModels.isEmpty {
+                    Text(
+                        text(
+                            "Verfügbare Modelle: \(provider.discoveredModels.count)",
+                            "Available models: \(provider.discoveredModels.count)"
+                        )
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var aiModelContent: some View {
+        if aiHasMatches {
+            LabeledContent {
+                Picker(
+                    text("Modell", "Model"),
+                    selection: Binding(
+                        get: { appState.selectedAIModelID ?? "" },
+                        set: { appState.selectedAIModelID = $0.isEmpty ? nil : $0 }
+                    )
+                ) {
+                    if appState.visibleAIModels.isEmpty {
+                        Text(text("Keine Modelle erkannt", "No models detected")).tag("")
+                    } else {
+                        ForEach(appState.visibleAIModels) { model in
+                            Text(model.displayName).tag(model.id)
+                        }
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 220)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Modell", "Model"),
+                    helpText: text(
+                        "Zeigt alle aktuell erkannten lokalen und entfernten Modelle an, die WisprLocal verwenden kann.",
+                        "Shows all currently detected local and remote models that WisprLocal can use."
+                    )
+                )
+            }
+
+            if appState.visibleAIModels.isEmpty {
+                Text(
+                    text(
+                        "Es wurde aktuell kein AI-Modell erkannt.",
+                        "There is currently no AI model available.")
+                )
+                .foregroundStyle(.secondary)
+            } else {
+                ForEach(appState.visibleAIModels, id: \AIModelDescriptor.id) {
+                    (model: AIModelDescriptor) in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.displayName)
+                            .font(.body.weight(.semibold))
+                        Text(model.providerKind.rawValue)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(
+                            model.availability.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(
+                            model.availability.isAvailable ? Color.secondary : Color.orange)
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
     }
@@ -786,15 +2016,18 @@ struct SettingsView: View {
     @ViewBuilder
     private var startStopShortcutContent: some View {
         if matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) {
-            Toggle(text("Start/Stopp-Kurzbefehl aktiv", "Enable start/stop shortcut"), isOn: $appState.toggleShortcutEnabled)
+            Toggle(
+                text("Start/Stopp-Kurzbefehl aktiv", "Enable start/stop shortcut"),
+                isOn: $appState.toggleShortcutEnabled)
 
             LabeledContent(text("Kurzbefehl", "Shortcut")) {
                 HotkeyRecorderField(
                     hotkey: $appState.selectedHotkey,
                     label: text("Diktier-Kurzbefehl", "Dictation shortcut"),
-                    language: appLanguage
+                    language: effectiveLanguage
                 )
                 .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             if let advisory = appState.hotkeyAdvisory {
@@ -806,28 +2039,82 @@ struct SettingsView: View {
     @ViewBuilder
     private var holdShortcutContent: some View {
         if matches(["shortcut", "kurzbefehl", "hold", "dictation", "diktat"]) {
-            Toggle(text("Halten-zum-Diktieren aktiv", "Enable hold-to-dictate"), isOn: $appState.holdToDictateEnabled)
+            Toggle(
+                text("Halten-zum-Diktieren aktiv", "Enable hold-to-dictate"),
+                isOn: $appState.holdToDictateEnabled)
 
-            LabeledContent(text("Hold-Kurzbefehl", "Hold shortcut")) {
+            LabeledContent {
                 HotkeyRecorderField(
                     hotkey: $appState.holdShortcut,
                     label: text("Halten-zum-Diktieren-Kurzbefehl", "Hold-to-dictate shortcut"),
-                    language: appLanguage
+                    language: effectiveLanguage
                 )
                 .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Hold-Kurzbefehl", "Hold shortcut"),
+                    helpText: text(
+                        "Fn allein wird im aktuellen globalen Hotkey-Pfad nicht zuverlässig unterstützt.",
+                        "Fn by itself is not supported reliably in the current global hotkey path."
+                    )
+                )
             }
             .disabled(!appState.holdToDictateEnabled)
 
             if appState.holdToDictateEnabled, let advisory = appState.holdShortcutAdvisory {
                 HotkeyAdvisoryBox(advisory: advisory)
             }
+        }
+    }
 
-            Text(text(
-                "Fn allein wird im aktuellen globalen Hotkey-Pfad nicht zuverlässig unterstützt.",
-                "Fn by itself is not supported reliably in the current global hotkey path."
-            ))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+    @ViewBuilder
+    private var cancelShortcutContent: some View {
+        if matches(["shortcut", "kurzbefehl", "cancel", "abbrechen", "diktat"]) {
+            Toggle(
+                text("Abbrechen-Shortcut aktiv", "Enable cancel shortcut"),
+                isOn: $appState.cancelShortcutEnabled)
+
+            LabeledContent(text("Abbrechen-Kurzbefehl", "Cancel shortcut")) {
+                HotkeyRecorderField(
+                    hotkey: $appState.cancelShortcut,
+                    label: text("Abbrechen-Kurzbefehl", "Cancel shortcut"),
+                    language: effectiveLanguage
+                )
+                .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .disabled(!appState.cancelShortcutEnabled)
+
+            if appState.cancelShortcutEnabled, let advisory = appState.cancelShortcutAdvisory {
+                HotkeyAdvisoryBox(advisory: advisory)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var modeSwitchShortcutContent: some View {
+        if matches(["shortcut", "kurzbefehl", "mode", "modus", "diktat"]) {
+            Toggle(
+                text("Moduswechsel-Shortcut aktiv", "Enable mode switch shortcut"),
+                isOn: $appState.modeSwitchShortcutEnabled)
+
+            LabeledContent(text("Moduswechsel-Kurzbefehl", "Mode switch shortcut")) {
+                HotkeyRecorderField(
+                    hotkey: $appState.modeSwitchShortcut,
+                    label: text("Moduswechsel-Kurzbefehl", "Mode switch shortcut"),
+                    language: effectiveLanguage
+                )
+                .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .disabled(!appState.modeSwitchShortcutEnabled)
+
+            if appState.modeSwitchShortcutEnabled,
+                let advisory = appState.modeSwitchShortcutAdvisory
+            {
+                HotkeyAdvisoryBox(advisory: advisory)
+            }
         }
     }
 
@@ -838,18 +2125,50 @@ struct SettingsView: View {
                 Button(text("Letztes Diktat kopieren", "Copy last dictation")) {
                     copyToClipboard(appState.latestDictationText)
                 }
-                .buttonStyle(.borderedProminent)
+                .liquidGlassPrimaryButtonStyle()
                 .disabled(appState.latestDictationText.isEmpty)
 
                 Button(text("Verlauf exportieren", "Export history")) {
                     appState.exportHistoryAsText()
                 }
-                .buttonStyle(.bordered)
+                .liquidGlassSecondaryButtonStyle()
 
-                Button(text("Verlauf leeren", "Clear history")) {
+                Button(role: .destructive) {
                     appState.clearHistory()
+                } label: {
+                    Text(text("Verlauf leeren", "Clear history"))
                 }
-                .buttonStyle(.bordered)
+                .liquidGlassDestructiveButtonStyle()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var historyRetentionContent: some View {
+        if historyHasMatches {
+            LabeledContent {
+                Picker(
+                    text("Verlauf aufbewahren", "Keep history"),
+                    selection: $appState.historyRetentionPolicy
+                ) {
+                    ForEach(HistoryRetentionPolicy.allCases) { policy in
+                        Text(
+                            policy.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        ).tag(policy)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 180)
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Verlauf aufbewahren", "Keep history"),
+                    helpText: text(
+                        "Bereinigt nur den lokalen Transkriptverlauf. Systemdateien oder Roh-Audio werden dabei nicht verändert.",
+                        "Prunes only the local transcript history. System files or raw audio are not changed."
+                    )
+                )
             }
         }
     }
@@ -860,21 +2179,58 @@ struct SettingsView: View {
             Text(text("Keine Transkripte gefunden.", "No transcripts found."))
                 .foregroundStyle(.secondary)
         } else {
-            ForEach(compactHistoryEntries) { entry in
-                HistoryEntryRow(
-                    entry: entry,
-                    dateText: Self.historyDateFormatter.string(from: entry.createdAt),
-                    language: appLanguage,
-                    onCopy: { appState.copyHistoryEntry(entry) },
-                    onDelete: { appState.removeHistoryEntry(entry.id) }
-                )
+            Table(compactHistoryEntries) {
+                TableColumn(text("Datum", "Date")) { entry in
+                    Text(formattedHistoryDate(entry.createdAt))
+                        .textSelection(.enabled)
+                }
+                .width(min: 118, ideal: 140)
+                TableColumn(text("Modus", "Mode")) { entry in
+                    Text("[\(entry.mode) • \(entry.languageCode)]")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                .width(min: 100, ideal: 120)
+                TableColumn(text("Vorschau", "Preview")) { entry in
+                    Text(entry.text)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .textSelection(.enabled)
+                }
+                TableColumn("") { entry in
+                    HStack(spacing: 6) {
+                        Button {
+                            appState.copyHistoryEntry(entry)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(
+                            text("Diktat kopieren", "Copy dictation")
+                        )
+                        Button(role: .destructive) {
+                            appState.removeHistoryEntry(entry.id)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(
+                            text("Diktat löschen: ", "Delete dictation: ")
+                                + formattedHistoryDate(entry.createdAt))
+                    }
+                }
+                .width(ideal: 72)
             }
+            .frame(minHeight: 200)
 
             if !isSearching, filteredHistory.count > compactHistoryEntries.count {
-                Text(text(
-                    "Es werden zuerst die letzten \(compactHistoryEntries.count) Diktate angezeigt. Über die Suche findest du ältere Einträge.",
-                    "The latest \(compactHistoryEntries.count) dictations are shown first. Use search to find older entries."
-                ))
+                Text(
+                    text(
+                        "Es werden zuerst die letzten \(compactHistoryEntries.count) Diktate angezeigt. Über die Suche findest du ältere Einträge.",
+                        "The latest \(compactHistoryEntries.count) dictations are shown first. Use search to find older entries."
+                    )
+                )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
@@ -882,146 +2238,238 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var snippetsContent: some View {
+    private var snippetNewEntryRows: some View {
         if matches(["snippet", "textbaustein", "replacement", "trigger"]) {
-            HStack(alignment: .center, spacing: 10) {
+            LabeledContent(text("Trigger", "Trigger")) {
                 TextField(text("Trigger", "Trigger"), text: $newSnippetTrigger)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 200)
                     .accessibilityLabel(text("Snippet-Trigger", "Snippet trigger"))
-                TextField(text("Ersetzung", "Replacement"), text: $newSnippetReplacement)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel(text("Snippet-Ersetzung", "Snippet replacement"))
-                Button(text("Hinzufügen", "Add")) {
-                    appState.addSnippet(trigger: newSnippetTrigger, replacement: newSnippetReplacement)
-                    newSnippetTrigger = ""
-                    newSnippetReplacement = ""
-                }
-                .buttonStyle(.borderedProminent)
+                    .onSubmit { commitNewSnippet() }
             }
+            LabeledContent(text("Ersetzung", "Replacement")) {
+                TextField(
+                    text("Ersetzung", "Replacement"),
+                    text: $newSnippetReplacement,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .lineLimit(3, reservesSpace: true)
+                .accessibilityLabel(text("Snippet-Ersetzung", "Snippet replacement"))
+                .onSubmit { commitNewSnippet() }
+            }
+            if newSnippetTriggerIsDuplicate, !trimmedNewSnippetTrigger.isEmpty {
+                Text(
+                    text("Dieser Trigger ist bereits vergeben.", "This trigger is already in use.")
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            Button(text("Hinzufügen", "Add")) {
+                commitNewSnippet()
+            }
+            .liquidGlassPrimaryButtonStyle()
+            .disabled(!canCommitNewSnippet)
+            .keyboardShortcut(.defaultAction)
+        }
+    }
 
+    @ViewBuilder
+    private var snippetImportExportRows: some View {
+        if matches([
+            "snippet", "textbaustein", "replacement", "trigger", "json", "import", "export",
+            "importieren", "exportieren",
+        ]) {
             HStack(alignment: .center, spacing: 10) {
                 Button(text("JSON importieren", "Import JSON")) {
                     appState.importSnippetsFromJSON()
                 }
-                .buttonStyle(.bordered)
+                .liquidGlassSecondaryButtonStyle()
                 Button(text("JSON exportieren", "Export JSON")) {
                     appState.exportSnippetsToJSON()
                 }
-                .buttonStyle(.bordered)
+                .liquidGlassSecondaryButtonStyle()
             }
+        }
+    }
 
+    @ViewBuilder
+    private var snippetSavedRows: some View {
+        if matches(["snippet", "textbaustein", "replacement", "trigger"])
+            || !filteredSnippets.isEmpty
+        {
             if filteredSnippets.isEmpty {
                 Text(text("Keine Snippets gespeichert.", "No snippets saved."))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(filteredSnippets) { rule in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rule.trigger)
-                            Text(rule.replacement)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button(text("Löschen", "Delete")) {
+                Table(filteredSnippets) {
+                    TableColumn(text("Trigger", "Trigger")) { rule in
+                        Text(rule.trigger)
+                            .textSelection(.enabled)
+                    }
+                    TableColumn(text("Ersetzung", "Replacement")) { rule in
+                        Text(rule.replacement)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    TableColumn("") { rule in
+                        Button(role: .destructive) {
                             appState.removeSnippet(ruleID: rule.id)
+                        } label: {
+                            Image(systemName: "trash")
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel(text("Snippet löschen: ", "Delete snippet: ") + rule.trigger)
+                        .accessibilityLabel(
+                            text("Snippet löschen: ", "Delete snippet: ") + rule.trigger)
                     }
+                    .width(ideal: 44)
                 }
+                .frame(minHeight: 200)
             }
         }
     }
 
     @ViewBuilder
-    private var dictionaryManagementContent: some View {
-        if matches(["dictionary", "wörterbuch", "woerterbuch", "term", "name", "jargon", "client", "kunde", "industrie", "auto add"]) {
-            Toggle(text("Auto Add to Dictionary", "Auto add to dictionary"), isOn: $appState.dictionaryAutoAddEnabled)
+    private var dictionaryNewEntryRows: some View {
+        if matches(["dictionary", "wörterbuch", "woerterbuch", "term", "jargon", "namen"]) {
+            Toggle(isOn: $appState.dictionaryAutoAddEnabled) {
+                SettingsFieldLabel(
+                    title: text(
+                        "Vorschläge automatisch sammeln",
+                        "Collect suggestions automatically"
+                    ),
+                    helpText: text(
+                        "Auffällige Namen und Fachbegriffe werden nach dem finalen Diktat in eine Review-Liste gelegt, statt direkt übernommen zu werden.",
+                        "Notable names and jargon are queued for review after final dictation instead of being added blindly."
+                    )
+                )
+            }
 
-            HStack(alignment: .center, spacing: 10) {
-                TextField(text("Begriff hinzufügen", "Add term"), text: $newDictionaryTerm)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel(text("Dictionary Begriff", "Dictionary term"))
+            LabeledContent(text("Begriff", "Term")) {
+                TextField(text("Begriff", "Term"), text: $newDictionaryTerm)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 220)
+                    .onSubmit { commitNewDictionaryTerm() }
+            }
 
+            LabeledContent(text("Kategorie", "Category")) {
                 Picker(text("Kategorie", "Category"), selection: $newDictionaryCategory) {
                     ForEach(DictionaryTermCategory.allCases) { category in
-                        Text(category.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(category)
+                        Text(
+                            category.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                            )
+                        )
+                        .tag(category)
                     }
                 }
-                .frame(width: 190)
-
-                Button(text("Hinzufügen", "Add")) {
-                    appState.addDictionaryTerm(newDictionaryTerm, category: newDictionaryCategory, source: .manual)
-                    newDictionaryTerm = ""
-                }
-                .buttonStyle(.borderedProminent)
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 220)
             }
 
-            HStack(alignment: .center, spacing: 10) {
-                Button(text("Dictionary JSON importieren", "Import dictionary JSON")) {
+            LabeledContent(text("Sprachcode", "Language code")) {
+                TextField(text("Optional", "Optional"), text: $newDictionaryLanguageCode)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 120)
+            }
+
+            HStack(spacing: 10) {
+                Button(text("Hinzufügen", "Add")) {
+                    commitNewDictionaryTerm()
+                }
+                .liquidGlassPrimaryButtonStyle()
+                .disabled(!canCommitNewDictionaryTerm)
+
+                Button(text("JSON importieren", "Import JSON")) {
                     appState.importDictionaryFromJSON()
                 }
-                .buttonStyle(.bordered)
+                .liquidGlassSecondaryButtonStyle()
 
-                Button(text("Dictionary JSON exportieren", "Export dictionary JSON")) {
+                Button(text("JSON exportieren", "Export JSON")) {
                     appState.exportDictionaryToJSON()
                 }
-                .buttonStyle(.bordered)
-            }
-
-            if appState.dictionaryTerms.isEmpty {
-                Text(text("Noch keine Dictionary-Begriffe gespeichert.", "No dictionary terms saved yet."))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(appState.dictionaryTerms) { term in
-                    HStack(alignment: .center, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(term.term)
-                            Text(term.category.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(term.source.rawValue.uppercased())
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
-                        Button(text("Löschen", "Delete")) {
-                            appState.removeDictionaryTerm(termID: term.id)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                }
+                .liquidGlassSecondaryButtonStyle()
             }
         }
     }
 
     @ViewBuilder
-    private var dictionaryQueueContent: some View {
-        if matches(["review", "queue", "vorschlag", "candidate", "dictionary"]) {
-            if appState.dictionaryReviewQueue.isEmpty {
-                Text(text("Keine offenen Dictionary-Vorschläge.", "No pending dictionary suggestions."))
+    private var dictionaryReviewQueueRows: some View {
+        if matches(["dictionary", "review", "queue", "vorschlag", "suggestion"])
+            || !filteredDictionaryReviewQueue.isEmpty
+        {
+            if filteredDictionaryReviewQueue.isEmpty {
+                Text(text("Keine offenen Vorschläge.", "No pending suggestions."))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(appState.dictionaryReviewQueue) { candidate in
-                    HStack(alignment: .center, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
+                ForEach(filteredDictionaryReviewQueue) { candidate in
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(candidate.proposedTerm)
-                            Text(candidate.category.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            Text(
+                                candidate.category.localizedDisplayName(
+                                    interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                                )
+                                    + (candidate.languageCode.map { " • \($0)" } ?? "")
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Button(text("Übernehmen", "Approve")) {
                             appState.approveDictionaryCandidate(candidate.id)
                         }
-                        .buttonStyle(.borderedProminent)
-                        Button(text("Ablehnen", "Reject")) {
+                        .liquidGlassPrimaryButtonStyle()
+                        Button(role: .destructive) {
                             appState.rejectDictionaryCandidate(candidate.id)
+                        } label: {
+                            Text(text("Ablehnen", "Reject"))
                         }
-                        .buttonStyle(.bordered)
+                        .liquidGlassDestructiveButtonStyle()
                     }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dictionarySavedRows: some View {
+        if matches(["dictionary", "wörterbuch", "woerterbuch", "term", "begriffe"])
+            || !filteredDictionaryTerms.isEmpty
+        {
+            if filteredDictionaryTerms.isEmpty {
+                Text(text("Keine Dictionary-Begriffe gespeichert.", "No dictionary terms saved."))
+                    .foregroundStyle(.secondary)
+            } else {
+                Table(filteredDictionaryTerms) {
+                    TableColumn(text("Begriff", "Term")) { term in
+                        Text(term.term).textSelection(.enabled)
+                    }
+                    TableColumn(text("Kategorie", "Category")) { term in
+                        Text(
+                            term.category.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                            )
+                        )
+                        .foregroundStyle(.secondary)
+                    }
+                    TableColumn(text("Quelle", "Source")) { term in
+                        Text(term.source == .manual ? text("Manuell", "Manual") : text("Auto", "Auto"))
+                            .foregroundStyle(.secondary)
+                    }
+                    TableColumn("") { term in
+                        Button(role: .destructive) {
+                            appState.removeDictionaryTerm(termID: term.id)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(text("Begriff löschen", "Delete term"))
+                    }
+                    .width(ideal: 44)
+                }
+                .frame(minHeight: 200)
             }
         }
     }
@@ -1035,6 +2483,65 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
 
+                Text(
+                    text(
+                        "Smoke-Test: Log-Datei artifacts/mac/dev-run.log (Projektroot).",
+                        "Smoke test: log file artifacts/mac/dev-run.log (project root)."
+                    )
+                )
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+                Toggle(isOn: $appState.debugModeEnabled) {
+                    SettingsFieldLabel(
+                        title: text("Technische Protokollierung", "Technical logging"),
+                        helpText: text(
+                            "Erfasst zusätzliche Laufzeit- und Prozessdetails für die Diagnose. Nur einschalten, wenn du ein Problem genauer untersuchen willst.",
+                            "Captures additional runtime and process details for diagnostics. Enable this only when you want to investigate a problem more closely."
+                        )
+                    )
+                }
+
+                if appState.debugModeEnabled {
+                    DisclosureGroup(
+                        content: {
+                            Text(
+                                appState.debugLogText.isEmpty
+                                    ? text(
+                                        "Noch keine Diagnoseprotokoll-Einträge erfasst.",
+                                        "No diagnostic log entries captured yet.")
+                                    : appState.debugLogText
+                            )
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        },
+                        label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(
+                                    text(
+                                        "Technisches Diagnoseprotokoll", "Technical diagnostic log")
+                                )
+                                Text(
+                                    appState.debugLogText.isEmpty
+                                        ? text(
+                                            "Die technische Protokollierung ist aktiv. Neue Laufzeit- und Prozessereignisse erscheinen hier.",
+                                            "Technical logging is active. New runtime and process events will appear here."
+                                        )
+                                        : appState.debugLogText.components(separatedBy: .newlines)
+                                            .suffix(3).joined(separator: " ")
+                                )
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .textSelection(.enabled)
+                            }
+                            .frame(minHeight: 38, alignment: .topLeading)
+                        }
+                    )
+                }
+
                 DisclosureGroup(
                     isExpanded: $diagnosticsExpanded,
                     content: {
@@ -1046,25 +2553,46 @@ struct SettingsView: View {
                     label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(text("Letzte Diagnosezeilen", "Recent diagnostic lines"))
-                            Text(compressedDiagnosticsText)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
+                            Text(
+                                compressedDiagnosticsText.replacingOccurrences(of: "\n", with: " ")
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .textSelection(.enabled)
                         }
+                        .frame(minHeight: 38, alignment: .topLeading)
                     }
                 )
 
                 HStack(alignment: .center, spacing: 10) {
+                    Button(
+                        text(
+                            "Alles kopieren (Diagnose + Protokoll)",
+                            "Copy all (diagnostics + log)")
+                    ) {
+                        copyToClipboard(appState.diagnosticsAndDebugCombinedForClipboard())
+                    }
+                    .liquidGlassSecondaryButtonStyle()
+
                     Button(text("Diagnose kopieren", "Copy diagnostics")) {
                         copyToClipboard(compressedDiagnosticsText)
                     }
-                    .buttonStyle(.bordered)
+                    .liquidGlassSecondaryButtonStyle()
                     .disabled(compressedDiagnosticsText.isEmpty)
 
                     Button(text("Diagnose exportieren", "Export diagnostics")) {
                         appState.exportDiagnosticsReport()
                     }
-                    .buttonStyle(.bordered)
+                    .liquidGlassSecondaryButtonStyle()
+
+                    if appState.debugModeEnabled {
+                        Button(text("Diagnoseprotokoll exportieren", "Export diagnostic log")) {
+                            appState.exportDebugLog()
+                        }
+                        .liquidGlassSecondaryButtonStyle()
+                    }
                 }
             }
         }
@@ -1079,13 +2607,16 @@ struct SettingsView: View {
                 Button(text("Aktivieren", "Activate")) {
                     appState.activateLicense()
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(appState.licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .liquidGlassPrimaryButtonStyle()
+                .disabled(
+                    appState.licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Button(text("Deaktivieren", "Deactivate")) {
+                Button(role: .destructive) {
                     appState.deactivateLicense()
+                } label: {
+                    Text(text("Deaktivieren", "Deactivate"))
                 }
-                .buttonStyle(.bordered)
+                .liquidGlassDestructiveButtonStyle()
             }
 
             if let storedLicenseSummary = appState.storedLicenseSummary {
@@ -1106,308 +2637,5 @@ struct SettingsView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(string, forType: .string)
     }
-}
 
-private enum SettingsTab: Hashable, CaseIterable {
-    case general
-    case dictation
-    case dictionary
-    case shortcuts
-    case history
-    case about
-    case snippets
-    case advanced
-
-    var symbolName: String {
-        switch self {
-        case .general: return "gearshape"
-        case .dictation: return "mic"
-        case .dictionary: return "character.book.closed"
-        case .shortcuts: return "command"
-        case .history: return "clock.arrow.circlepath"
-        case .about: return "person.crop.circle"
-        case .snippets: return "text.badge.plus"
-        case .advanced: return "wrench.and.screwdriver"
-        }
-    }
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .general:
-            return language.text("Allgemein", "General")
-        case .dictation:
-            return language.text("Diktat", "Dictation")
-        case .dictionary:
-            return language.text("Dictionary", "Dictionary")
-        case .shortcuts:
-            return language.text("Kurzbefehle", "Shortcuts")
-        case .history:
-            return language.text("Verlauf", "History")
-        case .about:
-            return language.text("About", "About")
-        case .snippets:
-            return language.text("Snippets", "Snippets")
-        case .advanced:
-            return language.text("Erweitert", "Advanced")
-        }
-    }
-}
-
-private struct AboutFactRow: View {
-    let title: String
-    let detail: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 110, alignment: .leading)
-            Text(detail)
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-private struct HistoryEntryRow: View {
-    let entry: TranscriptHistoryEntry
-    let dateText: String
-    let language: AppLanguage
-    let onCopy: () -> Void
-    let onDelete: () -> Void
-    @State private var isExpanded = false
-
-    private func text(_ german: String, _ english: String) -> String {
-        language.text(german, english)
-    }
-
-    private var requiresExpansion: Bool {
-        entry.text.count > 180 || entry.text.split(separator: "\n").count > 3
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(dateText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("[\(entry.mode) • \(entry.languageCode)]")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(text("Kopieren", "Copy")) {
-                    onCopy()
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(text("Diktat kopieren vom ", "Copy dictation from ") + dateText)
-                Button(text("Löschen", "Delete")) {
-                    onDelete()
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(text("Diktat löschen vom ", "Delete dictation from ") + dateText)
-            }
-
-            Text(entry.text)
-                .lineLimit(3)
-                .truncationMode(.tail)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-
-            if requiresExpansion {
-                DisclosureGroup(text("Vollständiges Diktat anzeigen", "Show full transcript"), isExpanded: $isExpanded) {
-                    Text(entry.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                        .padding(.top, 2)
-                }
-                .font(.footnote)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-private struct HotkeyRecorderField: NSViewRepresentable {
-    @Binding var hotkey: HotkeyBinding
-    let label: String
-    let language: AppLanguage
-
-    func makeNSView(context: Context) -> HotkeyRecorderButton {
-        let view = HotkeyRecorderButton()
-        view.onChange = { newHotkey in
-            hotkey = newHotkey
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: HotkeyRecorderButton, context: Context) {
-        nsView.displayedHotkey = hotkey
-        nsView.fieldLabel = label
-        nsView.language = language
-    }
-}
-
-private struct HotkeyAdvisoryBox: View {
-    let advisory: HotkeyAdvisory
-
-    private var accentColor: Color {
-        switch advisory.severity {
-        case .critical:
-            return .red
-        case .warning:
-            return .orange
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(advisory.title)
-                .font(.footnote.weight(.semibold))
-            Text(advisory.message)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(accentColor.opacity(0.12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(accentColor.opacity(0.3), lineWidth: 1)
-        )
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct NativeSearchField: NSViewRepresentable {
-    let placeholder: String
-    @Binding var text: String
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
-    }
-
-    func makeNSView(context: Context) -> NSSearchField {
-        let field = NSSearchField(frame: .zero)
-        field.delegate = context.coordinator
-        field.placeholderString = placeholder
-        field.sendsSearchStringImmediately = true
-        return field
-    }
-
-    func updateNSView(_ nsView: NSSearchField, context: Context) {
-        if nsView.stringValue != text {
-            nsView.stringValue = text
-        }
-        nsView.placeholderString = placeholder
-    }
-
-    final class Coordinator: NSObject, NSSearchFieldDelegate {
-        @Binding var text: String
-
-        init(text: Binding<String>) {
-            _text = text
-        }
-
-        func controlTextDidChange(_ obj: Notification) {
-            guard let field = obj.object as? NSSearchField else { return }
-            text = field.stringValue
-        }
-    }
-}
-
-private final class HotkeyRecorderButton: NSButton {
-    var onChange: ((HotkeyBinding) -> Void)?
-    var displayedHotkey: HotkeyBinding = .optionSpace {
-        didSet { updatePresentation() }
-    }
-    var fieldLabel: String = "Shortcut" {
-        didSet { updatePresentation() }
-    }
-    var language: AppLanguage = .german {
-        didSet { updatePresentation() }
-    }
-
-    private var isRecording = false {
-        didSet { updatePresentation() }
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        bezelStyle = .rounded
-        setButtonType(.momentaryPushIn)
-        target = self
-        action = #selector(beginRecording)
-        updatePresentation()
-    }
-
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    override var acceptsFirstResponder: Bool { true }
-
-    @objc private func beginRecording() {
-        isRecording = true
-        window?.makeFirstResponder(self)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == UInt16(kVK_Escape) && event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
-            isRecording = false
-            updatePresentation()
-            return
-        }
-
-        guard let binding = HotkeyBinding.from(event: event) else {
-            NSSound.beep()
-            return
-        }
-
-        displayedHotkey = binding
-        isRecording = false
-        onChange?(binding)
-    }
-
-    override func resignFirstResponder() -> Bool {
-        isRecording = false
-        updatePresentation()
-        return true
-    }
-
-    private func updatePresentation() {
-        title = isRecording
-            ? language.text("Jetzt Tastenkombination drücken", "Press shortcut now")
-            : displayedHotkey.displayName
-        setAccessibilityLabel(fieldLabel)
-        setAccessibilityValue(title)
-        setAccessibilityHelp(language.text(
-            "Leertaste oder Return zum Aufnehmen, Escape zum Abbrechen.",
-            "Press Space or Return to start recording, Escape to cancel."
-        ))
-    }
-}
-
-private struct PermissionStatusRow: View {
-    let title: String
-    let status: PermissionStatus
-    let detail: String
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(detail)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text(status.label)
-                .foregroundStyle(status.color)
-        }
-        .padding(.vertical, 2)
-    }
 }

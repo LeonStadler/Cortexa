@@ -1,0 +1,178 @@
+import AVFoundation
+import Foundation
+
+@MainActor
+final class PermissionCoordinator {
+    private let permissionController: PermissionControlling
+    private let dictationRuntime: DictationRuntimeControlling
+    private let currentMicrophonePermissionStatus: () -> PermissionStatus
+    private let setMicrophonePermissionStatus: (PermissionStatus) -> Void
+    private let currentAccessibilityPermissionStatus: () -> PermissionStatus
+    private let setAccessibilityPermissionStatus: (PermissionStatus) -> Void
+    private let registerSelectedHotkey: (Bool) -> Void
+    private let appendDiagnostic: (String) -> Void
+    private let appendDebug: (String) -> Void
+    private let isDebugModeEnabled: () -> Bool
+    private var permissionPollTask: Task<Void, Never>?
+    private var accessibilityStatusDebounceTask: Task<Void, Never>?
+    private var hasAppliedAccessibilityStatusOnce = false
+
+    init(
+        permissionController: PermissionControlling,
+        dictationRuntime: DictationRuntimeControlling,
+        currentMicrophonePermissionStatus: @escaping () -> PermissionStatus,
+        setMicrophonePermissionStatus: @escaping (PermissionStatus) -> Void,
+        currentAccessibilityPermissionStatus: @escaping () -> PermissionStatus,
+        setAccessibilityPermissionStatus: @escaping (PermissionStatus) -> Void,
+        registerSelectedHotkey: @escaping (Bool) -> Void,
+        appendDiagnostic: @escaping (String) -> Void,
+        appendDebug: @escaping (String) -> Void,
+        isDebugModeEnabled: @escaping () -> Bool
+    ) {
+        self.permissionController = permissionController
+        self.dictationRuntime = dictationRuntime
+        self.currentMicrophonePermissionStatus = currentMicrophonePermissionStatus
+        self.setMicrophonePermissionStatus = setMicrophonePermissionStatus
+        self.currentAccessibilityPermissionStatus = currentAccessibilityPermissionStatus
+        self.setAccessibilityPermissionStatus = setAccessibilityPermissionStatus
+        self.registerSelectedHotkey = registerSelectedHotkey
+        self.appendDiagnostic = appendDiagnostic
+        self.appendDebug = appendDebug
+        self.isDebugModeEnabled = isDebugModeEnabled
+    }
+
+    func stop() {
+        permissionPollTask?.cancel()
+        permissionPollTask = nil
+        accessibilityStatusDebounceTask?.cancel()
+        accessibilityStatusDebounceTask = nil
+    }
+
+    func refreshPermissionStates() {
+        let rawMic = AVCaptureDevice.authorizationStatus(for: .audio)
+        let microphoneStatus = permissionController.microphoneStatus()
+        setMicrophonePermissionStatus(microphoneStatus)
+        if isDebugModeEnabled() {
+            appendDebug(
+                "permissions.microphone raw=\(String(describing: rawMic)) mapped=\(microphoneStatus)"
+            )
+        }
+        applyAccessibilityStatusWithDebounce(permissionController.accessibilityStatus())
+    }
+
+    func refreshPermissionStatesAfterUserFacingPermissionStep() {
+        refreshPermissionStates()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard let self else { return }
+            self.refreshPermissionStates()
+        }
+    }
+
+    func requestMicrophoneAccessFromSettings() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let status = AVCaptureDevice.authorizationStatus(for: .audio)
+            switch status {
+            case .authorized:
+                self.refreshPermissionStatesAfterUserFacingPermissionStep()
+            case .notDetermined:
+                let granted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                    AVCaptureDevice.requestAccess(for: .audio) { ok in
+                        DispatchQueue.main.async {
+                            continuation.resume(returning: ok)
+                        }
+                    }
+                }
+                self.refreshPermissionStatesAfterUserFacingPermissionStep()
+                if !granted {
+                    self.appendDiagnostic("Mikrofonzugriff wurde nicht erteilt.")
+                }
+            case .denied, .restricted:
+                self.openMicrophoneSettings()
+                self.schedulePermissionRefresh()
+            @unknown default:
+                self.refreshPermissionStatesAfterUserFacingPermissionStep()
+            }
+        }
+    }
+
+    func requestAccessibilityAccessFromSettings() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if self.permissionController.accessibilityStatus() == .granted {
+                self.refreshPermissionStatesAfterUserFacingPermissionStep()
+                return
+            }
+            self.dictationRuntime.promptAccessibilityTrustFromUser()
+            self.refreshPermissionStatesAfterUserFacingPermissionStep()
+            self.schedulePermissionRefresh()
+        }
+    }
+
+    func openMicrophoneSettings() {
+        dictationRuntime.openMicrophoneSettings()
+        schedulePermissionRefresh()
+    }
+
+    func openAccessibilitySettings() {
+        dictationRuntime.openAccessibilitySettings()
+        schedulePermissionRefresh()
+    }
+
+    func schedulePermissionRefresh() {
+        permissionPollTask?.cancel()
+        permissionPollTask = Task { @MainActor [weak self] in
+            let delaysNanoseconds: [UInt64] = [
+                400_000_000, 1_200_000_000, 2_500_000_000, 5_000_000_000,
+            ]
+            for delay in delaysNanoseconds {
+                try? await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled else { return }
+                self?.refreshPermissionsAfterExternalEvent(reason: "permission-poll")
+            }
+        }
+    }
+
+    func refreshPermissionsAfterExternalEvent(reason: String) {
+        let beforeMic = currentMicrophonePermissionStatus()
+        let rawAXBefore = permissionController.accessibilityStatus()
+        refreshPermissionStates()
+        let afterMic = currentMicrophonePermissionStatus()
+        let rawAXAfter = permissionController.accessibilityStatus()
+        if beforeMic != afterMic || rawAXBefore != rawAXAfter {
+            registerSelectedHotkey(true)
+            appendDiagnostic("Berechtigungen geändert (\(reason))")
+        }
+    }
+
+    private func applyAccessibilityStatusWithDebounce(_ raw: PermissionStatus) {
+        if !hasAppliedAccessibilityStatusOnce {
+            accessibilityStatusDebounceTask?.cancel()
+            setAccessibilityPermissionStatus(raw)
+            hasAppliedAccessibilityStatusOnce = true
+            return
+        }
+
+        if raw == .granted {
+            accessibilityStatusDebounceTask?.cancel()
+            setAccessibilityPermissionStatus(.granted)
+            return
+        }
+
+        if raw == currentAccessibilityPermissionStatus() {
+            accessibilityStatusDebounceTask?.cancel()
+            return
+        }
+
+        accessibilityStatusDebounceTask?.cancel()
+        accessibilityStatusDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled, let self else { return }
+            let again = self.permissionController.accessibilityStatus()
+            if again == raw {
+                self.setAccessibilityPermissionStatus(again)
+            }
+        }
+    }
+}

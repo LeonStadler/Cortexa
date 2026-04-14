@@ -1,6 +1,10 @@
 name: WisprLocalMac
 options:
   minimumXcodeGenVersion: 2.38.0
+  developmentLanguage: en
+  knownRegions:
+    - en
+    - de
 settings:
   base:
     SWIFT_VERSION: 5.10
@@ -28,6 +32,8 @@ targets:
         type: folder
     resources:
       - path: ../AppShell/Resources/Assets.xcassets
+      - path: ../AppShell/Resources/Localizable.xcstrings
+      - path: ../../../changelog.md
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wisprlocal.mac
@@ -35,6 +41,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: WisprLocalMac-Info.plist
         CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
       configs:
@@ -42,11 +49,17 @@ targets:
           ENABLE_HARDENED_RUNTIME: YES
     dependencies:
       - package: WisprLocalPackage
+        product: AIProcessingCore
+      - package: WisprLocalPackage
         product: ASRCore
+      - package: WisprLocalPackage
+        product: AudioCore
       - package: WisprLocalPackage
         product: SnippetCore
       - package: WisprLocalPackage
         product: SessionCore
+      - package: WisprLocalPackage
+        product: TextTargetMac
       - package: WisprLocalPackage
         product: CapabilityCore
       - package: WisprLocalPackage

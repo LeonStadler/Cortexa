@@ -1,5 +1,22 @@
 # Changelog
 
+## Features
+
+- 2026-04-14: Funktionsreichen macOS-Settings-/Runtime-Stand für Speech, AI und Provider-Management wiederhergestellt.
+  - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsTab.swift`, `apps/macos/AppShell/SettingsFormPages.swift`, `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/AIProviderController.swift`, `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/SessionEntryController.swift`, `apps/macos/AppShell/MenuBarContentView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/WisprLocalMac/project.yml`
+  - Funktionalität: Die umfangreichen Speech-/AI-Einstellungen sind wieder aktiv (Provider-, Modell- und Formatierungssteuerung inkl. Kontextbewusstsein und Dictionary-Workflows). Zusätzlich wurden die zugehörigen AppShell-Controller und Settings-Komponenten als konsistentes Paket zurückgeführt, damit alle früheren UI- und State-Pfade wieder verfügbar sind.
+
+## Fixes
+
+- 2026-04-14: Große Restore-Migration auf funktionsreichen Settings-/Runtime-Stand technisch konsolidiert und Build-Blocker auf aktuelle Core-APIs aufgelöst.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `apps/macos/AppShell/PermissionController.swift`, `Sources/TextTargetMac/TextTargetTypes.swift`, `Sources/ASRCore/ASRTypes.swift`, `Sources/ASRCore/WhisperCppEngine.swift`, `Sources/TextTargetMac/AXTextTargetServices.swift`, `apps/macos/AppShell/*` (Settings-/Controller-Restore), `Sources/AIProcessingCore/*`, `Sources/ASRCore/VoiceModelCatalog.swift`, `Sources/ASRCore/VoiceModelInstaller.swift`, `Sources/AudioCore/AudioPreprocessor.swift`, `Tests/AIProcessingCoreTests/*`, `Tests/AppShellSupportTests/*`, `Tests/AudioCoreTests/AudioPreprocessorTests.swift`, `apps/macos/WisprLocalMac/project.yml`
+  - Funktionalität: Nach der Rückführung auf den reicheren Stand (Basis: `5bc2504`) wurden API-Differenzen zur neueren Core-Schicht gezielt aufgelöst (u. a. `ASRConfig`-Signatur, Entfernung veralteter `onDebugEvent`-Hooks, AX-Permission/Focused-Target-Pfad auf aktuelle `AXTextTargetResolver`-Logik, Sichtbarkeit von `TextTargetSnapshot.element`). Dadurch sind die zuvor aufgetretenen Compilerfehler im AppShell-Pfad behoben und der lokale macOS-Build inkl. Smoke-Test wieder erfolgreich.
+  - Rückverfolgbarkeit: Diese Änderung bündelt den Restore des umfangreichen Settings-/Runtime-Pakets mit den notwendigen Kompatibilitätsfixes, damit spätere Qualitätsarbeit auf stabiler Build-Basis erfolgen kann.
+
+- 2026-04-14: AIProcessingCore und Test-Suite auf denselben API-Stand harmonisiert, um Build-/Test-Inkonsistenzen nach dem Restore zu beheben.
+  - Dateien: `Sources/AIProcessingCore/AIProcessingTypes.swift`, `Sources/AIProcessingCore/AIProcessingService.swift`, `Sources/AIProcessingCore/AppleFoundationTextProcessor.swift`, `Sources/AIProcessingCore/AIProcessingOutputValidator.swift`, `Sources/AIProcessingCore/OpenAICompatibleRemoteTextProcessor.swift`, `Sources/AIProcessingCore/AppleFoundationPromptBuilder.swift`, `Tests/AIProcessingCoreTests/AIProcessingServiceTests.swift`, `Tests/AIProcessingCoreTests/AppleFoundationPromptBuilderTests.swift`, `Tests/AIProcessingCoreTests/OpenAICompatibleRemoteTextProcessorTests.swift`, `Tests/AppShellSupportTests/*`, `apps/macos/AppShell/MacAppState.swift`
+  - Funktionalität: Der Restore wurde auf einen konsistenten Typen-/Provider-Vertrag gebracht, doppelte PromptBuilder-Definitionen wurden entfernt und der lokale AX-Fokus-Zugriff in `MacAppState` auf einen sicheren Cast umgestellt. Dadurch laufen die relevanten Pakettests wieder stabil.
+
 ## Fixes
 
 - 2026-04-12: AI-Processing-Initialisierung bereinigt und Kontext-Gating pro Stage stabilisiert.

@@ -1,6 +1,15 @@
 import AVFoundation
 import ApplicationServices
 import Foundation
+import TextTargetMac
+
+/// Gemeinsame AX-/TCC-Logik für Einstellungen und Laufzeit (z. B. `DictationRuntime`).
+enum AccessibilityTrust {
+    /// Effektiver Bedienungshilfen-Status für den laufenden Prozess (Main-Thread-Pflicht für AX).
+    static func isClientProcessTrusted() -> Bool {
+        AXIsProcessTrusted()
+    }
+}
 
 protocol PermissionControlling {
     func microphoneStatus() -> PermissionStatus
@@ -13,6 +22,6 @@ struct PermissionController: PermissionControlling {
     }
 
     func accessibilityStatus() -> PermissionStatus {
-        PermissionStatus.accessibility(isTrusted: AXIsProcessTrusted())
+        PermissionStatus.accessibility(isTrusted: AccessibilityTrust.isClientProcessTrusted())
     }
 }

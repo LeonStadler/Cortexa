@@ -149,13 +149,9 @@ struct PersonalDictionaryStore: PersonalDictionaryStoring {
     }
 
     func exportSnapshot(_ snapshot: PersonalDictionarySnapshot, to destinationURL: URL) throws {
-        let parent = destinationURL.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: parent.path) {
-            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-        }
-
         let normalized = deduped(snapshot: snapshot)
         let data = try JSONEncoder().encode(normalized)
+        try SecurePersistence.ensureParentDirectory(for: destinationURL, fileManager: fileManager)
         try data.write(to: destinationURL, options: [.atomic])
     }
 
@@ -166,8 +162,7 @@ struct PersonalDictionaryStore: PersonalDictionaryStoring {
 
         for term in snapshot.terms {
             let key = normalizedKey(term.term, languageCode: term.languageCode)
-            guard !key.isEmpty else { continue }
-            guard !seenTerms.contains(key) else { continue }
+            guard !key.isEmpty, !seenTerms.contains(key) else { continue }
             seenTerms.insert(key)
             terms.append(term)
         }
@@ -202,9 +197,7 @@ struct PersonalDictionaryStore: PersonalDictionaryStoring {
     }
 
     private func quarantineCorruptedDictionary(reason: String) {
-        guard fileManager.fileExists(atPath: fileURL.path) else {
-            return
-        }
+        guard fileManager.fileExists(atPath: fileURL.path) else { return }
 
         let parent = fileURL.deletingLastPathComponent()
         let timestamp = Int(Date().timeIntervalSince1970)
@@ -220,8 +213,7 @@ struct PersonalDictionaryStore: PersonalDictionaryStoring {
             try fileManager.moveItem(at: fileURL, to: quarantineURL)
             try SecurePersistence.hardenFileIfPresent(at: quarantineURL, fileManager: fileManager)
         } catch {
-            // Best-effort quarantine only.
+            // Best effort only.
         }
     }
 }
-

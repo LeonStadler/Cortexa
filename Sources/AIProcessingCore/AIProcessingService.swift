@@ -1,6 +1,7 @@
 import Foundation
 
 public protocol AITextProcessingProviding: Sendable {
+    var providerID: String { get }
     var providerKind: AIProviderKind { get }
     func models() -> [AIModelDescriptor]
     func process(_ request: AIProcessingRequest, model: AIModelDescriptor) async throws -> String
@@ -13,10 +14,10 @@ public enum AIProcessingError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case let .providerUnavailable(reason),
-             let .modelUnavailable(reason):
+        case .providerUnavailable(let reason),
+            .modelUnavailable(let reason):
             return reason
-        case let .modelNotFound(modelID):
+        case .modelNotFound(let modelID):
             return "AI model \(modelID) was not found."
         }
     }
@@ -26,7 +27,9 @@ public struct AIModelCatalog: Sendable {
     private let descriptors: [AIModelDescriptor]
 
     public init(descriptors: [AIModelDescriptor]) {
-        self.descriptors = descriptors.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        self.descriptors = descriptors.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
     }
 
     public var allModels: [AIModelDescriptor] {
@@ -48,14 +51,13 @@ public struct AIModelCatalog: Sendable {
 }
 
 public struct AIProcessingService: Sendable {
-    private let providers: [AIProviderKind: any AITextProcessingProviding]
+    private let providers: [String: any AITextProcessingProviding]
+    private let outputValidator = AIProcessingOutputValidator()
 
-    public init() {
-        self.providers = Self.makeDefaultProviders()
-    }
-
-    public init(providers: [AIProviderKind: any AITextProcessingProviding]) {
-        self.providers = providers
+    public init(providers: [any AITextProcessingProviding]? = nil) {
+        let resolvedProviders = providers ?? Self.makeDefaultProviders()
+        self.providers = Dictionary(
+            uniqueKeysWithValues: resolvedProviders.map { ($0.providerID, $0) })
     }
 
     public func catalog() -> AIModelCatalog {
@@ -65,7 +67,8 @@ public struct AIProcessingService: Sendable {
     public func process(_ request: AIProcessingRequest) async -> AIProcessingOutcome {
         let trimmed = request.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return .bypassed(text: request.text, reason: "AI processing skipped because the text is empty.")
+            return .bypassed(
+                text: request.text, reason: "AI processing skipped because the text is empty.")
         }
 
         let configuration = request.configuration
@@ -73,75 +76,69 @@ public struct AIProcessingService: Sendable {
             return .bypassed(text: request.text, reason: "AI processing is disabled.")
         }
 
-        if request.stage == .live, configuration.scope == .finalOnly {
-            return .bypassed(text: request.text, reason: "AI processing is limited to final transcripts.")
+        if request.stage == .live, !configuration.applyDuringLiveInsertion {
+            return .bypassed(
+                text: request.text, reason: "AI processing is disabled for live insertion.")
+        }
+
+        if request.stage == .final, !configuration.applyToFinalResult {
+            return .bypassed(
+                text: request.text, reason: "AI processing is disabled for final results.")
         }
 
         let catalog = catalog()
         guard let model = catalog.model(id: configuration.selectedModelID) else {
-            return .bypassed(text: request.text, reason: "AI processing skipped because no usable model is selected.")
+            return .bypassed(
+                text: request.text,
+                reason: "AI processing skipped because no usable model is selected.")
         }
 
         guard model.availability.isAvailable else {
-            let reason = model.availability.reason ?? "The selected AI model is currently unavailable."
+            let reason =
+                model.availability.reason ?? "The selected AI model is currently unavailable."
             return .bypassed(text: request.text, reason: reason)
         }
 
-        guard let provider = providers[model.providerKind] else {
-            return .failedFallback(text: request.text, modelID: model.id, reason: "AI provider is not configured.")
+        if !configuration.requiresAIModelInvocation {
+            return .bypassed(
+                text: request.text,
+                reason:
+                    "AI processing skipped because no substantive revision tasks are active (e.g. all style, salutation, format, and cleanup intensity are neutral)."
+            )
         }
 
-        let effectiveRequest = sanitizeContextIfNeeded(in: request)
+        guard let provider = providers[model.providerID] else {
+            return .failedFallback(
+                text: request.text, modelID: model.id, reason: "AI provider is not configured.")
+        }
 
         do {
-            let processed = try await provider.process(effectiveRequest, model: model)
+            let processed = try await provider.process(request, model: model)
             let normalized = processed.trimmingCharacters(in: .whitespacesAndNewlines)
             if normalized.isEmpty {
-                return .failedFallback(text: request.text, modelID: model.id, reason: "AI processing returned an empty result. Keeping the original text.")
+                return .failedFallback(
+                    text: request.text, modelID: model.id,
+                    reason: "AI processing returned an empty result. Keeping the original text.")
+            }
+            if let validationFailure = outputValidator.validate(
+                originalText: request.text, processedText: normalized)
+            {
+                return .failedFallback(
+                    text: request.text, modelID: model.id, reason: validationFailure)
             }
             return .processed(text: normalized, modelID: model.id)
         } catch {
             return .failedFallback(
                 text: request.text,
                 modelID: model.id,
-                reason: "AI processing failed: \(error.localizedDescription). Keeping the original text."
+                reason:
+                    "AI processing failed: \(error.localizedDescription). Keeping the original text."
             )
         }
     }
 
-    private static func makeDefaultProviders() -> [AIProviderKind: any AITextProcessingProviding] {
-        [AppleFoundationTextProcessor().providerKind: AppleFoundationTextProcessor()]
-    }
-
-    private func sanitizeContextIfNeeded(in request: AIProcessingRequest) -> AIProcessingRequest {
-        guard let context = request.appContextText?.trimmingCharacters(in: .whitespacesAndNewlines), !context.isEmpty else {
-            return request
-        }
-
-        guard contextApplies(for: request.stage, mode: request.configuration.contextAwarenessMode) else {
-            return AIProcessingRequest(
-                text: request.text,
-                stage: request.stage,
-                locale: request.locale,
-                configuration: request.configuration,
-                appContextText: nil,
-                dictionaryTerms: request.dictionaryTerms
-            )
-        }
-
-        return request
-    }
-
-    private func contextApplies(for stage: AIProcessingStage, mode: ContextAwarenessMode) -> Bool {
-        switch mode {
-        case .off:
-            return false
-        case .finalOnly:
-            return stage == .final
-        case .liveOnly:
-            return stage == .live
-        case .liveAndFinal:
-            return true
-        }
+    private static func makeDefaultProviders() -> [any AITextProcessingProviding] {
+        let provider = AppleFoundationTextProcessor()
+        return [provider]
     }
 }

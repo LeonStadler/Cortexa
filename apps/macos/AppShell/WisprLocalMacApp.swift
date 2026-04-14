@@ -1,6 +1,48 @@
 import AppKit
 import SwiftUI
 
+/// Smoke-/Automatisierungspfad: Einstellungen ohne System-Events-Tastatur öffnen (kein Bedienungshilfen-Zugriff für Terminal nötig).
+private enum WisprSmokeLaunch {
+    static var shouldOpenSettingsAfterLaunch: Bool {
+        if ProcessInfo.processInfo.environment["WISPR_SMOKE_OPEN_SETTINGS"] == "1" {
+            return true
+        }
+        return ProcessInfo.processInfo.arguments.contains("--wispr-smoke-open-settings")
+    }
+}
+
+/// Hält den einmaligen `didFinishLaunching`-Observer, ohne `var`-Capture in einer `@Sendable`-Closure.
+private final class SmokeOpenSettingsLaunchObserver {
+    private var notificationToken: NSObjectProtocol?
+    private static var retained: SmokeOpenSettingsLaunchObserver?
+
+    static func start(appState: MacAppState) {
+        retained = SmokeOpenSettingsLaunchObserver(appState: appState)
+    }
+
+    private init(appState: MacAppState) {
+        notificationToken = NotificationCenter.default.addObserver(
+            forName: NSApplication.didFinishLaunchingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else {
+                Self.retained = nil
+                return
+            }
+            if let token = notificationToken {
+                NotificationCenter.default.removeObserver(token)
+                notificationToken = nil
+            }
+            Self.retained = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                appState.openSettingsWindow()
+            }
+        }
+    }
+}
+
 @main
 struct WisprLocalMacApp: App {
     @StateObject private var updaterController: SparkleUpdaterController
@@ -19,6 +61,11 @@ struct WisprLocalMacApp: App {
         _updaterController = StateObject(wrappedValue: updaterController)
         _appState = StateObject(wrappedValue: appState)
         self.settingsWindowPresenter = settingsWindowPresenter
+        BundleSigningDiagnostics.logStartupIdentityIfDebug()
+
+        if WisprSmokeLaunch.shouldOpenSettingsAfterLaunch {
+            SmokeOpenSettingsLaunchObserver.start(appState: appState)
+        }
     }
 
     var body: some Scene {
@@ -35,370 +82,5 @@ struct WisprLocalMacApp: App {
                 }
             }
         }
-    }
-}
-
-private final class SettingsWindowPresenter {
-    private let appState: MacAppState
-    private weak var window: NSWindow?
-
-    init(appState: MacAppState) {
-        self.appState = appState
-    }
-
-    func show() {
-        let window = existingWindow ?? makeWindow()
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private var existingWindow: NSWindow? {
-        guard let window, !window.isReleasedWhenClosed else {
-            return nil
-        }
-        return window
-    }
-
-    private func makeWindow() -> NSWindow {
-        let hostingController = NSHostingController(rootView: SettingsView().environmentObject(appState))
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = "WisprLocal"
-        window.toolbarStyle = .preference
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.styleMask = [.titled, .closable, .resizable]
-        window.setContentSize(NSSize(width: 980, height: 640))
-        window.contentMinSize = NSSize(width: 940, height: 620)
-        window.contentMaxSize = NSSize(width: 1_180, height: 1_080)
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName("WisprLocalSettingsWindow")
-        self.window = window
-        return window
-    }
-}
-
-struct MenuBarContentView: View {
-    @EnvironmentObject private var appState: MacAppState
-    @EnvironmentObject private var updaterController: SparkleUpdaterController
-    @AppStorage("wispr.uiLanguage") private var uiLanguageRaw: String = AppLanguage.german.rawValue
-
-    private var appLanguage: AppLanguage {
-        AppLanguage(rawValue: uiLanguageRaw) ?? .german
-    }
-
-    private func text(_ german: String, _ english: String) -> String {
-        appLanguage.text(german, english)
-    }
-
-    private var latestDictationPreview: String {
-        let normalized = appState.latestDictationText
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard normalized.count > 140 else {
-            return normalized
-        }
-        return "\(normalized.prefix(140))…"
-    }
-
-    private var showsUpdateMenuItem: Bool {
-        updaterController.state.allowsManualCheck
-    }
-
-    private var showsStatusHeader: Bool {
-        appState.isSessionActive || appState.hasPermissionProblems || appState.recordingStatus == "Error"
-    }
-
-    private var primaryActionTitle: String {
-        appState.isSessionActive
-            ? text("Diktat stoppen", "Stop Dictation")
-            : text("Diktat starten", "Start Dictation")
-    }
-
-    private var insertionModeLabel: String {
-        if appState.finalResultDeliveryMode == .clipboardOnly {
-            return text("Zwischenablage", "Clipboard")
-        }
-        return appState.streamingEnabled ? text("Live", "Live") : text("Am Ende einfügen", "Insert on Stop")
-    }
-
-    private var statusLine: String {
-        switch appState.recordingStatus {
-        case "Recording":
-            return text("Hört zu…", "Listening…")
-        case "Error":
-            return text("Aufmerksamkeit erforderlich", "Needs attention")
-        case "Idle":
-            switch appState.dictationCapability {
-            case .fullSystemInsertion:
-                return text("Bereit", "Ready")
-            case .limitedTranscription:
-                return text("Eingeschränkt", "Limited")
-            case .unavailable:
-                return text("Zugriff erforderlich", "Needs access")
-            }
-        default:
-            return text("Aktiv", "Active")
-        }
-    }
-
-    private var statusColor: Color {
-        switch appState.recordingStatus {
-        case "Recording":
-            return .red
-        case "Error":
-            return .orange
-        default:
-            return appState.hasPermissionProblems ? .yellow : .green
-        }
-    }
-
-    private var secondaryLine: String? {
-        if appState.isSessionActive {
-            return "\(appState.selectedLanguage.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)) • \(insertionModeLabel)"
-        }
-        if appState.recordingStatus == "Error" {
-            return appState.statusHintText
-        }
-        if appState.hasPermissionProblems {
-            return appState.permissionSummary
-        }
-        return nil
-    }
-
-    @ViewBuilder
-    private var statusHeader: some View {
-        if showsStatusHeader {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-
-                    Text(statusLine)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                }
-
-                if let secondaryLine {
-                    Text(secondaryLine)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-            .padding(.horizontal, 2)
-            .padding(.bottom, 2)
-        }
-    }
-
-    @ViewBuilder
-    private var startDictationButton: some View {
-        if appState.showMenuBarShortcutHints,
-           let keyEquivalent = appState.selectedHotkey.swiftUIKeyEquivalent {
-            Button {
-                appState.toggleTranscriptionFromMenuBar()
-            } label: {
-                PrimaryMenuActionLabel(
-                    title: primaryActionTitle,
-                    shortcutGlyph: nil,
-                    shortcutText: appState.selectedHotkey.displayName
-                )
-            }
-            .keyboardShortcut(keyEquivalent, modifiers: appState.selectedHotkey.swiftUIEventModifiers)
-        } else {
-            Button {
-                appState.toggleTranscriptionFromMenuBar()
-            } label: {
-                PrimaryMenuActionLabel(
-                    title: primaryActionTitle,
-                    shortcutGlyph: nil,
-                    shortcutText: nil
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var copyLastDictationButton: some View {
-        if appState.showMenuBarShortcutHints {
-            Button {
-                copyToClipboard(appState.latestDictationText)
-            } label: {
-                MenuActionLabel(
-                    title: text("Letztes Diktat kopieren", "Copy last dictation"),
-                    shortcutGlyph: nil,
-                    shortcutText: "Command + Shift + C"
-                )
-            }
-            .keyboardShortcut("c", modifiers: [.command, .shift])
-        } else {
-            Button {
-                copyToClipboard(appState.latestDictationText)
-            } label: {
-                MenuActionLabel(
-                    title: text("Letztes Diktat kopieren", "Copy last dictation"),
-                    shortcutGlyph: nil,
-                    shortcutText: nil
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var openSettingsButton: some View {
-        if appState.showMenuBarShortcutHints {
-            Button {
-                appState.openSettingsWindow()
-            } label: {
-                MenuActionLabel(
-                    title: text("Einstellungen…", "Settings…"),
-                    shortcutGlyph: nil,
-                    shortcutText: "Command + ,"
-                )
-            }
-            .keyboardShortcut(",", modifiers: [.command])
-        } else {
-            Button {
-                appState.openSettingsWindow()
-            } label: {
-                MenuActionLabel(
-                    title: text("Einstellungen…", "Settings…"),
-                    shortcutGlyph: nil,
-                    shortcutText: nil
-                )
-            }
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            startDictationButton
-
-            statusHeader
-
-            if showsStatusHeader {
-                Divider()
-            }
-
-            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
-                .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
-
-            Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
-                ForEach(DictationLanguage.allCases) { language in
-                    Text(language.localizedDisplayName(interfaceLanguageCode: appLanguage.rawValue)).tag(language)
-                }
-            }
-
-            if appState.hasPermissionProblems {
-                Divider()
-                Text(text("Berechtigungen", "Permissions"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if appState.microphonePermissionStatus != .granted {
-                    Button(text("Mikrofonzugriff öffnen", "Open microphone access")) {
-                        appState.openMicrophoneSettings()
-                    }
-                }
-                if appState.accessibilityPermissionStatus != .granted {
-                    Button(text("Bedienungshilfen öffnen", "Open accessibility access")) {
-                        appState.openAccessibilitySettings()
-                    }
-                }
-            }
-
-            if !appState.latestDictationText.isEmpty {
-                Divider()
-                copyLastDictationButton
-            }
-
-            Divider()
-
-            openSettingsButton
-
-            if showsUpdateMenuItem {
-                Button(text("Nach Updates suchen", "Check for updates")) {
-                    appState.checkForUpdates()
-                }
-                .buttonStyle(.borderless)
-            }
-
-            Divider()
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                MenuActionLabel(
-                    title: text("Beenden", "Quit"),
-                    shortcutGlyph: appState.showMenuBarShortcutHints ? "⌘Q" : nil,
-                    shortcutText: appState.showMenuBarShortcutHints ? "Command + Q" : nil
-                )
-            }
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
-        .frame(width: 332)
-        .controlSize(.small)
-    }
-
-    private func copyToClipboard(_ string: String) {
-        guard !string.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(string, forType: .string)
-    }
-}
-
-private struct MenuActionLabel: View {
-    let title: String
-    let shortcutGlyph: String?
-    let shortcutText: String?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(title)
-            Spacer(minLength: 12)
-            if let shortcutGlyph, !shortcutGlyph.isEmpty {
-                Text(shortcutGlyph)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(shortcutText.map { "\(title), \($0)" } ?? title)
-    }
-}
-
-private struct PrimaryMenuActionLabel: View {
-    let title: String
-    let shortcutGlyph: String?
-    let shortcutText: String?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .font(.body.weight(.semibold))
-            Spacer(minLength: 12)
-            if let shortcutGlyph, !shortcutGlyph.isEmpty {
-                Text(shortcutGlyph)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(.separator.opacity(0.08), lineWidth: 1)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(shortcutText.map { "\(title), \($0)" } ?? title)
     }
 }

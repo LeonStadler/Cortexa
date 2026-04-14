@@ -1,12 +1,15 @@
-import ASRCore
 import AIProcessingCore
+import ASRCore
 import AVFoundation
 import AppKit
 import ApplicationServices
+import AudioCore
 import CapabilityCore
+import Carbon
 import Foundation
 import SessionCore
 import SnippetCore
+import TextTargetMac
 
 enum DictationMode {
     case finalize
@@ -16,6 +19,15 @@ enum DictationMode {
 enum DictationLanguage: String, CaseIterable, Identifiable {
     case german = "de"
     case english = "en"
+    case french = "fr"
+    case spanish = "es"
+    case italian = "it"
+    case dutch = "nl"
+    case portuguese = "pt"
+    case polish = "pl"
+    case turkish = "tr"
+    case czech = "cs"
+    case chinese = "zh"
     case auto = "auto"
 
     var id: String { rawValue }
@@ -26,6 +38,24 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return "Deutsch"
         case .english:
             return "Englisch"
+        case .french:
+            return "Französisch"
+        case .spanish:
+            return "Spanisch"
+        case .italian:
+            return "Italienisch"
+        case .dutch:
+            return "Niederländisch"
+        case .portuguese:
+            return "Portugiesisch"
+        case .polish:
+            return "Polnisch"
+        case .turkish:
+            return "Türkisch"
+        case .czech:
+            return "Tschechisch"
+        case .chinese:
+            return "Chinesisch"
         case .auto:
             return "Auto"
         }
@@ -37,6 +67,24 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return "German"
         case ("en", .english):
             return "English"
+        case ("en", .french):
+            return "French"
+        case ("en", .spanish):
+            return "Spanish"
+        case ("en", .italian):
+            return "Italian"
+        case ("en", .dutch):
+            return "Dutch"
+        case ("en", .portuguese):
+            return "Portuguese"
+        case ("en", .polish):
+            return "Polish"
+        case ("en", .turkish):
+            return "Turkish"
+        case ("en", .czech):
+            return "Czech"
+        case ("en", .chinese):
+            return "Chinese"
         case ("en", .auto):
             return "Auto"
         default:
@@ -50,6 +98,24 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return "de"
         case .english:
             return "en"
+        case .french:
+            return "fr"
+        case .spanish:
+            return "es"
+        case .italian:
+            return "it"
+        case .dutch:
+            return "nl"
+        case .portuguese:
+            return "pt"
+        case .polish:
+            return "pl"
+        case .turkish:
+            return "tr"
+        case .czech:
+            return "cs"
+        case .chinese:
+            return "zh"
         case .auto:
             return "auto"
         }
@@ -61,6 +127,24 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
             return Locale(identifier: "de_DE")
         case .english:
             return Locale(identifier: "en_US")
+        case .french:
+            return Locale(identifier: "fr_FR")
+        case .spanish:
+            return Locale(identifier: "es_ES")
+        case .italian:
+            return Locale(identifier: "it_IT")
+        case .dutch:
+            return Locale(identifier: "nl_NL")
+        case .portuguese:
+            return Locale(identifier: "pt_PT")
+        case .polish:
+            return Locale(identifier: "pl_PL")
+        case .turkish:
+            return Locale(identifier: "tr_TR")
+        case .czech:
+            return Locale(identifier: "cs_CZ")
+        case .chinese:
+            return Locale(identifier: "zh_CN")
         case .auto:
             return Locale.current
         }
@@ -76,13 +160,13 @@ enum TranslationOutputMode: String, CaseIterable, Identifiable {
     func localizedDisplayName(interfaceLanguageCode: String) -> String {
         switch (interfaceLanguageCode, self) {
         case ("en", .original):
-            return "Default"
+            return "Original"
         case ("en", .english):
             return "English"
         case (_, .original):
-            return "Standard"
+            return "Keine Übersetzung"
         case (_, .english):
-            return "Englisch"
+            return "Nach Englisch"
         }
     }
 
@@ -138,15 +222,23 @@ struct DictationStartOptions {
     let language: DictationLanguage
     let translationOutput: TranslationOutputMode
     let performance: DictationPerformance
+    let selectedVoiceProviderID: String
+    let selectedVoiceModelID: String
     let liveRewriteScope: LiveRewriteScope
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
-    let aiProcessing: AIProcessingConfiguration
+    let simulateKeypresses: Bool
+    let restoreClipboardAfterPaste: Bool
+    let autoSendAfterPaste: Bool
     let muteMusicWhileDictating: Bool
     let asrInitialPrompt: String?
     let dictionaryTerms: [String]
-    let appContextText: String?
+    let liveContextText: String?
+    let finalContextText: String?
+    let aiProcessing: AIProcessingConfiguration
+    let audioProcessing: AudioProcessingConfiguration
+    let soundFeedback: SoundFeedbackConfiguration
 }
 
 enum FinalResultDeliveryMode: String, CaseIterable, Identifiable {
@@ -197,35 +289,37 @@ enum DictationRuntimeError: LocalizedError {
         case .invalidAudioPipeline:
             return "Audio-Pipeline konnte nicht initialisiert werden."
         case .unsafePasteFallback:
-            return "Paste-Fallback wurde blockiert, weil der Fokus nicht mehr auf der ursprünglichen Ziel-App liegt."
+            return
+                "Paste-Fallback wurde blockiert, weil der Fokus nicht mehr auf der ursprünglichen Ziel-App liegt."
         }
     }
-}
-
-private struct LockedTextTarget {
-    let element: AXUIElement
-    let insertionLocation: Int
-    let originalSelectedLength: Int
-    let fallbackBundleIdentifier: String?
-    var insertedLength: Int
 }
 
 final class DictationRuntime: @unchecked Sendable {
     var onStatus: ((String) -> Void)?
     var onDiagnostic: ((String) -> Void)?
+    var onDebugEvent: ((String) -> Void)?
     var onTranscript: ((String) -> Void)?
     var onFinalTranscript: ((FinalTranscriptEvent) -> Void)?
     var onSessionActivityChanged: ((Bool) -> Void)?
+    /// Mikrofon-/AX-Dialoge oder TCC-Updates: UI soll `authorizationStatus` / AX erneut lesen.
+    var onPermissionInteractionFinished: (() -> Void)?
 
     private let whisperEngine = WhisperCppEngine()
     private let processQueue = DispatchQueue(label: "wispr.dictation.process", qos: .userInitiated)
     private let insertionQueue = DispatchQueue(label: "wispr.dictation.insert", qos: .userInitiated)
     private let capabilityProfiler = CapabilityProfiler()
-    private let aiProcessingService = AIProcessingService()
+    private var aiProcessingService = AIProcessingService()
+    private let soundFeedbackPlayer = SoundFeedbackPlayer()
     private let sessionLock = NSLock()
+    private let permissionService = RuntimePermissionService()
+    private let focusedTextTargetService = FocusedTextTargetService()
+    private let streamingTextInsertionService = StreamingTextInsertionService()
+    private let finalTranscriptDeliveryService = FinalTranscriptDeliveryService()
 
     private let audioEngine = AVAudioEngine()
     private var converter: AVAudioConverter?
+    private var audioPreprocessor = AudioPreprocessor()
     private var runningMode: DictationMode?
     private var runningLocale: Locale = Locale(identifier: "de_DE")
     private var target: LockedTextTarget?
@@ -239,22 +333,22 @@ final class DictationRuntime: @unchecked Sendable {
     private var loadedModelPath: URL?
     private var loadedConfig: ASRConfig?
     private var currentOptions: DictationStartOptions?
+    private var voiceModelActiveDuration: VoiceModelActiveDuration = .oneMinute
     private var lastKnownTarget: LockedTextTarget?
     private var waitingForInsertionTarget = false
     private var pendingStreamingInsertionTask: Task<Void, Never>?
+    private var runtimeUnloadTask: Task<Void, Never>?
     private var speechActivityDetected = false
     private var speechChunkStreak = 0
     private var maxObservedRMS: Float = 0
     private var lastRecoverableInsertDiagnosticAt: Date?
     private var accessibilityPermissionGranted = false
     private var pausedMediaAppIdentifiers: Set<String> = []
-    private let focusedTargetRetryCount = 8
-    private let focusedTargetRetryDelayNanoseconds: UInt64 = 150_000_000
     private let pendingInsertionTimeoutNanoseconds: UInt64 = 5_000_000_000
     private let pendingInsertionPollNanoseconds: UInt64 = 150_000_000
     private let speechRMSActivationThreshold: Float = 0.008
     private let speechRMSReleaseThreshold: Float = 0.004
-    private let speechActivationChunkCount = 3
+    private let speechActivationChunkCount = 2
 
     private func withSessionLock<T>(_ work: () throws -> T) rethrows -> T {
         sessionLock.lock()
@@ -262,22 +356,25 @@ final class DictationRuntime: @unchecked Sendable {
         return try work()
     }
 
-    private func runOnMainThread<T>(_ work: () throws -> T) throws -> T {
-        if Thread.isMainThread {
-            return try work()
+    private func publishPermissionInteractionFinished() {
+        DispatchQueue.main.async { [weak self] in
+            self?.onPermissionInteractionFinished?()
         }
-
-        return try DispatchQueue.main.sync(execute: work)
     }
 
     func prepareRuntime() {
+        cancelRuntimeUnloadTask()
         guard !runtimePrepared else { return }
+        publishDebug("runtime.prepare.begin")
 
         do {
-            let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(bundle: .main, appName: "WisprLocal")
-            let bootstrapModel = runtime.modelsDirectoryURL.appendingPathComponent(runtime.defaultModelFileName)
+            let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(
+                bundle: .main, appName: "WisprLocal")
+            let bootstrapModel = runtime.modelsDirectoryURL.appendingPathComponent(
+                runtime.defaultModelFileName)
             let bootstrapConfig = ASRConfig(
                 languageHint: "de",
+                initialPrompt: nil,
                 translationMode: .original,
                 modelID: runtime.defaultModelFileName,
                 backend: .whisperCpp,
@@ -291,6 +388,8 @@ final class DictationRuntime: @unchecked Sendable {
             loadedConfig = bootstrapConfig
             runtimePrepared = true
             publishDiagnostic("ASR runtime ready (bundled model loaded).")
+            publishDebug("runtime.prepare.ready model=\(bootstrapModel.lastPathComponent)")
+            scheduleRuntimeUnloadIfNeeded()
 
             whisperEngine.onPartial = { [weak self] partial in
                 self?.handlePartialText(partial.text)
@@ -298,6 +397,18 @@ final class DictationRuntime: @unchecked Sendable {
         } catch {
             publishStatus("Error")
             publishDiagnostic("ASR init failed: \(error.localizedDescription)")
+            publishDebug("runtime.prepare.failed error=\(error.localizedDescription)")
+        }
+    }
+
+    func setVoiceModelActiveDuration(_ duration: VoiceModelActiveDuration) {
+        withSessionLock {
+            voiceModelActiveDuration = duration
+        }
+
+        publishDebug("runtime.voiceModel.duration=\(duration.rawValue)")
+        if !withSessionLock({ isRunning }) {
+            scheduleRuntimeUnloadIfNeeded()
         }
     }
 
@@ -324,7 +435,27 @@ final class DictationRuntime: @unchecked Sendable {
         start(options: options)
     }
 
+    func cancel() {
+        let snapshot = withSessionLock {
+            (isStarting: isStarting, isRunning: isRunning)
+        }
+
+        guard snapshot.isStarting || snapshot.isRunning else {
+            publishDiagnostic(DictationRuntimeError.notRunning.localizedDescription)
+            return
+        }
+
+        publishDebug("dictation.cancel.begin")
+        cleanupSession()
+        publishStatus("Idle")
+        publishDiagnostic("Diktat wurde abgebrochen.")
+        publishDebug("dictation.cancel.completed")
+    }
+
     func start(options: DictationStartOptions) {
+        publishDebug(
+            "dictation.start.requested mode=\(options.mode == .streaming ? "streaming" : "finalize") language=\(options.language.rawValue) translation=\(options.translationOutput.rawValue) performance=\(options.performance.rawValue)"
+        )
         let startPermissionMessage = withSessionLock { () -> String? in
             if isRunning {
                 return DictationRuntimeError.alreadyRunning.localizedDescription
@@ -359,25 +490,34 @@ final class DictationRuntime: @unchecked Sendable {
             }
 
             let micGranted = await requestMicrophonePermission()
+            publishPermissionInteractionFinished()
+            self.publishDebug("permissions.microphone granted=\(micGranted)")
             guard micGranted else {
                 publishStatus("Error")
-                publishDiagnostic(DictationRuntimeError.microphonePermissionDenied.localizedDescription)
+                publishDiagnostic(
+                    DictationRuntimeError.microphonePermissionDenied.localizedDescription)
                 return
             }
 
             do {
-                let requiresDirectInsertion = options.mode == .streaming || options.finalResultDeliveryMode == .insert
-                let accessibilityGranted = requestAccessibilityPermission(promptIfNeeded: requiresDirectInsertion)
+                let requiresDirectInsertion =
+                    options.mode == .streaming
+                    || options.finalResultDeliveryMode == .insert
+                    || options.simulateKeypresses
+                let accessibilityGranted = requestAccessibilityPermission(
+                    promptIfNeeded: requiresDirectInsertion)
+                publishPermissionInteractionFinished()
+                publishDebug(
+                    "permissions.accessibility granted=\(accessibilityGranted) requiresDirectInsertion=\(requiresDirectInsertion)"
+                )
                 accessibilityPermissionGranted = accessibilityGranted
-                if options.muteMusicWhileDictating {
-                    pauseMediaPlaybackBestEffort()
-                }
-                try configureEngine(for: options)
 
                 let effectiveMode: DictationMode = accessibilityGranted ? options.mode : .finalize
+                try configureEngine(for: options, runtimeMode: effectiveMode)
 
                 if accessibilityGranted {
-                    let lockedTarget = try? await captureFocusedTextTargetWithRetry(emitWaitingDiagnostics: false)
+                    let lockedTarget = try? await captureFocusedTextTargetWithRetry(
+                        emitWaitingDiagnostics: false)
                     withSessionLock {
                         self.target = lockedTarget
                         if let lockedTarget {
@@ -388,7 +528,9 @@ final class DictationRuntime: @unchecked Sendable {
                         }
                     }
                     if lockedTarget == nil {
-                        publishDiagnostic("Kein Textfeld aktiv. Das Diktat startet trotzdem und wartet auf ein fokussiertes Ziel.")
+                        publishDiagnostic(
+                            "Kein Textfeld aktiv. Das Diktat startet trotzdem und wartet auf ein fokussiertes Ziel."
+                        )
                         schedulePendingStreamingInsertionIfNeeded()
                     }
                 } else {
@@ -397,32 +539,46 @@ final class DictationRuntime: @unchecked Sendable {
                         self.waitingForInsertionTarget = false
                     }
                     if requiresDirectInsertion {
-                        publishDiagnostic("Bedienungshilfen fehlen. Das Diktat läuft im eingeschränkten Modus ohne direktes Einfügen.")
+                        publishDiagnostic(
+                            "Bedienungshilfen fehlen. Das Diktat läuft im eingeschränkten Modus ohne direktes Einfügen."
+                        )
                     }
                 }
                 withSessionLock {
                     self.runningMode = effectiveMode
                     self.runningLocale = options.language.locale
                     self.currentOptions = options
+                    self.pausedMediaAppIdentifiers.removeAll()
                     self.latestInsertedPreview = ""
                     self.speechActivityDetected = false
                     self.speechChunkStreak = 0
                     self.maxObservedRMS = 0
-                    self.stableCommitter = self.makeStreamingCommitStabilizer(for: options)
+                    self.audioPreprocessor.reset()
+                    self.stableCommitter = self.makeStreamingCommitStabilizer(
+                        for: options, runtimeMode: effectiveMode)
                     self.snippetMatcher = DefaultSnippetMatcher(rules: options.snippetRules)
                 }
 
                 try whisperEngine.startStreaming()
+                if options.muteMusicWhileDictating {
+                    pauseMediaPlaybackBestEffort()
+                }
                 try startAudioCapture()
+                publishDebug(
+                    "dictation.start.ready effectiveMode=\(effectiveMode == .streaming ? "streaming" : "finalize")"
+                )
 
                 withSessionLock {
                     self.isRunning = true
                 }
                 publishSessionActivity(true)
                 publishStatus("Recording")
+                playSoundFeedback(.started, settings: options.soundFeedback)
                 let modeText = effectiveMode == .streaming ? "Streaming Insert" : "Finalize Insert"
-                let translationText = options.translationOutput == .english ? ", translated to English" : ""
-                publishDiagnostic("Recording (\(modeText), \(options.language.displayName)\(translationText))")
+                let translationText =
+                    options.translationOutput == .english ? ", translated to English" : ""
+                publishDiagnostic(
+                    "Recording (\(modeText), \(options.language.displayName)\(translationText))")
             } catch {
                 abortSession(reason: "Start failed: \(error.localizedDescription)")
             }
@@ -437,28 +593,43 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         do {
+            publishDebug("dictation.stop.begin")
             stopAudioCapture()
             let final = try await whisperEngine.stopStreaming()
             let detectedLanguageCode = resolvedLanguageCode(from: final)
             let effectiveLocale = locale(for: detectedLanguageCode) ?? runningLocale
-            let normalized = normalizeText(final.text)
+            let normalized = sanitizeTranscriptArtifacts(
+                in: normalizeText(final.text), stage: .final)
             let snippetAdjustedText = applySnippetsToFinalText(normalized, locale: effectiveLocale)
-            let finalProcessingOutcome = await aiProcessingService.process(
-                AIProcessingRequest(
-                    text: snippetAdjustedText,
-                    stage: .final,
-                    locale: effectiveLocale,
-                    configuration: currentAIProcessingConfiguration(),
-                    appContextText: withSessionLock { currentOptions?.appContextText },
-                    dictionaryTerms: withSessionLock { currentOptions?.dictionaryTerms ?? [] }
+            let processingService = withSessionLock { aiProcessingService }
+            let finalProcessingOutcome: AIProcessingOutcome
+            if shouldRunFinalAIProcessing() {
+                finalProcessingOutcome = await processingService.process(
+                    AIProcessingRequest(
+                        text: snippetAdjustedText,
+                        stage: .final,
+                        locale: effectiveLocale,
+                        configuration: currentAIProcessingConfiguration(),
+                        appContextText: withSessionLock { currentOptions?.finalContextText },
+                        dictionaryTerms: withSessionLock { currentOptions?.dictionaryTerms ?? [] }
+                    )
                 )
-            )
-            let finalText = finalProcessingOutcome.text
+            } else {
+                finalProcessingOutcome = .bypassed(
+                    text: snippetAdjustedText,
+                    reason: "Final AI processing is skipped while live insertion is active."
+                )
+            }
+            let finalText = sanitizeTranscriptArtifacts(
+                in: finalProcessingOutcome.text, stage: .final)
 
             if shouldDiscardTranscript(finalText) {
                 publishTranscript("")
                 publishStatus("Idle")
-                publishDiagnostic("Kein verwertbares Sprachsignal erkannt. Das Transkript wurde verworfen.")
+                publishDiagnostic(
+                    "Kein verwertbares Sprachsignal erkannt. Das Transkript wurde verworfen.")
+                playSoundFeedback(
+                    .stopped, settings: withSessionLock { currentOptions?.soundFeedback })
                 cleanupSession()
                 return
             }
@@ -483,6 +654,10 @@ final class DictationRuntime: @unchecked Sendable {
             )
             publishStatus("Idle")
             publishDiagnostic("Letztes Transkript verarbeitet.")
+            playSoundFeedback(.stopped, settings: withSessionLock { currentOptions?.soundFeedback })
+            publishDebug(
+                "dictation.stop.completed textLength=\(finalText.count) delivery=\(String(describing: deliveryOutcome))"
+            )
         } catch {
             abortSession(reason: "Stop failed: \(error.localizedDescription)")
             return
@@ -492,13 +667,32 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     func openMicrophoneSettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") else { return }
+        guard
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            )
+        else { return }
         NSWorkspace.shared.open(url)
     }
 
     func openAccessibilitySettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
+        guard
+            let url = URL(
+                string:
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Systemdialog für Bedienungshilfen anzeigen (ohne eine Diktatsitzung zu starten).
+    func promptAccessibilityTrustFromUser() {
+        _ = requestAccessibilityPermission(promptIfNeeded: true)
+    }
+
+    func setAIProcessingService(_ service: AIProcessingService) {
+        withSessionLock {
+            aiProcessingService = service
+        }
     }
 
     private func handlePartialText(_ text: String) {
@@ -506,13 +700,18 @@ final class DictationRuntime: @unchecked Sendable {
             (
                 isRunning: isRunning,
                 runningMode: runningMode,
-                speechActivityDetected: speechActivityDetected
+                speechActivityDetected: speechActivityDetected,
+                hasLockedTarget: target != nil
             )
         }
         guard snapshot.isRunning, snapshot.runningMode == .streaming else { return }
-        guard snapshot.speechActivityDetected else { return }
+        // Ohne gesichertes Textziel: RMS-Gate, sonst „Warten auf Ziel“ nur durch echten Sprachbeginn auslösen.
+        // Mit Ziel: Partials sofort einfügen (sonst wirken leise Anfänge/Fernfeld-Mikros hackelig oder leer).
+        if !snapshot.hasLockedTarget {
+            guard snapshot.speechActivityDetected else { return }
+        }
 
-        let normalized = normalizeText(text)
+        let normalized = sanitizeTranscriptArtifacts(in: normalizeText(text), stage: .live)
         guard !normalized.isEmpty else { return }
 
         insertionQueue.async { [weak self] in
@@ -522,8 +721,12 @@ final class DictationRuntime: @unchecked Sendable {
 
             do {
                 let stable = self.stableCommitter.ingestPartial(normalized)
-                let committedWithSnippets = self.applySnippetsToFinalText(stable.committedPrefix, locale: self.runningLocale)
-                let mergedPatchText = self.normalizeText(committedWithSnippets + stable.tail)
+                let committedWithSnippets = self.applySnippetsToFinalText(
+                    stable.committedPrefix, locale: self.runningLocale)
+                let mergedPatchText = self.sanitizeTranscriptArtifacts(
+                    in: self.normalizeText(committedWithSnippets + stable.tail),
+                    stage: .live
+                )
                 let patchText = self.processLiveTextIfNeeded(mergedPatchText)
                 recoverablePatchText = patchText
 
@@ -546,7 +749,8 @@ final class DictationRuntime: @unchecked Sendable {
                 let maximumMutableCharacterCount = self.withSessionLock {
                     self.currentOptions?.liveRewriteScope.maximumMutableCharacterCount ?? 72
                 }
-                let preservePrefixLength = self.target == nil
+                let preservePrefixLength =
+                    self.target == nil
                     ? 0
                     : self.streamingPreservedPrefixLength(
                         previousText: self.latestInsertedPreview,
@@ -560,7 +764,7 @@ final class DictationRuntime: @unchecked Sendable {
 
                 do {
                     guard var activeTarget = target else { return }
-                    try self.replaceInsertedText(
+                    _ = try self.replaceInsertedText(
                         patchText,
                         in: activeTarget,
                         allowFallbackPaste: false,
@@ -580,7 +784,7 @@ final class DictationRuntime: @unchecked Sendable {
                     }
                     if let resolvedTarget = self.resolveAvailableTextTarget() {
                         var reboundTarget = resolvedTarget
-                        try self.replaceInsertedText(
+                        _ = try self.replaceInsertedText(
                             patchText,
                             in: reboundTarget,
                             allowFallbackPaste: false,
@@ -604,7 +808,9 @@ final class DictationRuntime: @unchecked Sendable {
                     }
                 }
             } catch {
-                if self.handleRecoverableStreamingInsertionFailure(error, patchText: recoverablePatchText) {
+                if self.handleRecoverableStreamingInsertionFailure(
+                    error, patchText: recoverablePatchText)
+                {
                     return
                 }
                 self.abortSession(reason: "Streaming insert failed: \(error.localizedDescription)")
@@ -613,107 +819,34 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func requestMicrophonePermission() async -> Bool {
-        #if os(macOS)
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        if status == .authorized {
-            return true
-        }
-        #endif
-
-        return await withCheckedContinuation { continuation in
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                continuation.resume(returning: granted)
-            }
-        }
+        await permissionService.requestMicrophonePermission()
     }
 
     private func requestAccessibilityPermission(promptIfNeeded: Bool) -> Bool {
-        if AXIsProcessTrusted() {
-            return true
-        }
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let options = [key: promptIfNeeded] as CFDictionary
-        return AXIsProcessTrustedWithOptions(options)
-    }
-
-    private func readSelectedRange(from element: AXUIElement, currentValueLength: Int) -> CFRange {
-        var selectedRangeRef: CFTypeRef?
-        let rangeResult = AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &selectedRangeRef)
-
-        if rangeResult == .success,
-           let selectedRangeRef,
-           CFGetTypeID(selectedRangeRef) == AXValueGetTypeID() {
-            let axValue = selectedRangeRef as! AXValue
-            var range = CFRange()
-            if AXValueGetType(axValue) == .cfRange, AXValueGetValue(axValue, .cfRange, &range) {
-                return CFRange(location: max(0, range.location), length: max(0, range.length))
-            }
-        }
-
-        return CFRange(location: currentValueLength, length: 0)
+        permissionService.requestAccessibilityPermission(promptIfNeeded: promptIfNeeded)
     }
 
     private func captureFocusedTextTarget() throws -> LockedTextTarget {
-        try runOnMainThread {
-            let systemWide = AXUIElementCreateSystemWide()
-            var focused: CFTypeRef?
-            let focusedResult = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused)
-
-            guard focusedResult == .success, let focusedElement = focused else {
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-
-            let element = focusedElement as! AXUIElement
-            try validateEditableTextTarget(element)
-
-            var valueRef: CFTypeRef?
-            _ = AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef)
-            let value = (valueRef as? String) ?? ""
-            let range = readSelectedRange(from: element, currentValueLength: value.count)
-
-            var owningPID: pid_t = 0
-            let owningPIDResult = AXUIElementGetPid(element, &owningPID)
-            let app = owningPIDResult == .success ? NSRunningApplication(processIdentifier: owningPID) : NSWorkspace.shared.frontmostApplication
-            return LockedTextTarget(
-                element: element,
-                insertionLocation: range.location,
-                originalSelectedLength: range.length,
-                fallbackBundleIdentifier: app?.bundleIdentifier,
-                insertedLength: range.length
-            )
-        }
+        let target = try focusedTextTargetService.captureFocusedTextTarget()
+        lastKnownTarget = target
+        return target
     }
 
-    private func captureFocusedTextTargetWithRetry(emitWaitingDiagnostics: Bool = true) async throws -> LockedTextTarget {
-        var lastError: Error = DictationRuntimeError.focusedElementUnavailable
-
-        for attempt in 0..<focusedTargetRetryCount {
-            do {
-                let target = try captureFocusedTextTarget()
-                lastKnownTarget = target
-                return target
-            } catch {
-                lastError = error
-                if let recoveredTarget = try? recoverLastKnownTarget() {
-                    lastKnownTarget = recoveredTarget
-                    publishDiagnostic("Verwende zuletzt bekanntes Textziel erneut.")
-                    return recoveredTarget
-                }
-                guard case DictationRuntimeError.focusedElementUnavailable = error,
-                      attempt < focusedTargetRetryCount - 1 else {
-                    throw error
-                }
-
-                if emitWaitingDiagnostics {
-                    publishDiagnostic(
-                        "Warte auf fokussiertes Textfeld (\(attempt + 1)/\(focusedTargetRetryCount))..."
-                    )
-                }
-                try? await Task.sleep(nanoseconds: focusedTargetRetryDelayNanoseconds)
+    private func captureFocusedTextTargetWithRetry(emitWaitingDiagnostics: Bool = true) async throws
+        -> LockedTextTarget
+    {
+        try await focusedTextTargetService.captureFocusedTextTargetWithRetry(
+            emitWaitingDiagnostics: emitWaitingDiagnostics,
+            captureFocusedTextTarget: { try self.captureFocusedTextTarget() },
+            recoverLastKnownTarget: {
+                let recoveredTarget = try self.recoverLastKnownTarget()
+                self.lastKnownTarget = recoveredTarget
+                return recoveredTarget
+            },
+            publishDiagnostic: { [weak self] message in
+                self?.publishDiagnostic(message)
             }
-        }
-
-        throw lastError
+        )
     }
 
     private func recoverLastKnownTarget() throws -> LockedTextTarget {
@@ -725,147 +858,65 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func refreshLockedTextTarget(_ target: LockedTextTarget) throws -> LockedTextTarget {
-        try runOnMainThread {
-            if let expectedBundleIdentifier = target.fallbackBundleIdentifier,
-               NSWorkspace.shared.frontmostApplication?.bundleIdentifier != expectedBundleIdentifier {
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-
-            try validateEditableTextTarget(target.element)
-
-            var valueRef: CFTypeRef?
-            let readResult = AXUIElementCopyAttributeValue(target.element, kAXValueAttribute as CFString, &valueRef)
-            guard readResult == .success else {
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-
-            let currentValue = (valueRef as? String) ?? ""
-            let range = readSelectedRange(from: target.element, currentValueLength: currentValue.count)
-
-            return LockedTextTarget(
-                element: target.element,
-                insertionLocation: range.location,
-                originalSelectedLength: range.length,
-                fallbackBundleIdentifier: target.fallbackBundleIdentifier,
-                insertedLength: max(range.length, target.insertedLength)
-            )
-        }
-    }
-
-    private func validateEditableTextTarget(_ element: AXUIElement) throws {
-        var isValueSettable = DarwinBoolean(false)
-        let settableResult = AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &isValueSettable)
-        guard settableResult == .success, isValueSettable.boolValue else {
-            throw DictationRuntimeError.unsupportedTextTarget
-        }
+        try focusedTextTargetService.refreshLockedTextTarget(target)
     }
 
     private func resolveAvailableTextTarget() -> LockedTextTarget? {
-        if let target,
-           let refreshed = try? refreshLockedTextTarget(target) {
-            return refreshed
-        }
-        if let focused = try? captureFocusedTextTarget() {
-            return focused
-        }
-        if let recovered = try? recoverLastKnownTarget() {
-            return recovered
-        }
-        return nil
+        focusedTextTargetService.resolveAvailableTextTarget(
+            currentTarget: target,
+            captureFocusedTextTarget: { try self.captureFocusedTextTarget() },
+            recoverLastKnownTarget: { try self.recoverLastKnownTarget() },
+            refreshLockedTextTarget: { try self.refreshLockedTextTarget($0) }
+        )
     }
 
     private func waitForAvailableTextTarget(timeoutNanoseconds: UInt64) async -> LockedTextTarget? {
-        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
-        while DispatchTime.now().uptimeNanoseconds < deadline {
-            if let target = resolveAvailableTextTarget() {
-                return target
-            }
-            try? await Task.sleep(nanoseconds: pendingInsertionPollNanoseconds)
-        }
-        return nil
+        await focusedTextTargetService.waitForAvailableTextTarget(
+            timeoutNanoseconds: timeoutNanoseconds,
+            pollNanoseconds: pendingInsertionPollNanoseconds,
+            resolveAvailableTextTarget: { self.resolveAvailableTextTarget() }
+        )
     }
 
     private func deliverFinalText(_ finalText: String) async -> FinalTranscriptDeliveryOutcome {
-        guard let currentOptions = withSessionLock({ currentOptions }) else {
-            return .failed("Fehlende Diktat-Optionen.")
-        }
-
-        if currentOptions.finalResultDeliveryMode == .clipboardOnly {
-            copyTranscriptToClipboard(finalText)
-            publishDiagnostic("Finales Transkript wurde in die Zwischenablage kopiert.")
-            withSessionLock {
-                waitingForInsertionTarget = false
-            }
-            return .copiedToClipboard
-        }
-
-        if !accessibilityPermissionGranted {
-            if currentOptions.clipboardFallbackWhenNoTarget {
-                copyTranscriptToClipboard(finalText)
-                publishDiagnostic("Bedienungshilfen fehlen. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert.")
-                return .copiedToClipboard
-            }
-
-            publishDiagnostic("Bedienungshilfen fehlen. Das finale Transkript bleibt in der History verfügbar.")
-            return .historyOnlyNoTarget
-        }
-
-        if let activeStreamingTarget = target {
-            do {
-                try replaceInsertedText(finalText, in: activeStreamingTarget, allowFallbackPaste: true)
-                withSessionLock {
-                    waitingForInsertionTarget = false
+        let currentOptions = withSessionLock { self.currentOptions }
+        let activeStreamingTarget = withSessionLock { self.target }
+        return await finalTranscriptDeliveryService.deliverFinalText(
+            finalText,
+            currentOptions: currentOptions,
+            activeStreamingTarget: activeStreamingTarget,
+            resolveAvailableTextTarget: {
+                self.resolveAvailableTextTarget()
+            },
+            waitForAvailableTextTarget: { timeout in
+                await self.waitForAvailableTextTarget(timeoutNanoseconds: timeout)
+            },
+            setWaitingForInsertionTarget: { value in
+                self.withSessionLock {
+                    self.waitingForInsertionTarget = value
                 }
-                return .inserted
-            } catch {
-                publishDiagnostic("Vorhandenes Live-Textziel konnte nicht aktualisiert werden. Versuche das aktuelle Fokusziel erneut.")
-            }
-        }
+            },
+            copyTranscriptToClipboard: { text in
+                self.copyTranscriptToClipboard(text)
+            },
+            insertFinalText: { text, target, options, allowFallbackPaste in
+                try self.insertFinalText(
+                    text, into: target, options: options, allowFallbackPaste: allowFallbackPaste)
+            },
+            publishDiagnostic: { value in
+                self.publishDiagnostic(value)
+            },
+            publishFinalDeliveryMetrics: { metrics in
+                self.publishFinalDeliveryMetrics(metrics)
+            },
+            pendingInsertionTimeoutNanoseconds: pendingInsertionTimeoutNanoseconds
+        )
+    }
 
-        if let resolvedTarget = resolveAvailableTextTarget() {
-            do {
-                try replaceInsertedText(finalText, in: resolvedTarget, allowFallbackPaste: true)
-                withSessionLock {
-                    waitingForInsertionTarget = false
-                }
-                return .inserted
-            } catch {
-                return .failed(error.localizedDescription)
-            }
-        }
-
-        withSessionLock {
-            waitingForInsertionTarget = true
-        }
-        publishDiagnostic("Kein Textfeld aktiv. Warte bis zu 5 Sekunden auf ein Ziel für das finale Transkript.")
-
-        if let delayedTarget = await waitForAvailableTextTarget(timeoutNanoseconds: pendingInsertionTimeoutNanoseconds) {
-            do {
-                try replaceInsertedText(finalText, in: delayedTarget, allowFallbackPaste: true)
-                withSessionLock {
-                    waitingForInsertionTarget = false
-                }
-                publishDiagnostic("Textziel erkannt. Finales Transkript wurde eingefügt.")
-                return .inserted
-            } catch {
-                withSessionLock {
-                    waitingForInsertionTarget = false
-                }
-                return .failed(error.localizedDescription)
-            }
-        }
-
-        withSessionLock {
-            waitingForInsertionTarget = false
-        }
-        if currentOptions.clipboardFallbackWhenNoTarget {
-            copyTranscriptToClipboard(finalText)
-            publishDiagnostic("Kein Textfeld gewählt. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert.")
-            return .copiedToClipboard
-        }
-
-        publishDiagnostic("Kein Textfeld gewählt. Das finale Transkript bleibt in der History verfügbar.")
-        return .historyOnlyNoTarget
+    private func publishFinalDeliveryMetrics(_ metrics: FinalInsertionMetrics) {
+        publishDebug(
+            "dictation.final_delivery path=\(metrics.path) clipboardRestored=\(metrics.clipboardRestored) autoSent=\(metrics.autoSent)"
+        )
     }
 
     private func schedulePendingStreamingInsertionIfNeeded() {
@@ -893,8 +944,9 @@ final class DictationRuntime: @unchecked Sendable {
                     )
                 }
                 guard loopSnapshot.isRunning,
-                      loopSnapshot.waitingForInsertionTarget,
-                      loopSnapshot.runningMode == .streaming else {
+                    loopSnapshot.waitingForInsertionTarget,
+                    loopSnapshot.runningMode == .streaming
+                else {
                     break
                 }
                 try? await Task.sleep(nanoseconds: pendingInsertionPollNanoseconds)
@@ -908,20 +960,25 @@ final class DictationRuntime: @unchecked Sendable {
                             latestInsertedPreview: self.latestInsertedPreview
                         )
                     }
-                    guard insertionSnapshot.isRunning, insertionSnapshot.waitingForInsertionTarget else { return }
+                    guard insertionSnapshot.isRunning, insertionSnapshot.waitingForInsertionTarget
+                    else { return }
                     guard !insertionSnapshot.latestInsertedPreview.isEmpty else { return }
                     guard let resolvedTarget = self.resolveAvailableTextTarget() else { return }
 
                     do {
                         var activeTarget = resolvedTarget
-                        try self.replaceInsertedText(insertionSnapshot.latestInsertedPreview, in: activeTarget, allowFallbackPaste: false)
+                        // Wie `deliverFinalText`: Cmd+V-Fallback für Ziele, die kein zuverlässiges AX-Set liefern
+                        _ = try self.replaceInsertedText(
+                            insertionSnapshot.latestInsertedPreview, in: activeTarget,
+                            allowFallbackPaste: true)
                         activeTarget.insertedLength = insertionSnapshot.latestInsertedPreview.count
                         self.withSessionLock {
                             self.target = activeTarget
                             self.lastKnownTarget = activeTarget
                             self.waitingForInsertionTarget = false
                         }
-                        self.publishDiagnostic("Textziel erkannt. Der aktuelle Streaming-Text wird jetzt eingefügt.")
+                        self.publishDiagnostic(
+                            "Textziel erkannt. Der aktuelle Streaming-Text wird jetzt eingefügt.")
                     } catch {
                         // Keep waiting; the target may have changed again.
                     }
@@ -937,7 +994,11 @@ final class DictationRuntime: @unchecked Sendable {
         let input = audioEngine.inputNode
         let inputFormat = input.inputFormat(forBus: 0)
 
-        guard let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false) else {
+        guard
+            let targetFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false
+            )
+        else {
             throw DictationRuntimeError.invalidAudioPipeline
         }
 
@@ -949,26 +1010,37 @@ final class DictationRuntime: @unchecked Sendable {
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             self?.processQueue.async {
-                self?.handleAudioBuffer(buffer, inputFormat: inputFormat, targetFormat: targetFormat)
+                self?.handleAudioBuffer(
+                    buffer, inputFormat: inputFormat, targetFormat: targetFormat)
             }
         }
 
         audioEngine.prepare()
         try audioEngine.start()
+        publishDebug(
+            "audio.capture.started inputRate=\(Int(inputFormat.sampleRate)) targetRate=\(Int(targetFormat.sampleRate))"
+        )
     }
 
     private func stopAudioCapture() {
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
+        publishDebug("audio.capture.stopped")
     }
 
-    private func handleAudioBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) {
+    private func handleAudioBuffer(
+        _ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat
+    ) {
         let isCurrentlyRunning = withSessionLock { isRunning }
         guard isCurrentlyRunning else { return }
         guard let converter else { return }
 
-        let capacity = AVAudioFrameCount((Double(buffer.frameLength) * targetFormat.sampleRate) / inputFormat.sampleRate) + 64
-        guard let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else {
+        let capacity =
+            AVAudioFrameCount(
+                (Double(buffer.frameLength) * targetFormat.sampleRate) / inputFormat.sampleRate)
+            + 64
+        guard let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity)
+        else {
             return
         }
 
@@ -989,8 +1061,22 @@ final class DictationRuntime: @unchecked Sendable {
 
         let frameCount = Int(converted.frameLength)
         updateSpeechActivityState(channelData: channelData, frameCount: frameCount)
+        let audioSamples = Array(UnsafeBufferPointer(start: channelData, count: frameCount))
+        let audioConfiguration = withSessionLock {
+            currentOptions?.audioProcessing ?? AudioProcessingConfiguration()
+        }
+        guard
+            let processed = audioPreprocessor.process(
+                audioSamples, configuration: audioConfiguration)
+        else {
+            return
+        }
+        guard !processed.wasSilenceSuppressed else {
+            return
+        }
         do {
-            try whisperEngine.pushAudioPCM16kMono(channelData, frameCount: frameCount)
+            try whisperEngine.pushAudioPCM16kMono(
+                processed.samples, frameCount: processed.samples.count)
         } catch {
             abortSession(reason: "Audio push failed: \(error.localizedDescription)")
         }
@@ -1020,7 +1106,9 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
-    private func handleRecoverableStreamingInsertionFailure(_ error: Error, patchText: String) -> Bool {
+    private func handleRecoverableStreamingInsertionFailure(_ error: Error, patchText: String)
+        -> Bool
+    {
         guard isRecoverableStreamingInsertionError(error) else {
             return false
         }
@@ -1051,11 +1139,14 @@ final class DictationRuntime: @unchecked Sendable {
 
     private func emitRecoverableInsertionDiagnosticIfNeeded(_ error: Error) {
         let now = Date()
-        if let lastRecoverableInsertDiagnosticAt, now.timeIntervalSince(lastRecoverableInsertDiagnosticAt) < 1.5 {
+        if let lastRecoverableInsertDiagnosticAt,
+            now.timeIntervalSince(lastRecoverableInsertDiagnosticAt) < 1.5
+        {
             return
         }
         lastRecoverableInsertDiagnosticAt = now
-        publishDiagnostic("Streaming wartet auf ein geeignetes Textfeld. Der bisherige Text bleibt erhalten.")
+        publishDiagnostic(
+            "Streaming wartet auf ein geeignetes Textfeld. Der bisherige Text bleibt erhalten.")
     }
 
     private func shouldDiscardTranscript(_ text: String) -> Bool {
@@ -1063,7 +1154,8 @@ final class DictationRuntime: @unchecked Sendable {
         guard !normalized.isEmpty else { return true }
 
         let lowered = normalized.lowercased()
-        let normalizedToken = lowered.replacingOccurrences(of: "[^a-zA-ZäöüÄÖÜß]", with: "", options: .regularExpression)
+        let normalizedToken = lowered.replacingOccurrences(
+            of: "[^a-zA-ZäöüÄÖÜß]", with: "", options: .regularExpression)
         let suspiciousTokens: Set<String> = ["musik", "music", "you", "thanks"]
         let placeholderTokens: Set<String> = [
             "blank audio",
@@ -1074,7 +1166,7 @@ final class DictationRuntime: @unchecked Sendable {
             "no speech",
             "nospeech",
             "silence",
-            "stille"
+            "stille",
         ]
 
         if placeholderTokens.contains(lowered) || placeholderTokens.contains(normalizedToken) {
@@ -1084,7 +1176,9 @@ final class DictationRuntime: @unchecked Sendable {
         let speechSnapshot = withSessionLock {
             (speechActivityDetected: speechActivityDetected, maxObservedRMS: maxObservedRMS)
         }
-        if !speechSnapshot.speechActivityDetected || speechSnapshot.maxObservedRMS < speechRMSActivationThreshold {
+        if !speechSnapshot.speechActivityDetected
+            || speechSnapshot.maxObservedRMS < speechRMSActivationThreshold
+        {
             if normalized.count <= 24 {
                 return true
             }
@@ -1096,69 +1190,79 @@ final class DictationRuntime: @unchecked Sendable {
         return false
     }
 
+    private func sanitizeTranscriptArtifacts(in text: String, stage: AIProcessingStage) -> String {
+        guard !text.isEmpty else { return "" }
+
+        var cleaned = text
+        let artifactPatterns = [
+            #"\((?:music|musik|silence|stille|noise|rauschen|background noise|husten|cough|laughing|laughter|applause|beep)\)"#,
+            #"\[(?:music|musik|silence|stille|noise|rauschen|background noise|husten|cough|laughing|laughter|applause|beep)\]"#,
+            #"\*(?:music|musik|noise|rauschen|cough|husten|laughing|laughter)\*"#,
+        ]
+
+        for pattern in artifactPatterns {
+            cleaned = cleaned.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+
+        cleaned = cleaned.replacingOccurrences(
+            of: #"\s{2,}"#, with: " ", options: .regularExpression)
+        cleaned = cleaned.replacingOccurrences(
+            of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let lowered = cleaned.lowercased()
+        let standaloneArtifacts: Set<String> = [
+            "music", "musik", "silence", "stille", "background noise", "noise", "rauschen",
+            "cough", "husten", "laughing", "laughter", "applause",
+        ]
+
+        if standaloneArtifacts.contains(lowered) {
+            return ""
+        }
+
+        if stage == .live,
+            cleaned.count <= 24,
+            standaloneArtifacts.contains(
+                lowered.replacingOccurrences(
+                    of: "[^a-zA-ZäöüÄÖÜß ]", with: "", options: .regularExpression
+                ).trimmingCharacters(in: .whitespacesAndNewlines))
+        {
+            return ""
+        }
+
+        return cleaned
+    }
+
     private func replaceInsertedText(
         _ text: String,
         in lockedTarget: LockedTextTarget,
         allowFallbackPaste: Bool,
         preservingPrefixLength: Int = 0
-    ) throws {
-        try runOnMainThread {
-            var valueRef: CFTypeRef?
-            let readResult = AXUIElementCopyAttributeValue(lockedTarget.element, kAXValueAttribute as CFString, &valueRef)
-            if readResult != .success {
-                if allowFallbackPaste {
-                    try pasteIntoFallbackTarget(lockedTarget, text: text)
-                    var updated = lockedTarget
-                    updated.insertedLength = text.count
-                    target = updated
-                    lastKnownTarget = updated
-                    return
-                }
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-
-            let currentValue = (valueRef as? String) ?? ""
-            let location = min(max(0, lockedTarget.insertionLocation), currentValue.count)
-            let preservedLength = Swift.min(
-                Swift.min(max(0, preservingPrefixLength), text.count),
-                Swift.min(lockedTarget.insertedLength, max(0, currentValue.count - location))
-            )
-            let replacementStart = min(location + preservedLength, currentValue.count)
-            let replacementEnd = min(location + max(0, lockedTarget.insertedLength), currentValue.count)
-
-            let startIndex = currentValue.index(currentValue.startIndex, offsetBy: replacementStart)
-            let endIndex = currentValue.index(currentValue.startIndex, offsetBy: replacementEnd)
-
-            var updatedValue = currentValue
-            updatedValue.replaceSubrange(startIndex..<endIndex, with: String(text.dropFirst(preservedLength)))
-
-            let setResult = AXUIElementSetAttributeValue(lockedTarget.element, kAXValueAttribute as CFString, updatedValue as CFTypeRef)
-            if setResult != .success {
-                if allowFallbackPaste {
-                    try pasteIntoFallbackTarget(lockedTarget, text: text)
-                    var updated = lockedTarget
-                    updated.insertedLength = text.count
-                    target = updated
-                    lastKnownTarget = updated
-                    return
-                }
-                throw DictationRuntimeError.focusedElementUnavailable
-            }
-
-            var updatedTarget = lockedTarget
-            updatedTarget.insertedLength = text.count
-            target = updatedTarget
-            lastKnownTarget = updatedTarget
-
-            let newCursor = location + text.count
-            var range = CFRange(location: newCursor, length: 0)
-            if let axRange = AXValueCreate(.cfRange, &range) {
-                _ = AXUIElementSetAttributeValue(lockedTarget.element, kAXSelectedTextRangeAttribute as CFString, axRange)
+    ) throws -> (path: String, clipboardRestored: Bool) {
+        let restoreClipboardAfterPaste = withSessionLock {
+            currentOptions?.restoreClipboardAfterPaste ?? true
+        }
+        return try streamingTextInsertionService.replaceInsertedText(
+            text,
+            in: lockedTarget,
+            allowFallbackPaste: allowFallbackPaste,
+            preservingPrefixLength: preservingPrefixLength,
+            restoreClipboardAfterPaste: restoreClipboardAfterPaste
+        ) { updatedTarget in
+            self.withSessionLock {
+                self.target = updatedTarget
+                self.lastKnownTarget = updatedTarget
             }
         }
     }
 
-    private func streamingPreservedPrefixLength(previousText: String, newText: String, maximumMutableCharacterCount: Int) -> Int {
+    private func streamingPreservedPrefixLength(
+        previousText: String, newText: String, maximumMutableCharacterCount: Int
+    ) -> Int {
         guard !previousText.isEmpty, !newText.isEmpty else { return 0 }
 
         let commonPrefixLength = previousText.commonPrefixLength(with: newText)
@@ -1166,59 +1270,76 @@ final class DictationRuntime: @unchecked Sendable {
         return min(newText.count, max(commonPrefixLength, hardFloor))
     }
 
-    private func pasteIntoFallbackTarget(_ target: LockedTextTarget, text: String) throws {
-        if let expectedBundleIdentifier = target.fallbackBundleIdentifier {
-            let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-            guard frontmostBundleIdentifier == expectedBundleIdentifier else {
-                throw DictationRuntimeError.unsafePasteFallback
+    private func pasteIntoFallbackTarget(_ target: LockedTextTarget, text: String) throws -> Bool {
+        try streamingTextInsertionService.pasteIntoFallbackTarget(
+            target,
+            text: text,
+            restoreClipboard: withSessionLock { currentOptions?.restoreClipboardAfterPaste ?? true }
+        )
+    }
+
+    private func pasteIntoFallbackTarget(
+        _ target: LockedTextTarget, text: String, restoreClipboard: Bool
+    ) throws -> Bool {
+        try streamingTextInsertionService.pasteIntoFallbackTarget(
+            target,
+            text: text,
+            restoreClipboard: restoreClipboard
+        )
+    }
+
+    private func insertFinalText(
+        _ text: String,
+        into lockedTarget: LockedTextTarget,
+        options: DictationStartOptions,
+        allowFallbackPaste: Bool
+    ) throws -> FinalInsertionMetrics {
+        try streamingTextInsertionService.insertFinalText(
+            text,
+            into: lockedTarget,
+            options: options,
+            allowFallbackPaste: allowFallbackPaste,
+            onTargetUpdated: { updatedTarget in
+                self.withSessionLock {
+                    self.target = updatedTarget
+                    self.lastKnownTarget = updatedTarget
+                }
             }
-        }
+        )
+    }
 
-        let pasteboard = NSPasteboard.general
-        let previousString = pasteboard.string(forType: .string)
+    private func simulateKeyboardInsertion(_ text: String, into target: LockedTextTarget) throws {
+        try streamingTextInsertionService.simulateKeyboardInsertion(text, into: target)
+    }
 
-        defer {
-            usleep(50_000)
-            pasteboard.clearContents()
-            if let previousString {
-                pasteboard.setString(previousString, forType: .string)
-            }
-        }
-
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-
-        guard let source = CGEventSource(stateID: .combinedSessionState) else {
-            throw DictationRuntimeError.focusedElementUnavailable
-        }
-
-        let keyV: CGKeyCode = 9
-        let down = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: true)
-        down?.flags = .maskCommand
-        let up = CGEvent(keyboardEventSource: source, virtualKey: keyV, keyDown: false)
-        up?.flags = .maskCommand
-
-        down?.post(tap: .cghidEventTap)
-        up?.post(tap: .cghidEventTap)
+    private func sendReturnKey() throws {
+        try streamingTextInsertionService.sendReturnKey()
     }
 
     private func copyTranscriptToClipboard(_ text: String) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        streamingTextInsertionService.copyTranscriptToClipboard(text)
     }
 
-    private func configureEngine(for options: DictationStartOptions) throws {
-        let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(bundle: .main, appName: "WisprLocal")
-        let preset = selectEnginePreset(options: options)
-        let modelFile = selectModelFileName(runtime: runtime, preset: preset, options: options)
+    private func configureEngine(for options: DictationStartOptions, runtimeMode: DictationMode)
+        throws
+    {
+        let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(
+            bundle: .main, appName: "WisprLocal")
+        let preset = selectEnginePreset(options: options, runtimeMode: runtimeMode)
+        let modelDescriptor = selectedVoiceModelDescriptor(for: options, runtime: runtime)
+        let modelFile = modelDescriptor.localFileName ?? runtime.defaultModelFileName
         let modelURL = runtime.modelsDirectoryURL.appendingPathComponent(modelFile)
 
-        let latencyProfile = selectLatencyProfile(options: options, preset: preset)
+        let latencyProfile = selectLatencyProfile(
+            options: options, preset: preset, runtimeMode: runtimeMode)
+        let translationMode: ASRTranslationMode =
+            modelDescriptor.supportsTranslationToEnglish
+            ? options.translationOutput.asrTranslationMode
+            : .original
         let config = ASRConfig(
             languageHint: options.language.asrHint,
             initialPrompt: options.asrInitialPrompt,
-            translationMode: options.translationOutput.asrTranslationMode,
+            translationMode: translationMode,
             modelID: modelFile,
             backend: .whisperCpp,
             latencyProfile: latencyProfile,
@@ -1228,15 +1349,21 @@ final class DictationRuntime: @unchecked Sendable {
         )
 
         if loadedModelPath == modelURL, loadedConfig == config {
+            publishDebug("engine.configure.reuse model=\(modelURL.lastPathComponent)")
             return
         }
 
         try whisperEngine.loadModel(at: modelURL, config: config)
         loadedModelPath = modelURL
         loadedConfig = config
+        publishDebug(
+            "engine.configure.loaded model=\(modelURL.lastPathComponent) latency=\(config.latencyProfile.rawValue) threads=\(config.threadCount) beam=\(config.beamSize) chunkMs=\(config.chunkMilliseconds)"
+        )
     }
 
-    private func selectEnginePreset(options: DictationStartOptions) -> EnginePreset {
+    private func selectEnginePreset(
+        options: DictationStartOptions, runtimeMode: DictationMode
+    ) -> EnginePreset {
         let profile = capabilityProfiler.profile()
         let override: QualityOverride
         switch options.performance {
@@ -1250,14 +1377,16 @@ final class DictationRuntime: @unchecked Sendable {
             override = .accurate
         }
 
-        if options.mode == .streaming {
+        if runtimeMode == .streaming {
             return capabilityProfiler.streamingPreset(for: profile, override: override)
         }
         return capabilityProfiler.qualityPreset(for: profile, override: override)
     }
 
-    private func selectLatencyProfile(options: DictationStartOptions, preset: EnginePreset) -> LatencyProfile {
-        guard options.mode == .streaming else {
+    private func selectLatencyProfile(
+        options: DictationStartOptions, preset: EnginePreset, runtimeMode: DictationMode
+    ) -> LatencyProfile {
+        guard runtimeMode == .streaming else {
             return .quality
         }
 
@@ -1271,7 +1400,9 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
-    private func makeStreamingCommitStabilizer(for options: DictationStartOptions) -> StreamingCommitStabilizer {
+    private func makeStreamingCommitStabilizer(
+        for options: DictationStartOptions, runtimeMode: DictationMode
+    ) -> StreamingCommitStabilizer {
         let rewriteScope: StreamingRewriteScope
         switch options.liveRewriteScope {
         case .currentSentence:
@@ -1304,7 +1435,7 @@ final class DictationRuntime: @unchecked Sendable {
                 rewriteScope: rewriteScope
             )
         case .auto:
-            let preset = selectEnginePreset(options: options)
+            let preset = selectEnginePreset(options: options, runtimeMode: runtimeMode)
             if preset.beamSize > 1 {
                 return StreamingCommitStabilizer(
                     stabilityThreshold: 3,
@@ -1320,37 +1451,79 @@ final class DictationRuntime: @unchecked Sendable {
         }
     }
 
-    private func selectModelFileName(runtime: InstalledWhisperRuntime, preset: EnginePreset, options: DictationStartOptions) -> String {
-        let names = Set(runtime.availableModelFileNames)
+    private func selectedVoiceModelDescriptor(
+        for options: DictationStartOptions,
+        runtime: InstalledWhisperRuntime
+    ) -> VoiceModelDescriptor {
+        let includeParakeet = false
+        let availableModelFiles = Set(runtime.availableModelFileNames)
+        let catalogModels = LocalVoiceModelCatalog.availableModels(includeParakeet: includeParakeet)
+        let fallbackDescriptor =
+            LocalVoiceModelCatalog.model(
+                id: LocalVoiceModelCatalog.defaultModelID, includeParakeet: includeParakeet)
+            ?? catalogModels.first
+            ?? VoiceModelDescriptor(
+                id: LocalVoiceModelCatalog.defaultModelID,
+                providerID: VoiceProviderID.whisperCpp.rawValue,
+                displayName: "Standard",
+                languageCode: nil,
+                languageScope: .all,
+                supportsTranslationToEnglish: true,
+                speedScore: 8,
+                accuracyScore: 5,
+                sizeLabel: "500 MB",
+                installState: .bundled,
+                localFileName: runtime.defaultModelFileName,
+                downloadIdentifier: "base"
+            )
 
-        let preferred: [String]
-        if options.mode == .streaming && options.performance == .accurate {
-            preferred = ["ggml-small.bin", "ggml-base.bin"]
-        } else if options.mode == .finalize && options.performance == .balanced {
-            preferred = ["ggml-small.bin", "ggml-base.bin"]
-        } else if options.mode == .finalize && options.performance == .accurate {
-            preferred = ["ggml-small.bin", "ggml-base.bin"]
-        } else if preset.modelID.lowercased().contains("medium") {
-            preferred = ["ggml-medium.bin", "ggml-small.bin", "ggml-base.bin"]
-        } else if preset.modelID.lowercased().contains("small") || options.performance == .accurate {
-            preferred = ["ggml-small.bin", "ggml-base.bin"]
-        } else {
-            preferred = ["ggml-base.bin", "ggml-small.bin"]
+        let requestedDescriptor = LocalVoiceModelCatalog.model(
+            id: options.selectedVoiceModelID, includeParakeet: includeParakeet)
+        guard var resolvedDescriptor = requestedDescriptor else {
+            return fallbackDescriptor
         }
 
-        for candidate in preferred where names.contains(candidate) {
-            return candidate
+        if resolvedDescriptor.providerID != VoiceProviderID.whisperCpp.rawValue {
+            return fallbackDescriptor
         }
 
-        if names.contains(runtime.defaultModelFileName) {
-            return runtime.defaultModelFileName
+        if let requiredLanguageCode = resolvedDescriptor.languageCode,
+            options.language != .auto,
+            requiredLanguageCode != options.language.rawValue
+        {
+            let compatibleOverride = catalogModels.first {
+                $0.providerID == resolvedDescriptor.providerID
+                    && $0.id != resolvedDescriptor.id
+                    && $0.languageCode == nil
+                    && modelFileExists($0, availableModelFiles: availableModelFiles)
+            }
+            resolvedDescriptor = compatibleOverride ?? fallbackDescriptor
         }
 
-        if let first = names.sorted().first {
-            return first
+        if modelFileExists(resolvedDescriptor, availableModelFiles: availableModelFiles) {
+            return resolvedDescriptor
         }
 
-        return runtime.defaultModelFileName
+        if modelFileExists(fallbackDescriptor, availableModelFiles: availableModelFiles) {
+            return fallbackDescriptor
+        }
+
+        if let installedCatalogDescriptor = catalogModels.first(where: {
+            modelFileExists($0, availableModelFiles: availableModelFiles)
+        }) {
+            return installedCatalogDescriptor
+        }
+
+        return fallbackDescriptor
+    }
+
+    private func modelFileExists(
+        _ descriptor: VoiceModelDescriptor, availableModelFiles: Set<String>
+    ) -> Bool {
+        guard let localFileName = descriptor.localFileName else {
+            return false
+        }
+        return availableModelFiles.contains(localFileName)
     }
 
     private func applySnippetsToFinalText(_ text: String, locale: Locale) -> String {
@@ -1367,7 +1540,22 @@ final class DictationRuntime: @unchecked Sendable {
 
     private func currentAIProcessingConfiguration() -> AIProcessingConfiguration {
         withSessionLock {
-            currentOptions?.aiProcessing ?? AIProcessingConfiguration(enabled: false, selectedModelID: nil)
+            currentOptions?.aiProcessing
+                ?? AIProcessingConfiguration(enabled: false, selectedModelID: nil)
+        }
+    }
+
+    private func playSoundFeedback(
+        _ event: SoundFeedbackEvent, settings: SoundFeedbackConfiguration?
+    ) {
+        guard let settings, settings.enabled else { return }
+        soundFeedbackPlayer.play(event: event, volume: settings.volume)
+    }
+
+    private func shouldRunFinalAIProcessing() -> Bool {
+        withSessionLock {
+            guard let currentOptions else { return false }
+            return currentOptions.aiProcessing.applyToFinalResult
         }
     }
 
@@ -1377,15 +1565,17 @@ final class DictationRuntime: @unchecked Sendable {
             stage: .live,
             locale: runningLocale,
             configuration: currentAIProcessingConfiguration(),
-            appContextText: withSessionLock { currentOptions?.appContextText },
+            appContextText: withSessionLock { currentOptions?.liveContextText },
             dictionaryTerms: withSessionLock { currentOptions?.dictionaryTerms ?? [] }
         )
+        let processingService = withSessionLock { aiProcessingService }
 
         let semaphore = DispatchSemaphore(value: 0)
-        var outcome: AIProcessingOutcome = .bypassed(text: text, reason: "AI processing did not run.")
+        var outcome: AIProcessingOutcome = .bypassed(
+            text: text, reason: "AI processing did not run.")
 
         Task {
-            outcome = await aiProcessingService.process(request)
+            outcome = await processingService.process(request)
             semaphore.signal()
         }
 
@@ -1394,7 +1584,9 @@ final class DictationRuntime: @unchecked Sendable {
         return outcome.text
     }
 
-    private func emitProcessingDiagnosticIfNeeded(_ outcome: AIProcessingOutcome, stage: AIProcessingStage) {
+    private func emitProcessingDiagnosticIfNeeded(
+        _ outcome: AIProcessingOutcome, stage: AIProcessingStage
+    ) {
         switch outcome {
         case .processed where stage == .final:
             if let message = outcome.diagnosticMessage {
@@ -1410,12 +1602,12 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func resolvedLanguageCode(from final: FinalTranscript) -> String {
-        let detected = final.language?
+        let detectedLanguage = final.language?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
-        if let detected, !detected.isEmpty {
-            return detected
+        if let detectedLanguage, !detectedLanguage.isEmpty {
+            return detectedLanguage
         }
 
         return withSessionLock {
@@ -1435,6 +1627,7 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func cleanupSession() {
+        publishDebug("dictation.cleanup.begin")
         let tasksToCancel = withSessionLock { () -> (Task<Void, Never>?, Task<Void, Never>?) in
             let startTask = self.startTask
             let pendingTask = self.pendingStreamingInsertionTask
@@ -1460,10 +1653,13 @@ final class DictationRuntime: @unchecked Sendable {
         stopAudioCapture()
         audioEngine.reset()
         converter = nil
+        audioPreprocessor.reset()
         whisperEngine.resetStreaming()
         resumeMediaPlaybackBestEffort()
         stableCommitter.reset()
         publishSessionActivity(false)
+        scheduleRuntimeUnloadIfNeeded()
+        publishDebug("dictation.cleanup.end")
     }
 
     private func pauseMediaPlaybackBestEffort() {
@@ -1476,38 +1672,44 @@ final class DictationRuntime: @unchecked Sendable {
         guard !identifiers.isEmpty else { return }
 
         if identifiers.contains("com.apple.Music") {
-            runAppleScriptBestEffort("""
-            tell application "Music"
-                play
-            end tell
-            """)
+            runAppleScriptBestEffort(
+                """
+                tell application "Music"
+                    play
+                end tell
+                """
+            )
         }
 
         if identifiers.contains("com.spotify.client") {
-            runAppleScriptBestEffort("""
-            tell application "Spotify"
-                play
-            end tell
-            """)
+            runAppleScriptBestEffort(
+                """
+                tell application "Spotify"
+                    play
+                end tell
+                """
+            )
         }
 
         pausedMediaAppIdentifiers.removeAll()
     }
 
     private func pauseMediaIfPlaying(appName: String, bundleIdentifier: String) {
-        guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty else {
-            return
-        }
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+            .isEmpty
+        else { return }
 
-        let descriptor = runAppleScriptBestEffort("""
-        tell application "\(appName)"
-            if player state is playing then
-                pause
-                return "paused"
-            end if
-            return "noop"
-        end tell
-        """)
+        let descriptor = runAppleScriptBestEffort(
+            """
+            tell application "\(appName)"
+                if player state is playing then
+                    pause
+                    return "paused"
+                end if
+                return "noop"
+            end tell
+            """
+        )
 
         if descriptor?.stringValue == "paused" {
             pausedMediaAppIdentifiers.insert(bundleIdentifier)
@@ -1522,20 +1724,71 @@ final class DictationRuntime: @unchecked Sendable {
 
         var error: NSDictionary?
         let descriptor = script.executeAndReturnError(&error)
-        if let error {
-            if let message = error[NSAppleScript.errorMessage] as? String {
-                publishDiagnostic("Media control skipped: \(message)")
-            }
-            return nil
+        if let error, let message = error[NSAppleScript.errorMessage] as? String {
+            publishDiagnostic("Media control skipped: \(message)")
         }
-
         return descriptor
     }
 
+    private func scheduleRuntimeUnloadIfNeeded() {
+        guard withSessionLock({ runtimePrepared }) else {
+            cancelRuntimeUnloadTask()
+            return
+        }
+
+        let timeout = withSessionLock { voiceModelActiveDuration.seconds }
+        guard let timeout else {
+            cancelRuntimeUnloadTask()
+            return
+        }
+
+        cancelRuntimeUnloadTask()
+        let task = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            self.unloadPreparedRuntimeIfNeeded()
+        }
+
+        withSessionLock {
+            runtimeUnloadTask = task
+        }
+        publishDebug("runtime.unload.scheduled after=\(Int(timeout))s")
+    }
+
+    private func cancelRuntimeUnloadTask() {
+        let task = withSessionLock {
+            let task = runtimeUnloadTask
+            runtimeUnloadTask = nil
+            return task
+        }
+        task?.cancel()
+    }
+
+    private func unloadPreparedRuntimeIfNeeded() {
+        let shouldUnload = withSessionLock {
+            guard runtimePrepared else { return false }
+            runtimePrepared = false
+            loadedModelPath = nil
+            loadedConfig = nil
+            return true
+        }
+
+        guard shouldUnload else { return }
+
+        whisperEngine.resetStreaming()
+        publishDiagnostic(
+            "ASR runtime war im Leerlauf zu lange inaktiv und wird beim nächsten Start neu geladen."
+        )
+        publishDebug("runtime.unload.completed")
+    }
+
     private func abortSession(reason: String) {
+        let feedback = withSessionLock { currentOptions?.soundFeedback }
         cleanupSession()
         publishStatus("Error")
         publishDiagnostic(reason)
+        playSoundFeedback(.failed, settings: feedback)
     }
 
     private func publishStatus(_ value: String) {
@@ -1547,6 +1800,12 @@ final class DictationRuntime: @unchecked Sendable {
     private func publishDiagnostic(_ value: String) {
         DispatchQueue.main.async { [weak self] in
             self?.onDiagnostic?(value)
+        }
+    }
+
+    private func publishDebug(_ value: String) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onDebugEvent?(value)
         }
     }
 
@@ -1569,16 +1828,17 @@ final class DictationRuntime: @unchecked Sendable {
     }
 }
 
-private extension String {
-    func commonPrefixLength(with other: String) -> Int {
+extension String {
+    fileprivate func commonPrefixLength(with other: String) -> Int {
         var lhsIndex = startIndex
         let rhs = other
         var rhsIndex = rhs.startIndex
         var length = 0
 
         while lhsIndex < endIndex,
-              rhsIndex < rhs.endIndex,
-              self[lhsIndex] == rhs[rhsIndex] {
+            rhsIndex < rhs.endIndex,
+            self[lhsIndex] == rhs[rhsIndex]
+        {
             length += 1
             formIndex(after: &lhsIndex)
             rhs.formIndex(after: &rhsIndex)
