@@ -47,7 +47,11 @@ internal struct RuntimePermissionService {
     }
 
     func requestAccessibilityPermission(promptIfNeeded: Bool) -> Bool {
-        AXTextAccess.permissionState(promptIfNeeded: promptIfNeeded) == .granted
+        let options: CFDictionary =
+            promptIfNeeded
+            ? [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            : [:] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
     }
 }
 
@@ -58,61 +62,53 @@ internal struct FocusedTextTargetService {
     private let pendingInsertionPollNanoseconds: UInt64 = 150_000_000
 
     func captureFocusedTextTarget() throws -> LockedTextTarget {
-        let probeResult = AXTextAccess.probeFocusedTarget()
-        switch probeResult {
-        case .target:
+        do {
             let snapshot = try AXTextTargetResolver().snapshotFocusedTarget()
             return makeLockedTextTarget(from: snapshot)
-        case .apiDisabled(let frontmostBundleIdentifier):
-            AgentSessionDebugLog.append(
-                hypothesisId: "H3",
-                location: "DictationRuntime.captureFocusedTextTarget",
-                message: "ax_api_disabled",
-                data: [
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
-                ]
-            )
-            throw DictationRuntimeError.accessibilityPermissionDenied
-        case .noFocusedElement(let frontmostBundleIdentifier):
-            AgentSessionDebugLog.append(
-                hypothesisId: "H3",
-                location: "DictationRuntime.captureFocusedTextTarget",
-                message: "ax_focused_unavailable",
-                data: [
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
-                ]
-            )
-            throw DictationRuntimeError.focusedElementUnavailable
-        case .unsupportedTarget(let frontmostBundleIdentifier, let role, let valueSettable):
-            AgentSessionDebugLog.append(
-                hypothesisId: "H4",
-                location: "DictationRuntime.captureFocusedTextTarget",
-                message: "validate_editable_failed",
-                data: [
-                    "role": role ?? "nil",
-                    "valueSettable": "\(valueSettable)",
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
-                ]
-            )
-            throw DictationRuntimeError.unsupportedTextTarget
-        case .unableToReadValue(let frontmostBundleIdentifier):
-            AgentSessionDebugLog.append(
-                hypothesisId: "H4",
-                location: "DictationRuntime.captureFocusedTextTarget",
-                message: "read_value_failed",
-                data: [
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
-                ]
-            )
-            throw DictationRuntimeError.focusedElementUnavailable
-        case .probeFailed(let frontmostBundleIdentifier, let reason):
+        } catch let error as TextTargetError {
+            let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            switch error {
+            case .accessibilityDenied:
+                AgentSessionDebugLog.append(
+                    hypothesisId: "H3",
+                    location: "DictationRuntime.captureFocusedTextTarget",
+                    message: "ax_api_disabled",
+                    data: [
+                        "frontmostBundle": frontmostBundleIdentifier ?? "nil"
+                    ]
+                )
+                throw DictationRuntimeError.accessibilityPermissionDenied
+            case .unsupportedFocusedElement:
+                AgentSessionDebugLog.append(
+                    hypothesisId: "H4",
+                    location: "DictationRuntime.captureFocusedTextTarget",
+                    message: "validate_editable_failed",
+                    data: [
+                        "frontmostBundle": frontmostBundleIdentifier ?? "nil"
+                    ]
+                )
+                throw DictationRuntimeError.unsupportedTextTarget
+            case .unableToReadValue:
+                AgentSessionDebugLog.append(
+                    hypothesisId: "H4",
+                    location: "DictationRuntime.captureFocusedTextTarget",
+                    message: "read_value_failed",
+                    data: [
+                        "frontmostBundle": frontmostBundleIdentifier ?? "nil"
+                    ]
+                )
+                throw DictationRuntimeError.focusedElementUnavailable
+            case .unableToWriteValue, .unsafeClipboardFallback:
+                throw DictationRuntimeError.focusedElementUnavailable
+            }
+        } catch {
+            let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
             AgentSessionDebugLog.append(
                 hypothesisId: "H3",
                 location: "DictationRuntime.captureFocusedTextTarget",
                 message: "ax_probe_failed",
                 data: [
-                    "frontmostBundle": frontmostBundleIdentifier ?? "nil",
-                    "reason": reason.rawValue,
+                    "frontmostBundle": frontmostBundleIdentifier ?? "nil"
                 ]
             )
             throw DictationRuntimeError.accessibilityPermissionDenied

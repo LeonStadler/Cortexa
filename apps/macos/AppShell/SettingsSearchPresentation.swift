@@ -4,6 +4,8 @@ import SnippetCore
 struct SettingsSearchPresentation {
     let searchText: String
     let transcriptHistory: [TranscriptHistoryEntry]
+    let dictionaryTerms: [DictionaryTerm]
+    let dictionaryReviewQueue: [DictionaryReviewCandidate]
     let snippetRules: [SnippetRule]
     let diagnosticsText: String
     let capabilitySummary: String
@@ -139,6 +141,13 @@ struct SettingsSearchPresentation {
         ]) || !filteredSnippets.isEmpty
     }
 
+    var dictionaryHasMatches: Bool {
+        matches([
+            "dictionary", "wörterbuch", "woerterbuch", "term", "begriffe", "jargon", "namen",
+            "context", "kontext", "review", "queue", "vorschlag", "personal terms",
+        ]) || !filteredDictionaryTerms.isEmpty || !filteredDictionaryReviewQueue.isEmpty
+    }
+
     var advancedHasMatches: Bool {
         matches([
             "update", "updates", "aktualisierung", "diagnose", "diagnostics", "capability",
@@ -182,6 +191,24 @@ struct SettingsSearchPresentation {
         return snippetRules.filter {
             $0.trigger.lowercased().contains(normalizedSearchQuery)
                 || $0.replacement.lowercased().contains(normalizedSearchQuery)
+        }
+    }
+
+    var filteredDictionaryTerms: [DictionaryTerm] {
+        guard isSearching else { return dictionaryTerms }
+        return dictionaryTerms.filter {
+            $0.term.lowercased().contains(normalizedSearchQuery)
+                || $0.category.rawValue.lowercased().contains(normalizedSearchQuery)
+                || ($0.languageCode?.lowercased().contains(normalizedSearchQuery) ?? false)
+        }
+    }
+
+    var filteredDictionaryReviewQueue: [DictionaryReviewCandidate] {
+        guard isSearching else { return dictionaryReviewQueue }
+        return dictionaryReviewQueue.filter {
+            $0.proposedTerm.lowercased().contains(normalizedSearchQuery)
+                || $0.category.rawValue.lowercased().contains(normalizedSearchQuery)
+                || ($0.languageCode?.lowercased().contains(normalizedSearchQuery) ?? false)
         }
     }
 }

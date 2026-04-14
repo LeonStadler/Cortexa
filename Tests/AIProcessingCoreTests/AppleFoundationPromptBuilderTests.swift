@@ -170,5 +170,26 @@
                 ))
             XCTAssertTrue(prompt.contains("Your answer must stay in German."))
         }
+
+        func testPromptIncludesDictionaryTermsAndContextWhenProvided() {
+            let request = AIProcessingRequest(
+                text: "Bitte schreibe Leon Stadler richtig.",
+                stage: .final,
+                locale: Locale(identifier: "de_DE"),
+                configuration: AIProcessingConfiguration(
+                    enabled: true,
+                    selectedModelID: "apple.ondevice"
+                ),
+                appContextText: "Kontaktliste: Leon Stadler, WisprLocal, InterMeda",
+                dictionaryTerms: ["Leon Stadler", "WisprLocal"]
+            )
+
+            let prompt = AppleFoundationPromptBuilder.prompt(for: request)
+
+            XCTAssertTrue(prompt.contains("<dictionary>"))
+            XCTAssertTrue(prompt.contains("Leon Stadler"))
+            XCTAssertTrue(prompt.contains("<context>"))
+            XCTAssertTrue(prompt.contains("Kontaktliste"))
+        }
     }
 #endif

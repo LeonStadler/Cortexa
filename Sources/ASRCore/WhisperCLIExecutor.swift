@@ -43,6 +43,7 @@ enum WhisperCLIExecutor {
         modelPath: URL,
         inputWav: URL,
         languageHint: String?,
+        initialPrompt: String?,
         translationMode: ASRTranslationMode,
         threads: Int,
         beamSize: Int,
@@ -57,6 +58,7 @@ enum WhisperCLIExecutor {
             modelPath: modelPath,
             inputWav: inputWav,
             languageHint: languageHint,
+            initialPrompt: initialPrompt,
             translationMode: translationMode,
             threads: threads,
             beamSize: beamSize,
@@ -133,6 +135,7 @@ enum WhisperCLIExecutor {
         _ = modelPath
         _ = inputWav
         _ = languageHint
+        _ = initialPrompt
         _ = translationMode
         _ = threads
         _ = beamSize
@@ -145,6 +148,7 @@ enum WhisperCLIExecutor {
         modelPath: URL,
         inputWav: URL,
         languageHint: String?,
+        initialPrompt: String?,
         translationMode: ASRTranslationMode,
         threads: Int,
         beamSize: Int,
@@ -164,6 +168,10 @@ enum WhisperCLIExecutor {
             arguments += ["-l", languageHint]
         }
 
+        if let sanitizedPrompt = sanitizePrompt(initialPrompt) {
+            arguments += ["--prompt", sanitizedPrompt]
+        }
+
         if translationMode == .toEnglish {
             arguments.append("-tr")
         }
@@ -171,8 +179,19 @@ enum WhisperCLIExecutor {
         return arguments
     }
 
-    private static func truncate(_ text: String, limit: Int = 500) -> String {
-        guard text.count > limit else { return text }
-        return "\(text.prefix(limit))…"
+    private static func sanitizePrompt(_ prompt: String?) -> String? {
+        guard let prompt else { return nil }
+
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let collapsed = trimmed.replacingOccurrences(
+            of: #"\s+"#,
+            with: " ",
+            options: .regularExpression
+        )
+
+        let limited = String(collapsed.prefix(500))
+        return limited.isEmpty ? nil : limited
     }
 }

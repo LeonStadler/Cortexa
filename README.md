@@ -83,7 +83,23 @@ Anschließend `apps/macos/AppShell/Resources/Runtime` ins Xcode-Target einbinden
 
 ### macOS — implementierte Funktionen (Kurzliste)
 
-Ausführlich mit Modulbezug: [`docs/features-and-implementation.md`](docs/features-and-implementation.md).
+Features implemented in macOS app shell:
+- Finalize Insert at locked original cursor target
+- Streaming Insert with immutable target binding
+- Snippet replacement + snippet import/export (JSON)
+- Transkript-History mit Copy/Delete/Clear + Export (TXT), lokal persistent
+- Language switch (`de`, `en`, `auto`) and profile presets (`auto`, `fast`, `balanced`, `accurate`)
+- Optional formatting/AI post-processing with configurable context awareness (`off`, `finalOnly`, `liveOnly`, `liveAndFinal`)
+- Personal dictionary with category-based terms, review queue, and JSON import/export
+- Dictionary-driven ASR prompt hints and dictionary-preservation hints for AI revisions
+- Optional best-effort music pause/resume while dictating (Apple Music, Spotify)
+- Offline licensing UI (key input, local verification, Keychain-only secret persistence with legacy cache cleanup)
+- Lokales Audit-Log mit Rotation (`~/Library/Application Support/WisprLocal/audit.log`)
+- Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI
+- Sparkle-kompatibler Auto-Updater mit permanent sichtbarem manuellen Check im Menü und in den Settings
+- Lifecycle-Refresh nach App-Aktivierung und System-Wake für Berechtigungen, Runtime und Hotkey-Registrierung
+- Eingeschränkter Transkriptionsmodus ohne Bedienungshilfen; direktes Einfügen bleibt dann deaktiviert, Verlauf und Zwischenablage bleiben nutzbar
+- Interner Speicher für Snippets, Verlauf und Audit-Dateien wird lokal gehärtet; Zwischenablage-Fallback bleibt absichtlich optional und ist als weniger privater Zustellpfad gekennzeichnet
 
 - Finalize- und Streaming-Modus mit **festem Textziel** pro Session; Snippets + Verlauf (Export TXT)
 - Sprache, Qualität, **explizite Übersetzung** (getrennt von Auto-Sprache)

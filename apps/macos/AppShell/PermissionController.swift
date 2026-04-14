@@ -7,7 +7,7 @@ import TextTargetMac
 enum AccessibilityTrust {
     /// Effektiver Bedienungshilfen-Status für den laufenden Prozess (Main-Thread-Pflicht für AX).
     static func isClientProcessTrusted() -> Bool {
-        AXTextAccess.permissionState() == .granted
+        AXIsProcessTrusted()
     }
 }
 

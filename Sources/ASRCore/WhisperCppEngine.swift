@@ -238,6 +238,7 @@ public final class WhisperCppEngine: WhisperEngine {
             modelPath: modelPath,
             inputWav: wavURL,
             languageHint: config.languageHint,
+            initialPrompt: config.initialPrompt,
             translationMode: config.translationMode,
             threads: threads,
             beamSize: beam,

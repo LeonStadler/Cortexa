@@ -11,6 +11,7 @@ let package = Package(
     products: [
         .library(name: "AIProcessingCore", targets: ["AIProcessingCore"]),
         .library(name: "ASRCore", targets: ["ASRCore"]),
+        .library(name: "AIProcessingCore", targets: ["AIProcessingCore"]),
         .library(name: "AudioCore", targets: ["AudioCore"]),
         .library(name: "SessionCore", targets: ["SessionCore"]),
         .library(name: "SnippetCore", targets: ["SnippetCore"]),
@@ -62,6 +63,10 @@ let package = Package(
                 "WisprLocalMacApp.swift",
                 "Resources"
             ]
+        ),
+        .testTarget(
+            name: "AIProcessingCoreTests",
+            dependencies: ["AIProcessingCore"]
         ),
         .testTarget(
             name: "AIProcessingCoreTests",

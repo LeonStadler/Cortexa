@@ -59,6 +59,19 @@ final class SettingsSearchPresentationTests: XCTestCase {
                     mode: "streaming"
                 ),
             ],
+            dictionaryTerms: [
+                DictionaryTerm(
+                    term: "WisprLocal",
+                    category: .companyJargon,
+                    source: .manual
+                )
+            ],
+            dictionaryReviewQueue: [
+                DictionaryReviewCandidate(
+                    proposedTerm: "Leon Stadler",
+                    category: .personName
+                )
+            ],
             snippetRules: [
                 SnippetRule(trigger: "old", replacement: "archive"),
                 SnippetRule(trigger: "fresh", replacement: "current"),
@@ -67,6 +80,13 @@ final class SettingsSearchPresentationTests: XCTestCase {
             capabilitySummary: "speech capability ready",
             updaterStatusText: "build version 1.0"
         )
+    }
+
+    func testQueryMatchesDictionaryContent() {
+        let presentation = makePresentation(searchText: "wispr")
+
+        XCTAssertTrue(presentation.dictionaryHasMatches)
+        XCTAssertEqual(presentation.filteredDictionaryTerms.map(\.term), ["WisprLocal"])
     }
 }
 #endif

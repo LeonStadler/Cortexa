@@ -156,6 +156,11 @@ final class SessionEntryControllerTests: XCTestCase {
             simulateKeypresses: false,
             restoreClipboardAfterPaste: false,
             autoSendAfterPaste: false,
+            muteMusicWhileDictating: false,
+            asrInitialPrompt: nil,
+            dictionaryTerms: [],
+            liveContextText: nil,
+            finalContextText: nil,
             aiProcessing: AIProcessingConfiguration(enabled: false, selectedModelID: nil),
             audioProcessing: AudioProcessingConfiguration(),
             soundFeedback: SoundFeedbackConfiguration()

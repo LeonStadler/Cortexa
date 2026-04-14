@@ -16,6 +16,9 @@ struct SettingsView: View {
     @State private var showsTabInfoPopover = false
     @State private var selectedRemoteProviderPreset: AIRemoteProviderPreset?
     @State private var addProviderDisclosureExpanded = false
+    @State private var newDictionaryTerm: String = ""
+    @State private var newDictionaryLanguageCode: String = ""
+    @State private var newDictionaryCategory: DictionaryTermCategory = .personalTerm
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     private let personalWebsiteURL = URL(string: "https://leon-stadler.com")!
@@ -69,6 +72,32 @@ struct SettingsView: View {
         newSnippetReplacement = ""
     }
 
+    private var trimmedNewDictionaryTerm: String {
+        newDictionaryTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedNewDictionaryLanguageCode: String {
+        newDictionaryLanguageCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canCommitNewDictionaryTerm: Bool {
+        !trimmedNewDictionaryTerm.isEmpty
+    }
+
+    private func commitNewDictionaryTerm() {
+        guard canCommitNewDictionaryTerm else { return }
+        appState.addDictionaryTerm(
+            trimmedNewDictionaryTerm,
+            category: newDictionaryCategory,
+            languageCode: trimmedNewDictionaryLanguageCode.isEmpty
+                ? nil
+                : trimmedNewDictionaryLanguageCode
+        )
+        newDictionaryTerm = ""
+        newDictionaryLanguageCode = ""
+        newDictionaryCategory = .personalTerm
+    }
+
     private var storedLanguage: AppLanguage {
         AppLanguage(rawValue: uiLanguageRaw) ?? .system
     }
@@ -93,6 +122,8 @@ struct SettingsView: View {
         SettingsSearchPresentation(
             searchText: searchText,
             transcriptHistory: appState.transcriptHistory,
+            dictionaryTerms: appState.dictionaryTerms,
+            dictionaryReviewQueue: appState.dictionaryReviewQueue,
             snippetRules: appState.snippetRules,
             diagnosticsText: appState.diagnosticsText,
             capabilitySummary: appState.capabilitySummary,
@@ -143,6 +174,14 @@ struct SettingsView: View {
         settingsSearchPresentation.filteredSnippets
     }
 
+    private var filteredDictionaryTerms: [DictionaryTerm] {
+        settingsSearchPresentation.filteredDictionaryTerms
+    }
+
+    private var filteredDictionaryReviewQueue: [DictionaryReviewCandidate] {
+        settingsSearchPresentation.filteredDictionaryReviewQueue
+    }
+
     private var generalHasMatches: Bool {
         settingsSearchPresentation.generalHasMatches
     }
@@ -173,6 +212,10 @@ struct SettingsView: View {
 
     private var snippetsHasMatches: Bool {
         settingsSearchPresentation.snippetsHasMatches
+    }
+
+    private var dictionaryHasMatches: Bool {
+        settingsSearchPresentation.dictionaryHasMatches
     }
 
     private var advancedHasMatches: Bool {
@@ -289,6 +332,15 @@ struct SettingsView: View {
                 changelogContent: erasedView { aboutChangelogContent },
                 supportContent: appState.isLicenseUIEnabledForDevelopment
                     ? erasedView { aboutSupportContent } : nil
+            )
+        case .dictionary:
+            DictionarySettingsPage(
+                newEntrySectionTitle: text("Neuer Begriff", "New term"),
+                reviewQueueSectionTitle: text("Vorschläge", "Review queue"),
+                savedTermsSectionTitle: text("Gespeicherte Begriffe", "Saved terms"),
+                newEntryContent: erasedView { dictionaryNewEntryRows },
+                reviewQueueContent: erasedView { dictionaryReviewQueueRows },
+                savedTermsContent: erasedView { dictionarySavedRows }
             )
         case .snippets:
             SnippetsSettingsPage(
@@ -430,6 +482,16 @@ struct SettingsView: View {
                     snippetNewEntryRows
                     snippetImportExportRows
                     snippetSavedRows
+                }
+            )
+        }
+
+        if dictionaryHasMatches {
+            sections.append(
+                pageSection(id: "dictionary", title: text("Dictionary", "Dictionary")) {
+                    dictionaryNewEntryRows
+                    dictionaryReviewQueueRows
+                    dictionarySavedRows
                 }
             )
         }
@@ -1049,6 +1111,15 @@ struct SettingsView: View {
                 )
             }
 
+            Text(
+                text(
+                    "Auto passt das Preset an Gerät und Laufzeit an. Schnell priorisiert Reaktionszeit, Ausgeglichen balanciert Stabilität und Tempo, Präzise investiert mehr in die finale Erkennung.",
+                    "Auto adapts the preset to the device and runtime. Fast prioritizes responsiveness, Balanced trades speed for stability, and Accurate spends more on the final recognition pass."
+                )
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+
             if let selectedModel = appState.selectedVoiceModel {
                 LabeledContent(text("Modell-Details", "Model details")) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -1259,6 +1330,25 @@ struct SettingsView: View {
                 appState.finalResultDeliveryMode == .clipboardOnly
                     || !appState.dictationCapability.allowsDirectInsertion)
 
+            Text(
+                text(
+                    "Für die beste Endqualität: Live-Text deaktivieren und die finale Formatierung aktiviert lassen. Das gibt ASR und AI mehr Ruhe für den letzten Pass.",
+                    "For the best final quality, disable live text and keep final formatting enabled. That gives ASR and AI more headroom for the last pass."
+                )
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+
+            Toggle(isOn: $appState.muteMusicWhileDictating) {
+                SettingsFieldLabel(
+                    title: text("Musik während des Diktats pausieren", "Pause music while dictating"),
+                    helpText: text(
+                        "Pausiert Apple Music und Spotify best-effort beim Start und setzt nur Player fort, die Wispr selbst pausiert hat.",
+                        "Best-effort pauses Apple Music and Spotify on start and resumes only players that Wispr paused itself."
+                    )
+                )
+            }
+
             Toggle(isOn: $appState.clipboardFallbackWhenNoTarget) {
                 SettingsFieldLabel(
                     title: text(
@@ -1450,7 +1540,7 @@ struct SettingsView: View {
 
                 if appState.aiShowsModeControls {
                     LabeledContent {
-                        Picker(text("Modus", "Mode"), selection: $appState.aiFormattingMode) {
+                        Picker(text("Formatierung", "Formatting"), selection: $appState.aiFormattingMode) {
                             ForEach(AIFormattingMode.allCases) { mode in
                                 Text(
                                     mode.localizedDisplayName(
@@ -1464,7 +1554,7 @@ struct SettingsView: View {
                         .settingsFormMenuPickerSlot(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
-                            title: text("Modus", "Mode"),
+                            title: text("Formatierung", "Formatting"),
                             helpText: text(
                                 "„Wie gesprochen“: keine aufgezwungene Struktur. „Automatische Formatierung“: aus dem Gesprochenen Listen und Absätze ableiten. Weitere Modi richten Text an E-Mail, Chat usw. aus.",
                                 "“As spoken”: no imposed structure. “Automatic formatting” infers lists and paragraphs from speech. Other modes target email, chat, and similar shapes."
@@ -1473,6 +1563,34 @@ struct SettingsView: View {
                     }
                     .disabled(appState.selectedAIModel?.availability.isAvailable != true)
                 }
+
+                LabeledContent {
+                    Picker(
+                        text("Kontextbewusstsein", "Context awareness"),
+                        selection: $appState.contextAwarenessMode
+                    ) {
+                        ForEach(ContextAwarenessMode.allCases) { mode in
+                            Text(
+                                mode.localizedDisplayName(
+                                    interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                                )
+                            )
+                            .tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .settingsFormMenuPickerSlot(minWidth: 220)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("Kontextbewusstsein", "Context awareness"),
+                        helpText: text(
+                            "Standard ist nur das Endergebnis. Live-Kontext bleibt optional und klein, damit Streaming stabil bleibt. Zusätzliche AI-Bereinigung verbessert den finalen Output weiter.",
+                            "The default is final result only. Live context stays optional and small to keep streaming stable. Additional AI cleanup can further improve the final output."
+                        )
+                    )
+                }
+                .disabled(appState.selectedAIModel?.availability.isAvailable != true)
 
                 if appState.aiTaskCleanupEnabled {
                     LabeledContent {
@@ -2203,6 +2321,152 @@ struct SettingsView: View {
                         .buttonStyle(.borderless)
                         .accessibilityLabel(
                             text("Snippet löschen: ", "Delete snippet: ") + rule.trigger)
+                    }
+                    .width(ideal: 44)
+                }
+                .frame(minHeight: 200)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dictionaryNewEntryRows: some View {
+        if matches(["dictionary", "wörterbuch", "woerterbuch", "term", "jargon", "namen"]) {
+            Toggle(isOn: $appState.dictionaryAutoAddEnabled) {
+                SettingsFieldLabel(
+                    title: text(
+                        "Vorschläge automatisch sammeln",
+                        "Collect suggestions automatically"
+                    ),
+                    helpText: text(
+                        "Auffällige Namen und Fachbegriffe werden nach dem finalen Diktat in eine Review-Liste gelegt, statt direkt übernommen zu werden.",
+                        "Notable names and jargon are queued for review after final dictation instead of being added blindly."
+                    )
+                )
+            }
+
+            LabeledContent(text("Begriff", "Term")) {
+                TextField(text("Begriff", "Term"), text: $newDictionaryTerm)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 220)
+                    .onSubmit { commitNewDictionaryTerm() }
+            }
+
+            LabeledContent(text("Kategorie", "Category")) {
+                Picker(text("Kategorie", "Category"), selection: $newDictionaryCategory) {
+                    ForEach(DictionaryTermCategory.allCases) { category in
+                        Text(
+                            category.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                            )
+                        )
+                        .tag(category)
+                    }
+                    .width(ideal: 44)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 220)
+            }
+
+            LabeledContent(text("Sprachcode", "Language code")) {
+                TextField(text("Optional", "Optional"), text: $newDictionaryLanguageCode)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 120)
+            }
+
+            HStack(spacing: 10) {
+                Button(text("Hinzufügen", "Add")) {
+                    commitNewDictionaryTerm()
+                }
+                .liquidGlassPrimaryButtonStyle()
+                .disabled(!canCommitNewDictionaryTerm)
+
+                Button(text("JSON importieren", "Import JSON")) {
+                    appState.importDictionaryFromJSON()
+                }
+                .liquidGlassSecondaryButtonStyle()
+
+                Button(text("JSON exportieren", "Export JSON")) {
+                    appState.exportDictionaryToJSON()
+                }
+                .liquidGlassSecondaryButtonStyle()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dictionaryReviewQueueRows: some View {
+        if matches(["dictionary", "review", "queue", "vorschlag", "suggestion"])
+            || !filteredDictionaryReviewQueue.isEmpty
+        {
+            if filteredDictionaryReviewQueue.isEmpty {
+                Text(text("Keine offenen Vorschläge.", "No pending suggestions."))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(filteredDictionaryReviewQueue) { candidate in
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(candidate.proposedTerm)
+                            Text(
+                                candidate.category.localizedDisplayName(
+                                    interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                                )
+                                    + (candidate.languageCode.map { " • \($0)" } ?? "")
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(text("Übernehmen", "Approve")) {
+                            appState.approveDictionaryCandidate(candidate.id)
+                        }
+                        .liquidGlassPrimaryButtonStyle()
+                        Button(role: .destructive) {
+                            appState.rejectDictionaryCandidate(candidate.id)
+                        } label: {
+                            Text(text("Ablehnen", "Reject"))
+                        }
+                        .liquidGlassDestructiveButtonStyle()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dictionarySavedRows: some View {
+        if matches(["dictionary", "wörterbuch", "woerterbuch", "term", "begriffe"])
+            || !filteredDictionaryTerms.isEmpty
+        {
+            if filteredDictionaryTerms.isEmpty {
+                Text(text("Keine Dictionary-Begriffe gespeichert.", "No dictionary terms saved."))
+                    .foregroundStyle(.secondary)
+            } else {
+                Table(filteredDictionaryTerms) {
+                    TableColumn(text("Begriff", "Term")) { term in
+                        Text(term.term).textSelection(.enabled)
+                    }
+                    TableColumn(text("Kategorie", "Category")) { term in
+                        Text(
+                            term.category.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                            )
+                        )
+                        .foregroundStyle(.secondary)
+                    }
+                    TableColumn(text("Quelle", "Source")) { term in
+                        Text(term.source == .manual ? text("Manuell", "Manual") : text("Auto", "Auto"))
+                            .foregroundStyle(.secondary)
+                    }
+                    TableColumn("") { term in
+                        Button(role: .destructive) {
+                            appState.removeDictionaryTerm(termID: term.id)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(text("Begriff löschen", "Delete term"))
                     }
                     .width(ideal: 44)
                 }

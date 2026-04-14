@@ -53,6 +53,9 @@ struct MacAppPreferencesSnapshot {
     let autoSendAfterPaste: Bool
     let restoreClipboardAfterPaste: Bool
     let simulateKeypresses: Bool
+    let muteMusicWhileDictating: Bool
+    let contextAwarenessMode: ContextAwarenessMode
+    let dictionaryAutoAddEnabled: Bool
     let remoteProviders: [AIRemoteProviderConfiguration]
     let selectedRemoteProviderID: String?
 }
@@ -140,6 +143,9 @@ struct MacAppPreferencesStore {
             autoSendAfterPaste: bool(Keys.autoSendAfterPaste, default: false),
             restoreClipboardAfterPaste: bool(Keys.restoreClipboardAfterPaste, default: false),
             simulateKeypresses: bool(Keys.simulateKeypresses, default: false),
+            muteMusicWhileDictating: bool(Keys.muteMusicWhileDictating, default: false),
+            contextAwarenessMode: enumValue(Keys.contextAwarenessMode, default: .finalOnly),
+            dictionaryAutoAddEnabled: bool(Keys.dictionaryAutoAddEnabled, default: false),
             remoteProviders: remoteProviders,
             selectedRemoteProviderID: userDefaults.string(forKey: Keys.selectedRemoteProviderID)
                 ?? remoteProviders.first?.id
@@ -288,6 +294,9 @@ struct MacAppPreferencesStore {
         static let autoSendAfterPaste = "wispr.settings.autoSendAfterPaste"
         static let restoreClipboardAfterPaste = "wispr.settings.restoreClipboardAfterPaste"
         static let simulateKeypresses = "wispr.settings.simulateKeypresses"
+        static let muteMusicWhileDictating = "wispr.settings.muteMusicWhileDictating"
+        static let contextAwarenessMode = "wispr.settings.contextAwarenessMode"
+        static let dictionaryAutoAddEnabled = "wispr.settings.dictionaryAutoAddEnabled"
         static let remoteProviders = "wispr.settings.ai.remoteProviders"
         static let selectedRemoteProviderID = "wispr.settings.ai.selectedRemoteProviderID"
     }

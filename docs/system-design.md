@@ -67,22 +67,14 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - macOS menu bar app + settings
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
-  snippet persistence/import/export UI, explicit speech-provider/model selection, language/performance selection, translation selection,
-  transcript history, AI processing model/goal/format controls, license activation UI, hotkey control,
-  dedicated app-behavior, sound, text-input, history-retention, and model-visibility settings
-- internally, the macOS shell is now split into a thin `MacAppState` orchestration layer plus focused support types:
-  `MacAppPreferencesStore` and `SessionConfigurationBuilder` for persisted settings and `DictationStartOptions`,
-  `PermissionCoordinator`, `AppLifecycleCoordinator`, `SessionEntryController`, `TranscriptHistoryController`,
-  `AIProviderController`, `SpeechModelController`, `SnippetController`, and `DiagnosticsController` for stateful shell concerns,
-  `SettingsViewShell`, page-based settings form helpers, `SettingsSearchPresentation`, `MenuBarContentView`, and `SettingsWindowPresenter` for UI composition,
-  and `DictationRuntimeServices` for permission checks, focused target capture, streaming insertion, and final transcript delivery
-- sound feedback controls are app-local cues for start/stop/failure states and do not control the system microphone volume or any global playback-pausing behavior
+  snippet persistence/import/export UI, personal dictionary persistence/import/export UI,
+  language/performance selection, transcript history, license activation UI, and hotkey control
+- optional context-aware AI post-processing (`off`, `finalOnly`, `liveOnly`, `liveAndFinal`)
+- optional media auto-pause/resume during dictation (best effort for Apple Music and Spotify)
 - local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
-- optional debug log for high-detail runtime/process tracing, including `whisper-cli` launch, exit, and timeout events
-- persistent user settings (mode/language/performance/translation/AI processing) via `UserDefaults`
-- iOS shell now includes a host app backed by app-group storage and a keyboard extension
-  that can insert the latest shared transcript and shared snippet replacements
-- an `AppShellSupport` test target freezes current macOS shell behavior through characterization, search-presentation, coordinator, and controller tests for permission mapping, session entry, history retention, settings search, remote-provider editing, diagnostics, snippets, and speech-model selection
+- persistent user settings (mode/language/performance/context/media-mute) via `UserDefaults`
+ - iOS shell now includes a host app backed by app-group storage and a keyboard extension
+   that can insert the latest shared transcript and shared snippet replacements
 
 ## Data Flows
 
@@ -91,16 +83,12 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 1. Hotkey starts session.
 2. AX target snapshot captured once (`bindingID` immutable).
 3. Audio captured and sent to ASR.
-   Optional preprocessing may adjust input level, suppress silence, attenuate weak background noise, or normalize dynamic gain before samples reach ASR.
-4. The selected local speech model is resolved from the visible catalog, with optional language-specific overrides and fallback to bundled `Standard`.
-5. Final transcript returned in the spoken language unless explicit translation is enabled and the selected model supports Whisper translation to English.
-6. Snippet replacement applied.
-7. Optional translation applied.
-8. Optional AI processing applied.
-9. Single deterministic insert into original target.
-10. Session transitions to completed.
-
-Insertion readiness is derived from the same AX-focused-target probe that the runtime later uses for capture and delivery. This avoids false-positive accessibility readiness states where TCC looks enabled but focused-target AX reads still fail with `apiDisabled`.
+4. Optional ASR dictionary prompt hints are applied before decode.
+5. Final transcript returned.
+6. Optional AI receives bounded app-context and dictionary term preservation hints.
+7. Snippet replacement applied.
+8. Single deterministic insert into original target.
+9. Session transitions to completed.
 
 ### 2) Streaming Insert (macOS)
 

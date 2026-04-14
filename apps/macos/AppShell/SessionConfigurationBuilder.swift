@@ -21,6 +21,11 @@ struct SessionConfigurationInput {
     let simulateKeypresses: Bool
     let restoreClipboardAfterPaste: Bool
     let autoSendAfterPaste: Bool
+    let muteMusicWhileDictating: Bool
+    let asrInitialPrompt: String?
+    let dictionaryTerms: [String]
+    let liveContextText: String?
+    let finalContextText: String?
     let aiProcessing: AIProcessingConfiguration
     let audioProcessing: AudioProcessingConfiguration
     let soundFeedback: SoundFeedbackConfiguration
@@ -50,6 +55,11 @@ struct SessionConfigurationBuilder {
             simulateKeypresses: input.simulateKeypresses,
             restoreClipboardAfterPaste: input.restoreClipboardAfterPaste,
             autoSendAfterPaste: input.autoSendAfterPaste,
+            muteMusicWhileDictating: input.muteMusicWhileDictating,
+            asrInitialPrompt: input.asrInitialPrompt,
+            dictionaryTerms: input.dictionaryTerms,
+            liveContextText: input.liveContextText,
+            finalContextText: input.finalContextText,
             aiProcessing: input.aiProcessing,
             audioProcessing: input.audioProcessing,
             soundFeedback: input.soundFeedback

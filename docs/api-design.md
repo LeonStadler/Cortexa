@@ -225,7 +225,8 @@ Current provider surface:
 ```swift
 struct DictationStartOptions {
     let mode: DictationMode            // .finalize | .streaming
-    let language: DictationLanguage    // de | en | fr | es | it | nl | pt | pl | tr | cs | zh | auto
+    let language: DictationLanguage    // de | en | auto
+    let translationOutput: TranslationOutputMode
     let performance: DictationPerformance // auto | fast | balanced | accurate
     let translationOutput: TranslationOutputMode // .original | .english
     let selectedVoiceProviderID: String
@@ -236,6 +237,11 @@ struct DictationStartOptions {
     let snippetRules: [SnippetRule]
     let finalResultDeliveryMode: FinalResultDeliveryMode
     let clipboardFallbackWhenNoTarget: Bool
+    let aiProcessing: AIProcessingConfiguration
+    let muteMusicWhileDictating: Bool
+    let asrInitialPrompt: String?
+    let dictionaryTerms: [String]
+    let appContextText: String?
 }
 ```
 
@@ -256,13 +262,8 @@ The macOS app shell uses these options to:
 - keep transcription, translation, and AI processing as separate runtime stages
 - apply app-level audio preprocessing before ASR, including adjustable noise suppression
 - apply stable streaming patching with a bounded mutable tail
-- sanitize common non-speech placeholders such as `(silence)` or `[music]` before live insertion and final delivery
-- apply snippet substitutions before optional translation and optional AI processing
-- optionally translate Whisper output to English only when `translationOutput == .english` and the selected voice model supports it
-- optionally run AI processing separately for live insertion updates and for the final result
-- maintain one provider-agnostic AI model picker across Apple on-device and remote API-backed providers
-- maintain a separate local speech-model picker with provider/model IDs, install state, and language-specific defaults
-- expose optional technical diagnostic logging that captures detailed runtime diagnostics plus ASR subprocess lifecycle events for support cases
+- apply snippet substitutions for streaming commits and final transcript
+- pass bounded dictionary/context hints into ASR and AI processing
 - choose whether the final transcript is inserted or copied, and whether clipboard fallback is allowed when no text target is available
 - expose clipboard fallback as an explicit privacy tradeoff rather than a silent background path
 - use the same AX focused-target probe for permission readiness and direct insertion, so the shell does not present insertion as available when AX later answers with `apiDisabled`
