@@ -1,9 +1,36 @@
 import AppKit
 import Foundation
 
+protocol HistoryClipboardWriting: AnyObject {
+    @discardableResult
+    func clearContents() -> Int
+
+    @discardableResult
+    func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool
+}
+
+final class SystemHistoryClipboard: HistoryClipboardWriting {
+    private let pasteboard: NSPasteboard
+
+    init(pasteboard: NSPasteboard = .general) {
+        self.pasteboard = pasteboard
+    }
+
+    @discardableResult
+    func clearContents() -> Int {
+        pasteboard.clearContents()
+    }
+
+    @discardableResult
+    func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool {
+        pasteboard.setString(string, forType: type)
+    }
+}
+
 @MainActor
 final class TranscriptHistoryController {
     private let historyStore: TranscriptHistoryStoring
+    private let clipboard: HistoryClipboardWriting
     private let currentTranscriptHistory: () -> [TranscriptHistoryEntry]
     private let setTranscriptHistory: ([TranscriptHistoryEntry]) -> Void
     private let currentHistoryRetentionPolicy: () -> HistoryRetentionPolicy
@@ -12,6 +39,7 @@ final class TranscriptHistoryController {
 
     init(
         historyStore: TranscriptHistoryStoring,
+        clipboard: HistoryClipboardWriting = SystemHistoryClipboard(),
         currentTranscriptHistory: @escaping () -> [TranscriptHistoryEntry],
         setTranscriptHistory: @escaping ([TranscriptHistoryEntry]) -> Void,
         currentHistoryRetentionPolicy: @escaping () -> HistoryRetentionPolicy,
@@ -19,6 +47,7 @@ final class TranscriptHistoryController {
         appendAudit: @escaping (String) -> Void
     ) {
         self.historyStore = historyStore
+        self.clipboard = clipboard
         self.currentTranscriptHistory = currentTranscriptHistory
         self.setTranscriptHistory = setTranscriptHistory
         self.currentHistoryRetentionPolicy = currentHistoryRetentionPolicy
@@ -96,9 +125,8 @@ final class TranscriptHistoryController {
     }
 
     func copyHistoryEntry(_ entry: TranscriptHistoryEntry) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(entry.text, forType: .string)
+        clipboard.clearContents()
+        clipboard.setString(entry.text, forType: .string)
         appendDiagnostic("History-Eintrag kopiert: \(entry.id.uuidString.prefix(8))")
     }
 
@@ -113,9 +141,8 @@ final class TranscriptHistoryController {
 
         guard !joined.isEmpty else { return }
 
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(joined, forType: .string)
+        clipboard.clearContents()
+        clipboard.setString(joined, forType: .string)
         appendDiagnostic("Gesamte History in Zwischenablage kopiert")
     }
 

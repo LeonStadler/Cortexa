@@ -656,7 +656,7 @@ struct MenuBarContentView: View {
         .clipped()
         .controlSize(.small)
         .onAppear {
-            appState.refreshPermissionStates()
+            appState.refreshPermissionStatesWithStabilization()
         }
     }
 

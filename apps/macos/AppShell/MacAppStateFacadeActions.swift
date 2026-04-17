@@ -4,7 +4,7 @@ import AppKit
 
 extension MacAppState {
     func bindUpdater(_ updaterController: SparkleUpdaterController) {
-        self.updaterController = updaterController
+        lifecyclePolicyFacade.bindUpdater(updaterController)
         updaterConfigured = updaterController.isConfigured
         updaterStatusText = updaterController.statusText
         updaterFeedURLText = updaterController.feedURLDescription
@@ -48,6 +48,7 @@ extension MacAppState {
     }
 
     func cancelTranscriptionFromUI() {
+        sessionEntryController.cancelPendingRestoreStart()
         appendAudit("session.cancel")
         dictationRuntime.cancel()
     }
@@ -62,7 +63,7 @@ extension MacAppState {
     }
 
     func revealAppDataFolder() {
-        let folderURL = Self.appSupportDirectory()
+        let folderURL = AppShellStoragePaths.appSupportDirectory()
         try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         NSWorkspace.shared.activateFileViewerSelecting([folderURL])
         appendAudit("storage.reveal path=\(folderURL.path)")

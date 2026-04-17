@@ -25,10 +25,14 @@
 
         func testSettingsCopyMentionsRebuildRecoveryForAccessibility() throws {
             let settingsView = try readRepositoryFile("apps/macos/AppShell/SettingsView.swift")
+            let generalSections = try readRepositoryFile(
+                "apps/macos/AppShell/SettingsViewGeneralSections.swift"
+            )
 
-            XCTAssertTrue(settingsView.contains("nach einem Rebuild"))
-            XCTAssertTrue(settingsView.contains("entfernen und neu hinzufügen"))
-            XCTAssertTrue(settingsView.contains("Bedienungshilfen"))
+            XCTAssertTrue(settingsView.contains("generalPermissionsContent"))
+            XCTAssertTrue(generalSections.contains("nach einem Rebuild"))
+            XCTAssertTrue(generalSections.contains("entfernen und neu hinzufügen"))
+            XCTAssertTrue(generalSections.contains("Bedienungshilfen"))
         }
 
         private func readRepositoryFile(_ relativePath: String) throws -> String {

@@ -25,16 +25,26 @@ final class DictationRuntimeServicesTests: XCTestCase {
         let service = FinalTranscriptDeliveryService()
         var copiedText: String?
         var waitingStates: [Bool] = []
+        var resolveCalls = 0
+        var waitCalls = 0
+        var insertCalls = 0
 
         let outcome = await service.deliverFinalText(
             "Hallo Welt",
             currentOptions: makeOptions(deliveryMode: .clipboardOnly),
             activeStreamingTarget: nil,
-            resolveAvailableTextTarget: { nil },
-            waitForAvailableTextTarget: { _ in nil },
+            resolveAvailableTextTarget: {
+                resolveCalls += 1
+                return nil
+            },
+            waitForAvailableTextTarget: { _ in
+                waitCalls += 1
+                return nil
+            },
             setWaitingForInsertionTarget: { waitingStates.append($0) },
             copyTranscriptToClipboard: { copiedText = $0 },
             insertFinalText: { _, _, _, _ in
+                insertCalls += 1
                 XCTFail("insertFinalText should not be called for clipboard-only delivery")
                 return FinalInsertionMetrics(path: "unused", clipboardRestored: false, autoSent: false)
             },
@@ -46,6 +56,9 @@ final class DictationRuntimeServicesTests: XCTestCase {
         XCTAssertEqual(outcome, .copiedToClipboard)
         XCTAssertEqual(copiedText, "Hallo Welt")
         XCTAssertEqual(waitingStates, [false])
+        XCTAssertEqual(resolveCalls, 0)
+        XCTAssertEqual(waitCalls, 0)
+        XCTAssertEqual(insertCalls, 0)
     }
 
     private func makeOptions(deliveryMode: FinalResultDeliveryMode) -> DictationStartOptions {

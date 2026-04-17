@@ -230,7 +230,7 @@ struct SettingsView: View {
             searchResultsForm: AnyView(searchResultsForm),
             accessibilityReduceMotion: accessibilityReduceMotion,
             onRefreshPermissionStates: {
-                appState.refreshPermissionStates()
+                appState.refreshPermissionStatesWithStabilization()
             }
         )
     }

@@ -71,6 +71,34 @@ final class AIProviderControllerTests: XCTestCase {
         XCTAssertEqual(secretStore.removeCalls, [first.id])
     }
 
+    func testSelectedAIModelRefreshFallsBackWhenSelectionNoLongerExists() {
+        let state = AIProviderControllerState()
+        let controller = makeController(state: state)
+
+        state.selectedAIModelID = "missing-model"
+
+        controller.selectedAIModelDidChange()
+
+        XCTAssertFalse(state.aiModels.isEmpty)
+        XCTAssertNotEqual(state.selectedAIModelID, "missing-model")
+        XCTAssertTrue(state.aiModels.contains(where: { $0.id == state.selectedAIModelID }))
+    }
+
+    func testSelectedAIModelRefreshKeepsExistingSelectionWhenItIsStillAvailable() {
+        let state = AIProviderControllerState()
+        let controller = makeController(state: state)
+
+        controller.selectedAIModelDidChange()
+
+        let initialSelection = state.selectedAIModelID
+        XCTAssertNotNil(initialSelection)
+
+        controller.selectedAIModelDidChange()
+
+        XCTAssertEqual(state.selectedAIModelID, initialSelection)
+        XCTAssertTrue(state.aiModels.contains(where: { $0.id == state.selectedAIModelID }))
+    }
+
     private func makeController(
         state: AIProviderControllerState,
         secretStore: AppShellTestSecretStore = AppShellTestSecretStore(),

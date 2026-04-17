@@ -71,15 +71,19 @@ Anschließend `apps/macos/AppShell/Resources/Runtime` ins Xcode-Target einbinden
 
 ## macOS: lokal starten
 
-1. Runtime wie oben vorbereiten, dann:
+1. Am schnellsten direkt per Script starten:
+   ```bash
+   ./scripts/smoke_test_macos_app.sh
+   ```
+2. Runtime wie oben vorbereiten, dann:
    ```bash
    ./scripts/generate_macos_xcodeproj.sh
    ```
-2. Projekt öffnen: `apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj`
-3. Target **WisprLocalMac** starten
-4. **Berechtigungen:** Mikrofon, Bedienungshilfen (für direktes Einfügen)
-5. **Diktat:** Menüleisten-Button oder globaler Hotkey (Standard **⌥ Space**)
-6. **Agent-App:** `LSUIElement` — standardmäßig keine Dock-Ikone (optional in den Settings aktivierbar)
+3. Projekt öffnen: `apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj`
+4. Target **WisprLocalMac** starten
+5. **Berechtigungen:** Mikrofon, Bedienungshilfen (für direktes Einfügen)
+6. **Diktat:** Menüleisten-Button oder globaler Hotkey (Standard **⌥ Space**)
+7. **Agent-App:** `LSUIElement` — standardmäßig keine Dock-Ikone (optional in den Settings aktivierbar)
 
 ### macOS — implementierte Funktionen (Kurzliste)
 

@@ -8,6 +8,10 @@
 
 ## Fixes
 
+- 2026-04-17: Offene Refactor-Findings für AppState-/Runtime-Entkopplung vollständig geschlossen und gegen Regressionen abgesichert.
+  - Dateien: `apps/macos/AppShell/SessionEntryController.swift`, `apps/macos/AppShell/DictationRuntimeEventBridge.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppStateFacadeActions.swift`, `apps/macos/AppShell/MacAppStatePersistenceFacade.swift`, `Tests/AppShellSupportTests/SessionEntryControllerTests.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
+  - Funktionalität: Der Startpfad nach App-Restore wurde gegen stale async Tasks abgesichert (inkl. explizitem Cancel), Fokus-Wartefehler brechen den Start jetzt deterministisch mit Diagnose/Audit ab, und die Runtime-Event-Bridge vermeidet doppelte Main-Thread-Scheduling-Ketten. Zusätzlich ist die Persistence-Fassade weiter entkoppelt (Datei-Dialog als Presenter, kein Cross-Facade-Normalizer), die Facade-Ownership in `MacAppState` wurde bereinigt und neue Regressionstests decken Abort-/Cancel-Verhalten gezielt ab.
+
 - 2026-04-14: Große Restore-Migration auf funktionsreichen Settings-/Runtime-Stand technisch konsolidiert und Build-Blocker auf aktuelle Core-APIs aufgelöst.
   - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `apps/macos/AppShell/PermissionController.swift`, `Sources/TextTargetMac/TextTargetTypes.swift`, `Sources/ASRCore/ASRTypes.swift`, `Sources/ASRCore/WhisperCppEngine.swift`, `Sources/TextTargetMac/AXTextTargetServices.swift`, `apps/macos/AppShell/*` (Settings-/Controller-Restore), `Sources/AIProcessingCore/*`, `Sources/ASRCore/VoiceModelCatalog.swift`, `Sources/ASRCore/VoiceModelInstaller.swift`, `Sources/AudioCore/AudioPreprocessor.swift`, `Tests/AIProcessingCoreTests/*`, `Tests/AppShellSupportTests/*`, `Tests/AudioCoreTests/AudioPreprocessorTests.swift`, `apps/macos/WisprLocalMac/project.yml`
   - Funktionalität: Nach der Rückführung auf den reicheren Stand (Basis: `5bc2504`) wurden API-Differenzen zur neueren Core-Schicht gezielt aufgelöst (u. a. `ASRConfig`-Signatur, Entfernung veralteter `onDebugEvent`-Hooks, AX-Permission/Focused-Target-Pfad auf aktuelle `AXTextTargetResolver`-Logik, Sichtbarkeit von `TextTargetSnapshot.element`). Dadurch sind die zuvor aufgetretenen Compilerfehler im AppShell-Pfad behoben und der lokale macOS-Build inkl. Smoke-Test wieder erfolgreich.
@@ -452,6 +456,10 @@
   - Inhalt: Klarstellung, dass Endnutzer keine lokale `brew`/`cmake`-Installation brauchen; Entwicklerflow für Runtime-Bundling dokumentiert.
 
 ## Chore
+
+- 2026-04-15: Hotkey-Registrierungslogik aus `MacAppState` in eine eigene Facade ausgelagert.
+  - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppStateHotkeyFacade.swift`
+  - Inhalt: Die bisher inline gepflegte globale Shortcut-Registrierung wurde in eine fokussierte Facade mit lokalem State-Snapshot verschoben; `MacAppState` bleibt funktionsgleich, ist aber kleiner und leichter zu warten.
 
 - 2026-03-20: Lokale Xcode-Verifikationsartefakte aus dem Repo-Tracking ausgeschlossen.
   - Dateien: `.gitignore`

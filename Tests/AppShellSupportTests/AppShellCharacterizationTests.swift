@@ -30,8 +30,10 @@ final class AppShellCharacterizationTests: XCTestCase {
 
         XCTAssertEqual(state.accessibilityPermissionStatus, .granted)
 
-        try await Task.sleep(nanoseconds: 500_000_000)
-        XCTAssertEqual(state.accessibilityPermissionStatus, .denied)
+        let debouncedUpdateApplied = await eventually {
+            state.accessibilityPermissionStatus == .denied
+        }
+        XCTAssertTrue(debouncedUpdateApplied)
     }
 
     func testRequestAccessibilityAccessFromSettingsPromptsRuntimeWhenDenied() async throws {
@@ -44,8 +46,10 @@ final class AppShellCharacterizationTests: XCTestCase {
 
         state.requestAccessibilityAccessFromSettings()
 
-        try await Task.sleep(nanoseconds: 100_000_000)
-        XCTAssertEqual(runtime.promptAccessibilityTrustCallCount, 1)
+        let prompted = await eventually {
+            runtime.promptAccessibilityTrustCallCount == 1
+        }
+        XCTAssertTrue(prompted)
     }
 
     func testToggleTranscriptionUsesFinalizeModeWhenClipboardOnlyIsSelected() {
@@ -81,7 +85,7 @@ final class AppShellCharacterizationTests: XCTestCase {
         XCTAssertEqual(runtime.toggleCalls.first?.mode, .streaming)
     }
 
-    func testHoldToDictateUsesToggleAndReleasesTheSession() {
+    func testHoldToDictateUsesToggleAndReleasesTheSession() async {
         let permissions = StubPermissionController(
             microphone: .granted,
             accessibility: .denied
@@ -96,8 +100,16 @@ final class AppShellCharacterizationTests: XCTestCase {
         XCTAssertEqual(runtime.toggleCalls.first?.mode, .streaming)
 
         runtime.emitSessionActivityChanged(true)
+        let becameActive = await eventually {
+            state.isSessionActive
+        }
+        XCTAssertTrue(becameActive)
         state.handleHoldShortcutReleased()
 
+        let released = await eventually {
+            runtime.toggleCalls.count == 2
+        }
+        XCTAssertTrue(released)
         XCTAssertEqual(runtime.toggleCalls.count, 2)
     }
 
@@ -127,7 +139,7 @@ final class AppShellCharacterizationTests: XCTestCase {
         XCTAssertEqual(historyStore.savedSnapshots.last, [freshEntry])
     }
 
-    func testFinalTranscriptEventIsPersistedIntoHistory() {
+    func testFinalTranscriptEventIsPersistedIntoHistory() async {
         let historyStore = MemoryHistoryStore(loadResult: [])
         let runtime = StubDictationRuntime()
         let state = makeState(runtime: runtime, historyStore: historyStore)
@@ -141,9 +153,51 @@ final class AppShellCharacterizationTests: XCTestCase {
             )
         )
 
+        let persisted = await eventually {
+            state.transcriptHistory.first?.text == "Hallo Welt"
+        }
+        XCTAssertTrue(persisted)
         XCTAssertEqual(state.transcriptHistory.first?.text, "Hallo Welt")
         XCTAssertEqual(state.transcriptHistory.first?.mode, "streaming")
         XCTAssertEqual(historyStore.savedSnapshots.last?.first?.text, "Hallo Welt")
+    }
+
+    func testMacAppStateConnectsRuntimeThroughInjectedBridge() {
+        let permissions = StubPermissionController(
+            microphone: .granted,
+            accessibility: .granted
+        )
+        let historyStore = MemoryHistoryStore(loadResult: [])
+        let runtime = StubDictationRuntime()
+        let bridge = SpyDictationRuntimeEventBridge()
+        let state = makeState(
+            permissionController: permissions,
+            runtime: runtime,
+            historyStore: historyStore,
+            runtimeEventBridge: bridge
+        )
+
+        XCTAssertTrue(bridge.connectedRuntime === runtime)
+
+        bridge.handlers?.handleStatus("Recording")
+        XCTAssertEqual(state.recordingStatus, "Recording")
+
+        bridge.handlers?.handleTranscript("Zwischenstand")
+        XCTAssertEqual(state.lastTranscript, "Zwischenstand")
+
+        bridge.handlers?.handleFinalTranscript(
+            FinalTranscriptEvent(
+                text: "Bridge Ergebnis",
+                languageCode: "de",
+                mode: .finalize,
+                deliveryOutcome: .inserted
+            )
+        )
+        XCTAssertEqual(state.transcriptHistory.first?.text, "Bridge Ergebnis")
+
+        permissions.microphoneStatusValue = .denied
+        bridge.handlers?.handlePermissionInteractionFinished()
+        XCTAssertEqual(state.microphonePermissionStatus, .denied)
     }
 
     func testHistorySettingsWindowHelpersRouteTabs() {
@@ -209,6 +263,50 @@ final class AppShellCharacterizationTests: XCTestCase {
         XCTAssertNil(state.selectedRemoteProviderID)
     }
 
+    func testApproveDictionaryCandidatePromotesItIntoTheDictionary() {
+        let state = makeState()
+
+        state.queueDictionaryCandidate(
+            "Leon Stadler",
+            category: .personName,
+            languageCode: "de"
+        )
+
+        guard let candidate = state.dictionaryReviewQueue.first else {
+            XCTFail("Expected queued dictionary candidate")
+            return
+        }
+
+        state.approveDictionaryCandidate(candidate.id)
+
+        XCTAssertEqual(state.dictionaryTerms.count, 1)
+        XCTAssertEqual(state.dictionaryTerms.first?.term, "Leon Stadler")
+        XCTAssertEqual(state.dictionaryTerms.first?.category, .personName)
+        XCTAssertEqual(state.dictionaryTerms.first?.source, .auto)
+        XCTAssertEqual(state.dictionaryTerms.first?.languageCode, "de")
+        XCTAssertTrue(state.dictionaryReviewQueue.isEmpty)
+    }
+
+    func testRejectDictionaryCandidateRemovesOnlyTheMatchingQueueEntry() {
+        let state = makeState()
+
+        state.queueDictionaryCandidate("Leon Stadler", category: .personName, languageCode: "de")
+        state.queueDictionaryCandidate("WisprLocal", category: .companyJargon)
+
+        guard let rejectedCandidate = state.dictionaryReviewQueue.first(where: {
+            $0.proposedTerm == "WisprLocal"
+        }) else {
+            XCTFail("Expected queued dictionary candidate")
+            return
+        }
+
+        state.rejectDictionaryCandidate(rejectedCandidate.id)
+
+        XCTAssertEqual(state.dictionaryReviewQueue.count, 1)
+        XCTAssertEqual(state.dictionaryReviewQueue.first?.proposedTerm, "Leon Stadler")
+        XCTAssertTrue(state.dictionaryTerms.isEmpty)
+    }
+
     func testAddRemoteProviderReusesExistingPreset() {
         let existing = AIRemoteProviderConfiguration.template(for: .ollama)
         let state = makeState()
@@ -220,24 +318,104 @@ final class AppShellCharacterizationTests: XCTestCase {
         XCTAssertEqual(state.selectedRemoteProviderID, existing.id)
     }
 
+    func testMacAppStateWiresHotkeyCallbacksToFacadeActions() async {
+        let permissions = StubPermissionController(
+            microphone: .granted,
+            accessibility: .granted
+        )
+        let runtime = StubDictationRuntime()
+        let hotkeyManager = StubGlobalHotkeyManager()
+        let state = makeState(
+            permissionController: permissions,
+            runtime: runtime,
+            hotkeyManager: hotkeyManager
+        )
+
+        XCTAssertNotNil(hotkeyManager.onToggle)
+        XCTAssertNotNil(hotkeyManager.onHoldPress)
+        XCTAssertNotNil(hotkeyManager.onHoldRelease)
+        XCTAssertNotNil(hotkeyManager.onCancel)
+        XCTAssertNotNil(hotkeyManager.onModeSwitch)
+
+        let togglesBeforeToggleShortcut = runtime.toggleCalls.count
+        hotkeyManager.onToggle?()
+        XCTAssertEqual(runtime.toggleCalls.count, togglesBeforeToggleShortcut + 1)
+
+        state.holdToDictateEnabled = true
+        let togglesBeforeHoldPress = runtime.toggleCalls.count
+        hotkeyManager.onHoldPress?()
+        XCTAssertEqual(runtime.toggleCalls.count, togglesBeforeHoldPress + 1)
+        runtime.emitSessionActivityChanged(true)
+        let becameActive = await eventually {
+            state.isSessionActive
+        }
+        XCTAssertTrue(becameActive)
+        let togglesBeforeHoldRelease = runtime.toggleCalls.count
+        hotkeyManager.onHoldRelease?()
+        let released = await eventually {
+            runtime.toggleCalls.count == togglesBeforeHoldRelease + 1
+        }
+        XCTAssertTrue(released)
+        XCTAssertEqual(runtime.toggleCalls.count, togglesBeforeHoldRelease + 1)
+
+        let cancelsBefore = runtime.cancelCallCount
+        hotkeyManager.onCancel?()
+        XCTAssertEqual(runtime.cancelCallCount, cancelsBefore + 1)
+
+        let previousStreaming = state.streamingEnabled
+        hotkeyManager.onModeSwitch?()
+        XCTAssertEqual(state.streamingEnabled, !previousStreaming)
+    }
+
     private func makeState(
         permissionController: StubPermissionController = StubPermissionController(),
         runtime: StubDictationRuntime = StubDictationRuntime(),
+        hotkeyManager: GlobalHotkeyRegistering = StubGlobalHotkeyManager(),
         historyStore: MemoryHistoryStore = MemoryHistoryStore(loadResult: []),
-        secretStore: StubSecretStore = StubSecretStore()
+        secretStore: StubSecretStore = StubSecretStore(),
+        runtimeEventBridge: DictationRuntimeEventBridging = DictationRuntimeEventBridge()
     ) -> MacAppState {
         let defaultsName = "AppShellSupportTests.\(UUID().uuidString)"
         let userDefaults = UserDefaults(suiteName: defaultsName)!
         userDefaults.removePersistentDomain(forName: defaultsName)
+        let fileManager = FileManager.default
+        let storageRootDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("AppShellSupportTests", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? fileManager.createDirectory(
+            at: storageRootDirectory,
+            withIntermediateDirectories: true
+        )
+        addTeardownBlock {
+            try? fileManager.removeItem(at: storageRootDirectory)
+        }
 
         return MacAppState(
             userDefaults: userDefaults,
             permissionController: permissionController,
             dictationRuntime: runtime,
+            runtimeEventBridge: runtimeEventBridge,
+            hotkeyManager: hotkeyManager,
             historyStore: historyStore,
             aiRemoteProviderSecretStore: secretStore,
+            storageRootDirectory: storageRootDirectory,
             skipStartupSystemHooks: true
         )
+    }
+
+    private func eventually(
+        timeoutNanoseconds: UInt64 = 1_000_000_000,
+        pollNanoseconds: UInt64 = 25_000_000,
+        condition: () -> Bool
+    ) async -> Bool {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            if condition() {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: pollNanoseconds)
+        }
+        return condition()
     }
 }
 
@@ -362,6 +540,42 @@ private final class MemoryHistoryStore: TranscriptHistoryStoring {
     func exportText(entries: [TranscriptHistoryEntry], to destinationURL: URL) throws {
         let output = entries.reversed().map { $0.text }.joined(separator: "\n")
         try output.write(to: destinationURL, atomically: true, encoding: .utf8)
+    }
+}
+
+private final class SpyDictationRuntimeEventBridge: DictationRuntimeEventBridging {
+    private(set) weak var connectedRuntime: DictationRuntimeControlling?
+    private(set) var handlers: DictationRuntimeEventHandlers?
+
+    func connect(
+        runtime: DictationRuntimeControlling,
+        handlers: DictationRuntimeEventHandlers
+    ) {
+        connectedRuntime = runtime
+        self.handlers = handlers
+    }
+}
+
+private final class StubGlobalHotkeyManager: GlobalHotkeyRegistering {
+    var onToggle: (() -> Void)?
+    var onHoldPress: (() -> Void)?
+    var onHoldRelease: (() -> Void)?
+    var onCancel: (() -> Void)?
+    var onModeSwitch: (() -> Void)?
+
+    @discardableResult
+    func register(
+        shortcut: HotkeyBinding,
+        shortcutEnabled: Bool,
+        holdShortcut: HotkeyBinding?,
+        holdEnabled: Bool,
+        cancelShortcut: HotkeyBinding?,
+        cancelEnabled: Bool,
+        modeShortcut: HotkeyBinding?,
+        modeEnabled: Bool,
+        force: Bool
+    ) -> Bool {
+        true
     }
 }
 #endif

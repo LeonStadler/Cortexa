@@ -97,7 +97,7 @@ final class TranscriptHistoryControllerTests: XCTestCase {
         XCTAssertEqual(audits.last, "transcript.final language=de mode=streaming chars=10")
     }
 
-    func testCopyHistoryEntryAndCopyAllHistoryToClipboard() {
+    func testCopyHistoryEntryAndCopyAllHistoryToClipboard() throws {
         let olderEntry = TranscriptHistoryEntry(
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
             text: "old",
@@ -111,23 +111,36 @@ final class TranscriptHistoryControllerTests: XCTestCase {
             mode: "streaming"
         )
         var currentHistory = [olderEntry, newerEntry]
+        var diagnostics: [String] = []
+        let pasteboard = StubHistoryClipboard()
         let controller = makeController(
+            clipboard: pasteboard,
             currentTranscriptHistory: { currentHistory },
-            setTranscriptHistory: { currentHistory = $0 }
+            setTranscriptHistory: { currentHistory = $0 },
+            appendDiagnostic: { diagnostics.append($0) }
         )
 
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-
         controller.copyHistoryEntry(newerEntry)
-        XCTAssertEqual(pasteboard.string(forType: .string), "new")
+        XCTAssertEqual(pasteboard.lastString, "new")
+
+        let historyFormatter = DateFormatter()
+        historyFormatter.dateStyle = .short
+        historyFormatter.timeStyle = .medium
+        historyFormatter.locale = .current
+        historyFormatter.timeZone = .current
+        let expectedHistory = [
+            "[\(historyFormatter.string(from: newerEntry.createdAt))] [\(newerEntry.mode)] [\(newerEntry.languageCode)] \(newerEntry.text)",
+            "[\(historyFormatter.string(from: olderEntry.createdAt))] [\(olderEntry.mode)] [\(olderEntry.languageCode)] \(olderEntry.text)",
+        ].joined(separator: "\n")
 
         controller.copyAllHistoryToClipboard()
-        let output = pasteboard.string(forType: .string) ?? ""
-        let lines = output.split(separator: "\n")
-        XCTAssertEqual(lines.count, 2)
-        XCTAssertTrue(lines[0].contains("new"))
-        XCTAssertTrue(lines[1].contains("old"))
+        XCTAssertEqual(pasteboard.lastString, expectedHistory)
+
+        XCTAssertEqual(currentHistory, [olderEntry, newerEntry])
+        XCTAssertTrue(
+            diagnostics.contains("History-Eintrag kopiert: \(newerEntry.id.uuidString.prefix(8))")
+        )
+        XCTAssertTrue(diagnostics.contains("Gesamte History in Zwischenablage kopiert"))
     }
 
     func testRemoveHistoryEntryAndClearHistoryPersistSnapshots() {
@@ -166,6 +179,7 @@ final class TranscriptHistoryControllerTests: XCTestCase {
 
     private func makeController(
         historyStore: TranscriptHistoryStoring = AppShellTestHistoryStore(loadResult: []),
+        clipboard: HistoryClipboardWriting = StubHistoryClipboard(),
         currentTranscriptHistory: @escaping () -> [TranscriptHistoryEntry],
         setTranscriptHistory: @escaping ([TranscriptHistoryEntry]) -> Void,
         currentHistoryRetentionPolicy: @escaping () -> HistoryRetentionPolicy = { .forever },
@@ -174,6 +188,7 @@ final class TranscriptHistoryControllerTests: XCTestCase {
     ) -> TranscriptHistoryController {
         TranscriptHistoryController(
             historyStore: historyStore,
+            clipboard: clipboard,
             currentTranscriptHistory: currentTranscriptHistory,
             setTranscriptHistory: setTranscriptHistory,
             currentHistoryRetentionPolicy: currentHistoryRetentionPolicy,
@@ -181,5 +196,25 @@ final class TranscriptHistoryControllerTests: XCTestCase {
             appendAudit: appendAudit
         )
     }
+
 }
+
+private final class StubHistoryClipboard: HistoryClipboardWriting {
+    private(set) var clearContentsCallCount = 0
+    private(set) var lastString: String?
+
+    @discardableResult
+    func clearContents() -> Int {
+        clearContentsCallCount += 1
+        lastString = nil
+        return 1
+    }
+
+    @discardableResult
+    func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool {
+        lastString = string
+        return true
+    }
+}
+
 #endif

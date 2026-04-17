@@ -17,6 +17,8 @@ final class MacAppPreferencesStoreTests: XCTestCase {
             forKey: "wispr.settings.finalResultDeliveryMode"
         )
         userDefaults.set(true, forKey: "wispr.settings.aiProcessingEnabled")
+        userDefaults.set(false, forKey: "wispr.settings.launchOnLoginEnabled")
+        userDefaults.set(false, forKey: "wispr.settings.automaticallyCheckForUpdates")
         userDefaults.set("test-model", forKey: "wispr.settings.selectedAIModelID")
         userDefaults.set(85.0, forKey: "wispr.settings.soundEffectsVolume")
         userDefaults.set(
@@ -27,13 +29,15 @@ final class MacAppPreferencesStoreTests: XCTestCase {
         )
 
         let snapshot = MacAppPreferencesStore(userDefaults: userDefaults).loadInitialState(
-            currentLaunchOnLoginEnabled: false
+            currentLaunchOnLoginEnabled: true
         )
 
         XCTAssertFalse(snapshot.streamingEnabled)
         XCTAssertEqual(snapshot.selectedLanguage, .english)
         XCTAssertEqual(snapshot.finalResultDeliveryMode, .clipboardOnly)
         XCTAssertTrue(snapshot.aiProcessingEnabled)
+        XCTAssertFalse(snapshot.launchOnLoginEnabled)
+        XCTAssertFalse(snapshot.automaticallyCheckForUpdates)
         XCTAssertEqual(snapshot.selectedAIModelID, "test-model")
         XCTAssertEqual(snapshot.soundEffectsVolume, 85)
         XCTAssertEqual(snapshot.remoteProviders.count, 1)
@@ -50,6 +54,7 @@ final class MacAppPreferencesStoreTests: XCTestCase {
         )
 
         XCTAssertTrue(snapshot.launchOnLoginEnabled)
+        XCTAssertTrue(snapshot.automaticallyCheckForUpdates)
         XCTAssertEqual(snapshot.selectedLanguage, .german)
         XCTAssertEqual(snapshot.translationOutputMode, .original)
     }

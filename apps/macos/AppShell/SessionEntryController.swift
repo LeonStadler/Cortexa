@@ -16,7 +16,11 @@ final class SessionEntryController {
     private let currentDictationCapability: () -> DictationCapability
     private let isSessionActive: () -> Bool
     private let holdToDictateEnabled: () -> Bool
+    private let shouldRestorePreviousApplicationBeforeStarting: () -> Bool
+    private let waitForMenuBarToCloseOperation: () async -> Bool
+    private let waitForFrontmostApplicationOperation: (String, UInt64) async -> Bool
     private var holdSessionActive = false
+    private var pendingRestoreStartTask: Task<Void, Never>?
 
     init(
         dictationRuntime: DictationRuntimeControlling,
@@ -31,7 +35,12 @@ final class SessionEntryController {
         currentPerformanceProfileRawValue: @escaping () -> String,
         currentDictationCapability: @escaping () -> DictationCapability,
         isSessionActive: @escaping () -> Bool,
-        holdToDictateEnabled: @escaping () -> Bool
+        holdToDictateEnabled: @escaping () -> Bool,
+        shouldRestorePreviousApplicationBeforeStarting: (() -> Bool)? = nil,
+        waitForMenuBarToCloseOperation: @escaping () async -> Bool =
+            SessionEntryController.defaultWaitForMenuBarToClose,
+        waitForFrontmostApplicationOperation: @escaping (String, UInt64) async -> Bool =
+            SessionEntryController.defaultWaitForFrontmostApplication
     ) {
         self.dictationRuntime = dictationRuntime
         self.currentStartOptions = currentStartOptions
@@ -46,10 +55,26 @@ final class SessionEntryController {
         self.currentDictationCapability = currentDictationCapability
         self.isSessionActive = isSessionActive
         self.holdToDictateEnabled = holdToDictateEnabled
+        self.shouldRestorePreviousApplicationBeforeStarting =
+            shouldRestorePreviousApplicationBeforeStarting
+            ?? {
+                SessionEntryController.defaultShouldRestorePreviousApplicationBeforeStarting(
+                    ownBundleIdentifier: Bundle.main.bundleIdentifier,
+                    frontmostBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                        .bundleIdentifier
+                )
+            }
+        self.waitForMenuBarToCloseOperation = waitForMenuBarToCloseOperation
+        self.waitForFrontmostApplicationOperation = waitForFrontmostApplicationOperation
     }
 
     func resetHoldSessionActive() {
         holdSessionActive = false
+    }
+
+    func cancelPendingRestoreStart() {
+        pendingRestoreStartTask?.cancel()
+        pendingRestoreStartTask = nil
     }
 
     func handleHoldShortcutPressed() {
@@ -58,6 +83,7 @@ final class SessionEntryController {
         guard !holdSessionActive else { return }
         guard !isSessionActive() else { return }
 
+        cancelPendingRestoreStart()
         holdSessionActive = true
         startTranscriptionForShortcut()
     }
@@ -71,6 +97,7 @@ final class SessionEntryController {
     }
 
     func toggleTranscriptionFromUI() {
+        cancelPendingRestoreStart()
         if isSessionActive() {
             appendAudit("session.toggle stop")
             holdSessionActive = false
@@ -82,6 +109,7 @@ final class SessionEntryController {
     }
 
     func toggleTranscriptionFromMenuBar() {
+        cancelPendingRestoreStart()
         if isSessionActive() {
             toggleTranscriptionFromUI()
             return
@@ -116,6 +144,7 @@ final class SessionEntryController {
     }
 
     func startTranscriptionForShortcut() {
+        cancelPendingRestoreStart()
         refreshPermissionStates()
 
         let options = currentStartOptions()
@@ -143,8 +172,9 @@ final class SessionEntryController {
         source: String,
         preferredApplication: NSRunningApplication? = nil
     ) {
-        Task { @MainActor [weak self] in
+        pendingRestoreStartTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.pendingRestoreStartTask = nil }
 
             let targetApplication = preferredApplication ?? self.lastExternalApplication()
             AgentSessionDebugLog.append(
@@ -162,7 +192,8 @@ final class SessionEntryController {
                 self.appendDiagnostic(
                     "Aktiviere die letzte App erneut, damit das Ziel-Textfeld fokussiert bleibt.")
                 targetApplication.activate(options: [.activateAllWindows])
-                let waitOk = await self.waitForFrontmostApplication(bundleIdentifier: bundleIdentifier)
+                let waitOk = await self.waitForFrontmostApplicationOperation(
+                    bundleIdentifier, 1_500_000_000)
                 AgentSessionDebugLog.append(
                     hypothesisId: "H2",
                     location: "MacAppState.restorePreviousApplicationAndStart",
@@ -174,8 +205,15 @@ final class SessionEntryController {
                             ?? "nil",
                     ]
                 )
+                guard waitOk else {
+                    self.appendDiagnostic(
+                        "Konnte die Ziel-App nicht zuverlässig fokussieren. Bitte erneut starten."
+                    )
+                    self.appendAudit("session.restore_abort source=\(source) reason=focus_timeout")
+                    return
+                }
             } else {
-                _ = await self.waitForMenuBarToClose()
+                _ = await self.waitForMenuBarToCloseOperation()
                 AgentSessionDebugLog.append(
                     hypothesisId: "H1",
                     location: "MacAppState.restorePreviousApplicationAndStart",
@@ -197,18 +235,20 @@ final class SessionEntryController {
                 ]
             )
 
+            guard !Task.isCancelled else { return }
             self.appendAudit("session.restore_start source=\(source)")
             self.dictationRuntime.start(options: options)
         }
     }
 
-    private func waitForMenuBarToClose() async -> Bool {
+    static func defaultWaitForMenuBarToClose() async -> Bool {
         try? await Task.sleep(nanoseconds: 150_000_000)
         return true
     }
 
-    private func waitForFrontmostApplication(
-        bundleIdentifier: String, timeoutNanoseconds: UInt64 = 1_500_000_000
+    static func defaultWaitForFrontmostApplication(
+        bundleIdentifier: String,
+        timeoutNanoseconds: UInt64
     ) async -> Bool {
         let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
 
@@ -223,9 +263,10 @@ final class SessionEntryController {
         return false
     }
 
-    private func shouldRestorePreviousApplicationBeforeStarting() -> Bool {
-        let ownBundleIdentifier = Bundle.main.bundleIdentifier
-        let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    static func defaultShouldRestorePreviousApplicationBeforeStarting(
+        ownBundleIdentifier: String?,
+        frontmostBundleIdentifier: String?
+    ) -> Bool {
         return frontmostBundleIdentifier == ownBundleIdentifier
     }
 
