@@ -19,6 +19,7 @@ internal struct LockedTextTarget {
     let insertionLocation: Int
     let originalSelectedLength: Int
     let fallbackBundleIdentifier: String?
+    let prefersKeyboardInsertion: Bool
     var insertedLength: Int
 }
 
@@ -182,6 +183,7 @@ internal struct FocusedTextTargetService {
                 insertionLocation: range.location,
                 originalSelectedLength: range.length,
                 fallbackBundleIdentifier: target.fallbackBundleIdentifier,
+                prefersKeyboardInsertion: target.prefersKeyboardInsertion,
                 insertedLength: max(range.length, target.insertedLength)
             )
         }
@@ -200,6 +202,9 @@ internal struct FocusedTextTargetService {
         }
         if let focused = try? captureFocusedTextTarget() {
             return focused
+        }
+        if let fallbackFocused = captureFocusedTargetForPasteFallback() {
+            return fallbackFocused
         }
         if let recovered = try? recoverLastKnownTarget() {
             return recovered
@@ -228,8 +233,57 @@ internal struct FocusedTextTargetService {
             insertionLocation: snapshot.insertionRange.location,
             originalSelectedLength: snapshot.insertionRange.length,
             fallbackBundleIdentifier: snapshot.fallbackBundleIdentifier,
+            prefersKeyboardInsertion: false,
             insertedLength: snapshot.insertionRange.length
         )
+    }
+
+    /// Captures the current focused AX element even when it is not value-settable.
+    /// This allows downstream Cmd+V fallback insertion for editors that reject AX value writes
+    /// (e.g. some IDE/Electron text controls).
+    private func captureFocusedTargetForPasteFallback() -> LockedTextTarget? {
+        runOnMainThread {
+            let systemWide = AXUIElementCreateSystemWide()
+            var focused: CFTypeRef?
+            let focusedResult = AXUIElementCopyAttributeValue(
+                systemWide,
+                kAXFocusedUIElementAttribute as CFString,
+                &focused
+            )
+            guard focusedResult == .success, let focused else {
+                return nil
+            }
+
+            let focusedElement = unsafeBitCast(focused, to: AXUIElement.self)
+
+            var valueRef: CFTypeRef?
+            let readValueResult = AXUIElementCopyAttributeValue(
+                focusedElement,
+                kAXValueAttribute as CFString,
+                &valueRef
+            )
+            let currentValueLength: Int
+            if readValueResult == .success {
+                currentValueLength = ((valueRef as? String) ?? "").count
+            } else {
+                currentValueLength = 0
+            }
+
+            let selectedRange = readSelectedRange(
+                for: focusedElement,
+                currentValueLength: currentValueLength
+            )
+
+            return LockedTextTarget(
+                element: focusedElement,
+                insertionLocation: selectedRange.location,
+                originalSelectedLength: selectedRange.length,
+                fallbackBundleIdentifier: NSWorkspace.shared.frontmostApplication?
+                    .bundleIdentifier,
+                prefersKeyboardInsertion: true,
+                insertedLength: max(0, selectedRange.length)
+            )
+        }
     }
 
     private func readSelectedRange(for element: AXUIElement, currentValueLength: Int) -> CFRange {
@@ -277,8 +331,16 @@ internal struct StreamingTextInsertionService {
                 lockedTarget.element, kAXValueAttribute as CFString, &valueRef)
             if readResult != .success {
                 if allowFallbackPaste {
+                    let replacementRange = CFRange(
+                        location: max(0, lockedTarget.insertionLocation),
+                        length: max(0, lockedTarget.insertedLength)
+                    )
                     let clipboardRestored = try pasteIntoFallbackTarget(
-                        lockedTarget, text: text, restoreClipboard: restoreClipboardAfterPaste)
+                        lockedTarget,
+                        text: text,
+                        replacementRange: replacementRange,
+                        restoreClipboard: restoreClipboardAfterPaste
+                    )
                     var updated = lockedTarget
                     updated.insertedLength = text.count
                     onTargetUpdated(updated)
@@ -308,8 +370,16 @@ internal struct StreamingTextInsertionService {
                 lockedTarget.element, kAXValueAttribute as CFString, updatedValue as CFTypeRef)
             if setResult != .success {
                 if allowFallbackPaste {
+                    let replacementRange = CFRange(
+                        location: replacementStart,
+                        length: max(0, replacementEnd - replacementStart)
+                    )
                     let clipboardRestored = try pasteIntoFallbackTarget(
-                        lockedTarget, text: text, restoreClipboard: restoreClipboardAfterPaste)
+                        lockedTarget,
+                        text: String(text.dropFirst(preservedLength)),
+                        replacementRange: replacementRange,
+                        restoreClipboard: restoreClipboardAfterPaste
+                    )
                     var updated = lockedTarget
                     updated.insertedLength = text.count
                     onTargetUpdated(updated)
@@ -335,12 +405,30 @@ internal struct StreamingTextInsertionService {
     func pasteIntoFallbackTarget(
         _ target: LockedTextTarget, text: String, restoreClipboard: Bool
     ) throws -> Bool {
+        try pasteIntoFallbackTarget(
+            target,
+            text: text,
+            replacementRange: nil,
+            restoreClipboard: restoreClipboard
+        )
+    }
+
+    private func pasteIntoFallbackTarget(
+        _ target: LockedTextTarget,
+        text: String,
+        replacementRange: CFRange?,
+        restoreClipboard: Bool
+    ) throws -> Bool {
         if let expectedBundleIdentifier = target.fallbackBundleIdentifier {
             let frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?
                 .bundleIdentifier
             guard frontmostBundleIdentifier == expectedBundleIdentifier else {
                 throw DictationRuntimeError.unsafePasteFallback
             }
+        }
+
+        if let replacementRange {
+            setSelectedRange(replacementRange, for: target.element)
         }
 
         let pasteboard = NSPasteboard.general
@@ -369,6 +457,18 @@ internal struct StreamingTextInsertionService {
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
         return restoreClipboard
+    }
+
+    private func setSelectedRange(_ range: CFRange, for element: AXUIElement) {
+        var selectedRange = CFRange(location: max(0, range.location), length: max(0, range.length))
+        guard let axRange = AXValueCreate(.cfRange, &selectedRange) else {
+            return
+        }
+        _ = AXUIElementSetAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            axRange
+        )
     }
 
     func insertFinalText(
@@ -565,6 +665,14 @@ internal struct FinalTranscriptDeliveryService {
                 setWaitingForInsertionTarget(false)
                 return .inserted
             } catch {
+                if currentOptions.clipboardFallbackWhenNoTarget {
+                    copyTranscriptToClipboard(finalText)
+                    publishDiagnostic(
+                        "Direktes Einfügen fehlgeschlagen. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert."
+                    )
+                    setWaitingForInsertionTarget(false)
+                    return .copiedToClipboard
+                }
                 return .failed(error.localizedDescription)
             }
         }
@@ -585,6 +693,13 @@ internal struct FinalTranscriptDeliveryService {
                 return .inserted
             } catch {
                 setWaitingForInsertionTarget(false)
+                if currentOptions.clipboardFallbackWhenNoTarget {
+                    copyTranscriptToClipboard(finalText)
+                    publishDiagnostic(
+                        "Einfügen ins Ziel ist fehlgeschlagen. Das finale Transkript wurde in die Zwischenablage kopiert und in der History gespeichert."
+                    )
+                    return .copiedToClipboard
+                }
                 return .failed(error.localizedDescription)
             }
         }

@@ -36,7 +36,7 @@ final class DocsContractTests: XCTestCase {
     func testVersionFileMatchesCurrentRepositoryVersion() throws {
         let version = try readRepositoryFile("VERSION").trimmingCharacters(
             in: .whitespacesAndNewlines)
-        XCTAssertEqual(version, "0.24.1")
+        XCTAssertEqual(version, "0.24.3")
     }
 
     private func readRepositoryFile(_ relativePath: String) throws -> String {

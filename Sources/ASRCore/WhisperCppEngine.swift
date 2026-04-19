@@ -18,7 +18,10 @@ public final class WhisperCppEngine: WhisperEngine {
     private var sequence = 0
     private var decodeVersion = 0
 
-    private let maxStreamingWindowSamples = 16_000 * 45
+    // Keep enough context for responsive live partials without letting decode cost grow
+    // unbounded, while preserving a much longer final buffer for stop/finalize accuracy.
+    private let maxPartialDecodeWindowSamples = 16_000 * 45
+    private let maxFinalRecordingSamples = 16_000 * 60 * 10
 
     public init(cliPath: URL? = nil) {
         self.explicitCLIPath = cliPath
@@ -93,8 +96,8 @@ public final class WhisperCppEngine: WhisperEngine {
             let incoming = Array(UnsafeBufferPointer(start: buffer, count: frameCount))
             streamingSamples.append(contentsOf: incoming)
 
-            if streamingSamples.count > maxStreamingWindowSamples {
-                streamingSamples.removeFirst(streamingSamples.count - maxStreamingWindowSamples)
+            if streamingSamples.count > maxFinalRecordingSamples {
+                streamingSamples.removeFirst(streamingSamples.count - maxFinalRecordingSamples)
             }
 
             let partialThreshold = minimumSamplesForPartial(for: config)
@@ -105,6 +108,10 @@ public final class WhisperCppEngine: WhisperEngine {
 
             isDecodingPartial = true
             decodeVersion += 1
+            if streamingSamples.count > maxPartialDecodeWindowSamples {
+                let partialSlice = streamingSamples.suffix(maxPartialDecodeWindowSamples)
+                return (Array(partialSlice), decodeVersion)
+            }
             return (streamingSamples, decodeVersion)
         }
 

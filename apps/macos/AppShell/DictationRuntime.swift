@@ -342,6 +342,9 @@ final class DictationRuntime: @unchecked Sendable {
     private var speechChunkStreak = 0
     private var maxObservedRMS: Float = 0
     private var lastRecoverableInsertDiagnosticAt: Date?
+    private var liveAIProcessingCooldownUntil: Date?
+    private var lastLiveAIFailureDiagnosticAt: Date?
+    private var lastLiveAIFailureMessage: String?
     private var accessibilityPermissionGranted = false
     private var pausedMediaAppIdentifiers: Set<String> = []
     private let pendingInsertionTimeoutNanoseconds: UInt64 = 5_000_000_000
@@ -482,6 +485,7 @@ final class DictationRuntime: @unchecked Sendable {
             }
             return
         }
+        cancelRuntimeUnloadTask()
 
         startTask = Task { [weak self] in
             guard let self else { return }
@@ -519,8 +523,11 @@ final class DictationRuntime: @unchecked Sendable {
                 try configureEngine(for: options, runtimeMode: effectiveMode)
 
                 if accessibilityGranted {
-                    let lockedTarget = try? await captureFocusedTextTargetWithRetry(
+                    var lockedTarget = try? await captureFocusedTextTargetWithRetry(
                         emitWaitingDiagnostics: false)
+                    if lockedTarget == nil {
+                        lockedTarget = resolveAvailableTextTarget()
+                    }
                     withSessionLock {
                         self.target = lockedTarget
                         if let lockedTarget {
@@ -662,6 +669,10 @@ final class DictationRuntime: @unchecked Sendable {
                 "dictation.stop.completed textLength=\(finalText.count) delivery=\(String(describing: deliveryOutcome))"
             )
         } catch {
+            if recoverTranscriptAfterStopFailure(error) {
+                cleanupSession()
+                return
+            }
             abortSession(reason: "Stop failed: \(error.localizedDescription)")
             return
         }
@@ -770,7 +781,7 @@ final class DictationRuntime: @unchecked Sendable {
                     _ = try self.replaceInsertedText(
                         patchText,
                         in: activeTarget,
-                        allowFallbackPaste: false,
+                        allowFallbackPaste: activeTarget.prefersKeyboardInsertion,
                         preservingPrefixLength: preservePrefixLength
                     )
                     activeTarget.insertedLength = patchText.count
@@ -790,7 +801,7 @@ final class DictationRuntime: @unchecked Sendable {
                         _ = try self.replaceInsertedText(
                             patchText,
                             in: reboundTarget,
-                            allowFallbackPaste: false,
+                            allowFallbackPaste: reboundTarget.prefersKeyboardInsertion,
                             preservingPrefixLength: preservePrefixLength
                         )
                         reboundTarget.insertedLength = patchText.count
@@ -1563,6 +1574,12 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func processLiveTextIfNeeded(_ text: String) -> String {
+        if let cooldownUntil = withSessionLock({ liveAIProcessingCooldownUntil }),
+            cooldownUntil > Date()
+        {
+            return text
+        }
+
         let request = AIProcessingRequest(
             text: text,
             stage: .live,
@@ -1583,6 +1600,13 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         semaphore.wait()
+        if case .failedFallback(_, _, let reason) = outcome,
+            isTransientAILiveFailure(reason: reason)
+        {
+            withSessionLock {
+                liveAIProcessingCooldownUntil = Date().addingTimeInterval(8)
+            }
+        }
         emitProcessingDiagnosticIfNeeded(outcome, stage: .live)
         return outcome.text
     }
@@ -1597,6 +1621,21 @@ final class DictationRuntime: @unchecked Sendable {
             }
         case .failedFallback:
             if let message = outcome.diagnosticMessage {
+                if stage == .live {
+                    let shouldEmit = withSessionLock { () -> Bool in
+                        let now = Date()
+                        if let lastAt = lastLiveAIFailureDiagnosticAt,
+                            now.timeIntervalSince(lastAt) < 12,
+                            lastLiveAIFailureMessage == message
+                        {
+                            return false
+                        }
+                        lastLiveAIFailureDiagnosticAt = now
+                        lastLiveAIFailureMessage = message
+                        return true
+                    }
+                    guard shouldEmit else { return }
+                }
                 publishDiagnostic(message)
             }
         default:
@@ -1643,6 +1682,9 @@ final class DictationRuntime: @unchecked Sendable {
             self.latestInsertedPreview = ""
             self.snippetMatcher = nil
             self.waitingForInsertionTarget = false
+            self.liveAIProcessingCooldownUntil = nil
+            self.lastLiveAIFailureDiagnosticAt = nil
+            self.lastLiveAIFailureMessage = nil
             self.pendingStreamingInsertionTask = nil
             self.speechActivityDetected = false
             self.speechChunkStreak = 0
@@ -1663,6 +1705,48 @@ final class DictationRuntime: @unchecked Sendable {
         publishSessionActivity(false)
         scheduleRuntimeUnloadIfNeeded()
         publishDebug("dictation.cleanup.end")
+    }
+
+    private func isTransientAILiveFailure(reason: String) -> Bool {
+        let lowered = reason.lowercased()
+        return lowered.contains("verbindung zum server konnte nicht hergestellt werden")
+            || lowered.contains("connection")
+            || lowered.contains("timed out")
+            || lowered.contains("timeout")
+            || lowered.contains("network")
+    }
+
+    private func recoverTranscriptAfterStopFailure(_ error: Error) -> Bool {
+        let recoverySnapshot = withSessionLock { () -> (mode: DictationMode?, text: String, languageCode: String) in
+            (
+                mode: runningMode,
+                text: latestInsertedPreview.trimmingCharacters(in: .whitespacesAndNewlines),
+                languageCode: currentOptions?.language.rawValue ?? "auto"
+            )
+        }
+
+        guard recoverySnapshot.mode == .streaming, !recoverySnapshot.text.isEmpty else {
+            return false
+        }
+
+        publishTranscript(recoverySnapshot.text)
+        publishFinalTranscript(
+            FinalTranscriptEvent(
+                text: recoverySnapshot.text,
+                languageCode: recoverySnapshot.languageCode,
+                mode: .streaming,
+                deliveryOutcome: .failed(error.localizedDescription)
+            )
+        )
+        publishStatus("Idle")
+        publishDiagnostic(
+            "ASR-Finalisierung fehlgeschlagen. Letzter stabiler Live-Text wurde in der History gesichert."
+        )
+        playSoundFeedback(.stopped, settings: withSessionLock { currentOptions?.soundFeedback })
+        publishDebug(
+            "dictation.stop.recovered_from_error reason=\(error.localizedDescription) chars=\(recoverySnapshot.text.count)"
+        )
+        return true
     }
 
     private func pauseMediaPlaybackBestEffort() {
@@ -1771,13 +1855,17 @@ final class DictationRuntime: @unchecked Sendable {
     private func unloadPreparedRuntimeIfNeeded() {
         let shouldUnload = withSessionLock {
             guard runtimePrepared else { return false }
+            guard !isRunning, !isStarting else { return false }
             runtimePrepared = false
             loadedModelPath = nil
             loadedConfig = nil
             return true
         }
 
-        guard shouldUnload else { return }
+        guard shouldUnload else {
+            scheduleRuntimeUnloadIfNeeded()
+            return
+        }
 
         whisperEngine.resetStreaming()
         publishDiagnostic(

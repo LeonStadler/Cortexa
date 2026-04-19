@@ -8,6 +8,14 @@
 
 ## Fixes
 
+- 2026-04-17: Streaming-/Final-Einfügepfad für schwierige Textfelder stabilisiert und unerwartete Vordergrund-Aktivierung beim Start entschärft.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `apps/macos/AppShell/SessionEntryController.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
+  - Funktionalität: Für Fallback-Textziele (z. B. IDE-/Electron-Felder ohne zuverlässiges AX-Value-Set) nutzt der Streaming-Pfad jetzt gezielt Paste-Replace über den selektierten AX-Bereich statt nur auf AX-Write zu warten; dadurch werden laufende Aktualisierungen robuster in solchen Controls zugestellt. Final-Insert-Fehler fallen zusätzlich auf einen klaren Clipboard-Backup-Pfad zurück, damit kein finales Transkript verloren geht. Außerdem aktiviert der Restore-Startpfad nicht mehr versehentlich die eigene App als Zielanwendung, was Fokus-/Menu-Bar-Störungen reduziert.
+
+- 2026-04-17: Texteingabe-Robustheit für IDE-/Electron-Ziele verbessert, AI-Live-Fehlerwellen gedrosselt und Stop-Recovery gegen Transkriptverlust ergänzt.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
+  - Funktionalität: Bei nicht-AX-kompatiblen Textfeldern (z. B. manche IDE-/Electron-Controls) wird jetzt ein fokussiertes Fallback-Ziel für Cmd+V-basierte Einfügung erkannt, statt nur auf AX-Value-Set zu warten. Live-AI-Verarbeitung pausiert nach transienten Verbindungsfehlern kurzzeitig und begrenzt wiederholte Diagnosemeldungen, damit Diktatläufe nicht durch Fehler-Spam überlastet werden. Zusätzlich wird bei `stop`-Fehlern der letzte stabile Live-Text in History/Final-Event gesichert, damit gesprochener Inhalt nicht mehr vollständig verloren geht.
+
 - 2026-04-17: Offene Refactor-Findings für AppState-/Runtime-Entkopplung vollständig geschlossen und gegen Regressionen abgesichert.
   - Dateien: `apps/macos/AppShell/SessionEntryController.swift`, `apps/macos/AppShell/DictationRuntimeEventBridge.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppStateFacadeActions.swift`, `apps/macos/AppShell/MacAppStatePersistenceFacade.swift`, `Tests/AppShellSupportTests/SessionEntryControllerTests.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
   - Funktionalität: Der Startpfad nach App-Restore wurde gegen stale async Tasks abgesichert (inkl. explizitem Cancel), Fokus-Wartefehler brechen den Start jetzt deterministisch mit Diagnose/Audit ab, und die Runtime-Event-Bridge vermeidet doppelte Main-Thread-Scheduling-Ketten. Zusätzlich ist die Persistence-Fassade weiter entkoppelt (Datei-Dialog als Presenter, kein Cross-Facade-Normalizer), die Facade-Ownership in `MacAppState` wurde bereinigt und neue Regressionstests decken Abort-/Cancel-Verhalten gezielt ab.

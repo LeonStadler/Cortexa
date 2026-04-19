@@ -140,7 +140,12 @@ final class SessionEntryController {
             return
         }
 
-        restorePreviousApplicationAndStart(options: options, source: "menuBar")
+        if shouldRestorePreviousApplicationBeforeStarting() {
+            restorePreviousApplicationAndStart(options: options, source: "menuBar")
+            return
+        }
+
+        dictationRuntime.start(options: options)
     }
 
     func startTranscriptionForShortcut() {
@@ -176,7 +181,17 @@ final class SessionEntryController {
             guard let self else { return }
             defer { self.pendingRestoreStartTask = nil }
 
-            let targetApplication = preferredApplication ?? self.lastExternalApplication()
+            let ownBundleIdentifier = Bundle.main.bundleIdentifier
+            let candidateApplication = preferredApplication ?? self.lastExternalApplication()
+            let targetApplication: NSRunningApplication? = {
+                guard let candidateApplication else { return nil }
+                if let ownBundleIdentifier,
+                    candidateApplication.bundleIdentifier == ownBundleIdentifier
+                {
+                    return nil
+                }
+                return candidateApplication
+            }()
             AgentSessionDebugLog.append(
                 hypothesisId: "H1",
                 location: "MacAppState.restorePreviousApplicationAndStart",
@@ -185,6 +200,7 @@ final class SessionEntryController {
                     "source": source,
                     "preferredBundle": preferredApplication?.bundleIdentifier ?? "nil",
                     "lastExternalBundle": self.lastExternalApplication()?.bundleIdentifier ?? "nil",
+                    "candidateBundle": candidateApplication?.bundleIdentifier ?? "nil",
                     "targetChosenBundle": targetApplication?.bundleIdentifier ?? "nil",
                 ]
             )

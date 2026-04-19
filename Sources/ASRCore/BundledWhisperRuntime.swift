@@ -97,6 +97,10 @@ public enum BundledWhisperRuntimeInstaller {
             return resourceURL
         }
 
+        if let fallbackRuntimeDirectory = fallbackRuntimeDirectory(resourceSubdirectory: resourceSubdirectory) {
+            return fallbackRuntimeDirectory
+        }
+
         return nil
     }
 
@@ -236,6 +240,41 @@ public enum BundledWhisperRuntimeInstaller {
         }
 
         try fileManager.copyItem(at: source, to: destination)
+    }
+
+    private static func fallbackRuntimeDirectory(resourceSubdirectory: String) -> URL? {
+        let fileManager = FileManager.default
+        let environment = ProcessInfo.processInfo.environment
+
+        let environmentCandidates = [
+            environment["WISPRLOCAL_RUNTIME_DIR"],
+            environment["WISPR_RUNTIME_DIR"],
+            environment["WISPRLOCAL_RUNTIME_SOURCE_DIR"],
+        ]
+        .compactMap { $0 }
+        .map { URL(fileURLWithPath: $0, isDirectory: true) }
+
+        let currentDirectory = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+        let executableDirectory = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+            .deletingLastPathComponent()
+        let searchRoots = [currentDirectory, executableDirectory]
+
+        let relativeCandidates = searchRoots.flatMap { root in
+            [
+                root.appendingPathComponent("apps/macos/AppShell/Resources/\(resourceSubdirectory)", isDirectory: true),
+                root.appendingPathComponent("../AppShell/Resources/\(resourceSubdirectory)", isDirectory: true),
+                root.appendingPathComponent("../../AppShell/Resources/\(resourceSubdirectory)", isDirectory: true),
+            ]
+        }
+
+        let candidates = environmentCandidates + relativeCandidates
+        for candidate in candidates {
+            if isValidRuntimeDirectory(candidate, fileManager: fileManager) {
+                return candidate
+            }
+        }
+
+        return nil
     }
 
     private static func makeExecutable(_ fileURL: URL, fileManager: FileManager) throws {
