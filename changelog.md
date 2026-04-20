@@ -8,6 +8,14 @@
 
 ## Fixes
 
+- 2026-04-20: Menüleisten-Auswahl für Sprache/LLM/AI-Details wieder klar sichtbar gemacht und `Auto` als Sprachoption korrekt ergänzt.
+  - Dateien: `apps/macos/AppShell/MenuBarContentView.swift`, `VERSION`
+  - Funktionalität: Die Sprachauswahl in der Menüleiste enthält wieder explizit `Auto`, sodass bei aktivem Auto-Modus kein leerer Zustand mehr angezeigt wird. Zusätzlich zeigt das kompakte LLM-Menü jetzt direkt das aktuell ausgewählte Modell im Label, und die nicht-kompakten AI-Detailmenüs (Stil, Anrede, Format) zeigen den jeweils aktiven Wert sichtbar im Menülabel sowie per Auswahlmarkierung in der Liste.
+
+- 2026-04-20: Voice-Model-Auswahl auf installierte Modelle begrenzt und inkonsistente Modellzustände im Menü/Settings bereinigt.
+  - Dateien: `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MenuBarContentView.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `VERSION`
+  - Funktionalität: Nicht installierte Speech-Modelle können im Menüleisten- und Settings-Picker nicht mehr ausgewählt werden. Persistierte/ungültige Modellzustände werden bei der Sanitization wieder auf einen validen Default zurückgeführt, sodass UI-Auswahl und effektive Runtime-Konfiguration konsistenter bleiben. Zusätzlich reagiert der Smoke-Settings-Startup-Hook nur noch auf das explizite Launch-Argument statt auf ein Environment-Flag.
+
 - 2026-04-17: Streaming-/Final-Einfügepfad für schwierige Textfelder stabilisiert und unerwartete Vordergrund-Aktivierung beim Start entschärft.
   - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `apps/macos/AppShell/SessionEntryController.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
   - Funktionalität: Für Fallback-Textziele (z. B. IDE-/Electron-Felder ohne zuverlässiges AX-Value-Set) nutzt der Streaming-Pfad jetzt gezielt Paste-Replace über den selektierten AX-Bereich statt nur auf AX-Write zu warten; dadurch werden laufende Aktualisierungen robuster in solchen Controls zugestellt. Final-Insert-Fehler fallen zusätzlich auf einen klaren Clipboard-Backup-Pfad zurück, damit kein finales Transkript verloren geht. Außerdem aktiviert der Restore-Startpfad nicht mehr versehentlich die eigene App als Zielanwendung, was Fokus-/Menu-Bar-Störungen reduziert.

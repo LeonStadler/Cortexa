@@ -4,9 +4,6 @@ import SwiftUI
 /// Smoke-/Automatisierungspfad: Einstellungen ohne System-Events-Tastatur öffnen (kein Bedienungshilfen-Zugriff für Terminal nötig).
 private enum WisprSmokeLaunch {
     static var shouldOpenSettingsAfterLaunch: Bool {
-        if ProcessInfo.processInfo.environment["WISPR_SMOKE_OPEN_SETTINGS"] == "1" {
-            return true
-        }
         return ProcessInfo.processInfo.arguments.contains("--wispr-smoke-open-settings")
     }
 }
@@ -36,7 +33,6 @@ private final class SmokeOpenSettingsLaunchObserver {
             }
             Self.retained = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                NSApplication.shared.activate(ignoringOtherApps: true)
                 appState.openSettingsWindow()
             }
         }

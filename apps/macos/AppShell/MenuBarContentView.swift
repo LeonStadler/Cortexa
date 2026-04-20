@@ -48,7 +48,8 @@ struct MenuBarContentView: View {
     }
 
     private var visibleMenuBarLanguages: [DictationLanguage] {
-        DictationLanguage.allCases.filter { $0 != .auto }
+        let configured = appState.visibleMenuBarLanguages.compactMap(DictationLanguage.init(rawValue:))
+        return [.auto] + configured
     }
 
     private func aiProviderMenuSectionTitle(for model: AIModelDescriptor) -> String {
@@ -134,6 +135,21 @@ struct MenuBarContentView: View {
         .lineLimit(1)
     }
 
+    private var currentAIWritingStyleTitle: String {
+        appState.aiWritingStyle.localizedDisplayName(
+            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+    }
+
+    private var currentAISalutationTitle: String {
+        appState.aiSalutation.localizedDisplayName(
+            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+    }
+
+    private var currentAIFormattingModeTitle: String {
+        appState.aiFormattingMode.localizedDisplayName(
+            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+    }
+
     private var menuBarLLMAddModelButton: some View {
         Button {
             appState.openAISettingsWindow()
@@ -148,6 +164,7 @@ struct MenuBarContentView: View {
             set: { newValue in
                 guard let descriptor = appState.voiceModels.first(where: { $0.id == newValue })
                 else { return }
+                guard appState.isVoiceModelInstalled(descriptor) else { return }
                 appState.setSelectedVoiceModel(descriptor)
             }
         )
@@ -155,12 +172,16 @@ struct MenuBarContentView: View {
 
     private var menuBarVoiceProviders: [VoiceProviderDescriptor] {
         appState.voiceProviders.filter { provider in
-            appState.voiceModels.contains(where: { $0.providerID == provider.id })
+            selectableVoiceModels.contains(where: { $0.providerID == provider.id })
         }
     }
 
+    private var selectableVoiceModels: [VoiceModelDescriptor] {
+        appState.voiceModels.filter { appState.isVoiceModelInstalled($0) }
+    }
+
     private var voiceModelsByProviderID: [String: [VoiceModelDescriptor]] {
-        Dictionary(grouping: appState.voiceModels, by: \.providerID)
+        Dictionary(grouping: selectableVoiceModels, by: \.providerID)
     }
 
     private var menuBarPopupWidth: CGFloat {
@@ -384,7 +405,10 @@ struct MenuBarContentView: View {
         } label: {
             if appState.compactMenuBarDesign {
                 MenuActionLabel(
-                    title: text("LLM Modell", "LLM model"),
+                    title:
+                        "\(text("LLM Modell", "LLM model")): "
+                        + (appState.selectedAIModel.map(aiModelMenuRowTitle(for:))
+                            ?? text("Auswählen…", "Choose…")),
                     shortcutGlyph: nil,
                     shortcutText: nil
                 )
@@ -497,40 +521,82 @@ struct MenuBarContentView: View {
     @ViewBuilder
     private var menuBarNonCompactAIDetailPickers: some View {
         if appState.aiShowsWritingStyleControls {
-            Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
+            Menu {
                 ForEach(appState.availableAIWritingStyles) { style in
-                    Text(
-                        style.localizedDisplayName(
+                    Button {
+                        appState.aiWritingStyle = style
+                    } label: {
+                        let title = style.localizedDisplayName(
                             interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                    )
-                    .tag(style)
+                        Text(
+                            verbatim: (style == appState.aiWritingStyle ? "✓ " : "\u{3000}")
+                                + title
+                        )
+                    }
                 }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(text("Stil", "Style"))
+                    Spacer(minLength: 8)
+                    Text(currentAIWritingStyleTitle)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(appState.selectedAIModel?.availability.isAvailable != true)
         }
 
         if appState.aiShowsSalutationControls {
-            Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+            Menu {
                 ForEach(AISalutation.allCases) { salutation in
-                    Text(
-                        salutation.localizedDisplayName(
+                    Button {
+                        appState.aiSalutation = salutation
+                    } label: {
+                        let title = salutation.localizedDisplayName(
                             interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                    )
-                    .tag(salutation)
+                        Text(
+                            verbatim: (salutation == appState.aiSalutation ? "✓ " : "\u{3000}")
+                                + title
+                        )
+                    }
                 }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(text("Anrede", "Salutation"))
+                    Spacer(minLength: 8)
+                    Text(currentAISalutationTitle)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(appState.selectedAIModel?.availability.isAvailable != true)
         }
 
         if appState.aiShowsModeControls {
-            Picker(text("Formatierung", "Formatting"), selection: $appState.aiFormattingMode) {
+            Menu {
                 ForEach(AIFormattingMode.allCases) { mode in
-                    Text(
-                        mode.localizedDisplayName(
+                    Button {
+                        appState.aiFormattingMode = mode
+                    } label: {
+                        let title = mode.localizedDisplayName(
                             interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                    )
-                    .tag(mode)
+                        Text(
+                            verbatim: (mode == appState.aiFormattingMode ? "✓ " : "\u{3000}")
+                                + title
+                        )
+                    }
                 }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(text("Formatierung", "Formatting"))
+                    Spacer(minLength: 8)
+                    Text(currentAIFormattingModeTitle)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(appState.selectedAIModel?.availability.isAvailable != true)
         }
@@ -574,12 +640,18 @@ struct MenuBarContentView: View {
             }
 
             if !appState.compactMenuBarDesign {
-                Picker(text("Sprachmodell", "Voice model"), selection: selectedVoiceModelBinding) {
-                    ForEach(menuBarVoiceProviders) { provider in
-                        if let models = voiceModelsByProviderID[provider.id], !models.isEmpty {
-                            Section(provider.displayName) {
-                                ForEach(models) { model in
-                                    Text(model.displayName).tag(model.id)
+                if menuBarVoiceProviders.isEmpty {
+                    Text(text("Keine installierten Modelle", "No installed models"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker(text("Sprachmodell", "Voice model"), selection: selectedVoiceModelBinding) {
+                        ForEach(menuBarVoiceProviders) { provider in
+                            if let models = voiceModelsByProviderID[provider.id], !models.isEmpty {
+                                Section(provider.displayName) {
+                                    ForEach(models) { model in
+                                        Text(model.displayName).tag(model.id)
+                                    }
                                 }
                             }
                         }

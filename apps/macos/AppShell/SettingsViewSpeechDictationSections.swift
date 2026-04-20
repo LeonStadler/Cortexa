@@ -5,16 +5,21 @@ extension SettingsView {
     var speechModelSelectionContent: some View {
         if speechHasMatches {
             LabeledContent {
-                Picker(
-                    text("Voice-Modell", "Voice model"), selection: $appState.selectedVoiceModelID
-                ) {
-                    ForEach(appState.visibleVoiceModels) { model in
-                        Text(model.displayName).tag(model.id)
+                if appState.visibleSelectableVoiceModels.isEmpty {
+                    Text(text("Keine installierten Modelle", "No installed models"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker(
+                        text("Voice-Modell", "Voice model"), selection: $appState.selectedVoiceModelID
+                    ) {
+                        ForEach(appState.visibleSelectableVoiceModels) { model in
+                            Text(model.displayName).tag(model.id)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .settingsFormMenuPickerSlot(minWidth: 240)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .settingsFormMenuPickerSlot(minWidth: 240)
             } label: {
                 SettingsFieldLabel(
                     title: text("Voice-Modell", "Voice model"),

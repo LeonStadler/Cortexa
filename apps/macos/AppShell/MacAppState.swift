@@ -958,6 +958,10 @@ final class MacAppState: ObservableObject {
         voiceModels.filter { $0.providerID == selectedVoiceProviderID }
     }
 
+    var visibleSelectableVoiceModels: [VoiceModelDescriptor] {
+        visibleVoiceModels.filter { isVoiceModelInstalled($0) }
+    }
+
     var selectedVoiceModel: VoiceModelDescriptor? {
         voiceModels.first(where: { $0.id == selectedVoiceModelID })
     }

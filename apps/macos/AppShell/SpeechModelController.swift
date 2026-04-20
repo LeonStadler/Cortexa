@@ -155,6 +155,12 @@ final class SpeechModelController {
     }
 
     func setSelectedVoiceModel(_ descriptor: VoiceModelDescriptor) {
+        guard isVoiceModelInstalled(descriptor) else {
+            appendDiagnostic(
+                "Speech-Modell \(descriptor.displayName) ist nicht installiert und kann nicht ausgewählt werden."
+            )
+            return
+        }
         setSelectedVoiceProviderID(descriptor.providerID)
         setSelectedVoiceModelID(descriptor.id)
     }
@@ -246,14 +252,20 @@ final class SpeechModelController {
             )
         }
 
-        if selectedVoiceModel == nil {
-            setSelectedVoiceModelID(
-                currentVoiceModels().first(where: { $0.id == LocalVoiceModelCatalog.defaultModelID })?.id
-                    ?? currentVoiceModels().first(where: {
-                        $0.providerID == currentSelectedVoiceProviderID()
-                    })?.id
-                    ?? LocalVoiceModelCatalog.defaultModelID
-            )
+        if selectedVoiceModel == nil || selectedVoiceModel.map(isVoiceModelInstalled) == false {
+            if let defaultModel = currentVoiceModels().first(where: {
+                $0.id == LocalVoiceModelCatalog.defaultModelID
+            }) {
+                setSelectedVoiceProviderID(defaultModel.providerID)
+                setSelectedVoiceModelID(defaultModel.id)
+            } else if let providerFallback = currentVoiceModels().first(where: {
+                $0.providerID == currentSelectedVoiceProviderID()
+            }) {
+                setSelectedVoiceModelID(providerFallback.id)
+            } else if let anyFallback = currentVoiceModels().first {
+                setSelectedVoiceProviderID(anyFallback.providerID)
+                setSelectedVoiceModelID(anyFallback.id)
+            }
         }
 
         if let selectedVoiceModel {
