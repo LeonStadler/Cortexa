@@ -4,7 +4,7 @@ Offline-first Diktat und Transkription für **macOS** (Schwerpunkt) und **iOS/iP
 
 ## Status: proprietär
 
-Dieses Repository und die gebündelte **Dokumentation dienen der internen Entwicklung und dem Release** — **keine Open-Source-Veröffentlichung**. Weitergabe von Quellcode oder Binärprodukten nur nach eigenen Vereinbarungen. Details und Lizenzschlüssel-Design: [`docs/licensing.md`](docs/licensing.md#proprietary).
+Dieses Repository und die gebündelte **Dokumentation dienen der internen Entwicklung und dem Release** — **keine Open-Source-Veröffentlichung**. Weitergabe von Quellcode oder Binärprodukten nur nach eigenen Vereinbarungen. Details zum proprietären Status: [`docs/licensing.md`](docs/licensing.md#proprietary).
 
 ## Dokumentation (Index)
 
@@ -29,7 +29,6 @@ Dieses Repository und die gebündelte **Dokumentation dienen der internen Entwic
 - **Deterministisches Einfügen** auf macOS: Accessibility zuerst, optional Paste-Fallback
 - **Gemeinsame Swift-Pakete** für macOS und iOS (`Package.swift`)
 - **Optionale** KI-Nachbearbeitung: Apple On-Device und/oder **OpenAI-kompatible** APIs (Netz nur bei aktivem API-Betrieb)
-- **Offline-Lizenzprüfung** (Ed25519), Schlüssel im **Keychain** — **Keychain-only secret persistence with legacy cache cleanup**
 
 ## Repository-Layout
 
@@ -41,7 +40,6 @@ Dieses Repository und die gebündelte **Dokumentation dienen der internen Entwic
 - `Sources/TextTargetMac` — AX-Ziel, Einfügen (macOS)
 - `Sources/CapabilityCore` — Geräteprofil, adaptive Presets
 - `Sources/AIProcessingCore` — KI-Nachbearbeitung, Provider, Apple Foundation Models
-- `Sources/LicenseCore` — Lizenzformat, Verifikation, sichere Ablage
 - `apps/macos` — WisprLocalMac (MenuBarExtra)
 - `apps/ios` — Host-App + Keyboard Extension
 - `docs/` — Architektur, Build, Distribution, Permissions
@@ -85,6 +83,13 @@ Anschließend `apps/macos/AppShell/Resources/Runtime` ins Xcode-Target einbinden
 6. **Diktat:** Menüleisten-Button oder globaler Hotkey (Standard **⌥ Space**)
 7. **Agent-App:** `LSUIElement` — standardmäßig keine Dock-Ikone (optional in den Settings aktivierbar)
 
+Ohne Script geht es direkt in Xcode so:
+
+1. Runtime wie oben vorbereiten.
+2. `./scripts/generate_macos_xcodeproj.sh` ausführen, damit das Xcode-Projekt aktuell ist.
+3. `apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj` in Xcode öffnen.
+4. Scheme `WisprLocalMac` auswählen und auf `Run` drücken.
+
 ### macOS — implementierte Funktionen (Kurzliste)
 
 Features implemented in macOS app shell:
@@ -97,7 +102,6 @@ Features implemented in macOS app shell:
 - Personal dictionary with category-based terms, review queue, and JSON import/export
 - Dictionary-driven ASR prompt hints and dictionary-preservation hints for AI revisions
 - Optional best-effort music pause/resume while dictating (Apple Music, Spotify)
-- Offline licensing UI (key input, local verification, Keychain-only secret persistence with legacy cache cleanup)
 - Lokales Audit-Log mit Rotation (`~/Library/Application Support/WisprLocal/audit.log`)
 - Diagnostics-Export (`wispr-diagnostics.txt`) und Audit-Log-Export aus der macOS-UI
 - Sparkle-kompatibler Auto-Updater mit permanent sichtbarem manuellen Check im Menü und in den Settings
@@ -111,7 +115,6 @@ Features implemented in macOS app shell:
 - Audio-Preprocessing, Sound-Feedback, **Sparkle**-Updates mit **permanent sichtbarem manuellen Check** im Menü und in den Settings
 - Dock, Login-Item, Diagnose-Export, Audit-Log, optional Debug-Log
 - Eingeschränkter Modus ohne Bedienungshilfen (Transkription/Verlauf weiter nutzbar)
-- Lizenz-UI steuerbar über Bundle-Key (`WLMEnableInternalLicenseUI`)
 
 ## macOS: Release
 
@@ -130,7 +133,7 @@ DEVELOPMENT_TEAM=YOURTEAMID CODE_SIGN_IDENTITY="Developer ID Application: Your N
 
 Ausgabe: `artifacts/mac/WisprLocalMac.xcarchive`
 
-**Build-Secrets** (in Xcode-Projekt injiziert): `WISPR_LICENSE_PUBLIC_KEY_BASE64`, `SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`. Vor Release: `./scripts/preflight_macos_release.sh`. Checkliste: [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
+**Build-Secrets** (in Xcode-Projekt injiziert): `SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`. Vor Release: `./scripts/preflight_macos_release.sh`. Checkliste: [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
 
 Export / DMG / Appcast:
 
