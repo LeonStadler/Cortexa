@@ -143,8 +143,16 @@ public final class WhisperCppEngine: WhisperEngine {
             throw WhisperEngineError.engineNotRunning
         }
 
-        emitDebug("engine.stopStreaming samples=\(snapshot.0.count)")
-        let final = try transcribe(samples: snapshot.0, config: snapshot.1, modelPath: snapshot.2, cliPath: snapshot.3)
+        let finalConfig = makeFinalDecodeConfig(from: snapshot.1)
+        emitDebug(
+            "engine.stopStreaming samples=\(snapshot.0.count) beamLive=\(snapshot.1.beamSize) beamFinal=\(finalConfig.beamSize) chunkLive=\(snapshot.1.chunkMilliseconds) chunkFinal=\(finalConfig.chunkMilliseconds)"
+        )
+        let final = try transcribe(
+            samples: snapshot.0,
+            config: finalConfig,
+            modelPath: snapshot.2,
+            cliPath: snapshot.3
+        )
         for segment in final.segments {
             onFinalSegment?(segment)
         }
@@ -272,6 +280,26 @@ public final class WhisperCppEngine: WhisperEngine {
         }
         let chunkMilliseconds = max(160, config.chunkMilliseconds)
         return max(16_000, Int((Double(chunkMilliseconds) / 1000.0) * 16_000.0))
+    }
+
+    private func makeFinalDecodeConfig(from baseConfig: ASRConfig) -> ASRConfig {
+        let boostedBeam = max(baseConfig.beamSize, baseConfig.latencyProfile == .streaming ? 3 : 5)
+        let boostedChunk = max(
+            baseConfig.chunkMilliseconds,
+            baseConfig.latencyProfile == .streaming ? 420 : 560
+        )
+
+        return ASRConfig(
+            languageHint: baseConfig.languageHint,
+            initialPrompt: baseConfig.initialPrompt,
+            translationMode: baseConfig.translationMode,
+            modelID: baseConfig.modelID,
+            backend: baseConfig.backend,
+            latencyProfile: .quality,
+            threadCount: baseConfig.threadCount,
+            beamSize: boostedBeam,
+            chunkMilliseconds: boostedChunk
+        )
     }
 
     private func makeTempDirectory(prefix: String) throws -> URL {
