@@ -341,6 +341,7 @@ final class DictationRuntime: @unchecked Sendable {
     private var speechActivityDetected = false
     private var speechChunkStreak = 0
     private var maxObservedRMS: Float = 0
+    private var maxObservedPeak: Float = 0
     private var lastRecoverableInsertDiagnosticAt: Date?
     private var liveAIProcessingCooldownUntil: Date?
     private var lastLiveAIFailureDiagnosticAt: Date?
@@ -351,6 +352,8 @@ final class DictationRuntime: @unchecked Sendable {
     private let pendingInsertionPollNanoseconds: UInt64 = 150_000_000
     private let speechRMSActivationThreshold: Float = 0.008
     private let speechRMSReleaseThreshold: Float = 0.004
+    private let speechPeakActivationThreshold: Float = 0.028
+    private let speechPeakReleaseThreshold: Float = 0.014
     private let speechActivationChunkCount = 2
 
     private func withSessionLock<T>(_ work: () throws -> T) rethrows -> T {
@@ -563,6 +566,7 @@ final class DictationRuntime: @unchecked Sendable {
                     self.speechActivityDetected = false
                     self.speechChunkStreak = 0
                     self.maxObservedRMS = 0
+                    self.maxObservedPeak = 0
                     self.audioPreprocessor.reset()
                     self.stableCommitter = self.makeStreamingCommitStabilizer(
                         for: options, runtimeMode: effectiveMode)
@@ -1100,21 +1104,24 @@ final class DictationRuntime: @unchecked Sendable {
         guard frameCount > 0 else { return }
 
         var sumSquares: Float = 0
+        var peak: Float = 0
         for index in 0..<frameCount {
             let sample = channelData[index]
             sumSquares += sample * sample
+            peak = max(peak, abs(sample))
         }
 
         let rms = sqrt(sumSquares / Float(frameCount))
         withSessionLock {
             maxObservedRMS = max(maxObservedRMS, rms)
+            maxObservedPeak = max(maxObservedPeak, peak)
 
-            if rms >= speechRMSActivationThreshold {
+            if rms >= speechRMSActivationThreshold || peak >= speechPeakActivationThreshold {
                 speechChunkStreak += 1
                 if speechChunkStreak >= speechActivationChunkCount {
                     speechActivityDetected = true
                 }
-            } else if rms < speechRMSReleaseThreshold {
+            } else if rms < speechRMSReleaseThreshold && peak < speechPeakReleaseThreshold {
                 speechChunkStreak = max(0, speechChunkStreak - 1)
             }
         }
@@ -1188,10 +1195,17 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         let speechSnapshot = withSessionLock {
-            (speechActivityDetected: speechActivityDetected, maxObservedRMS: maxObservedRMS)
+            (
+                speechActivityDetected: speechActivityDetected,
+                maxObservedRMS: maxObservedRMS,
+                maxObservedPeak: maxObservedPeak
+            )
         }
         if !speechSnapshot.speechActivityDetected
-            || speechSnapshot.maxObservedRMS < speechRMSActivationThreshold
+            || (
+                speechSnapshot.maxObservedRMS < speechRMSActivationThreshold
+                    && speechSnapshot.maxObservedPeak < speechPeakActivationThreshold
+            )
         {
             if normalized.count <= 24 {
                 return true
@@ -1689,6 +1703,7 @@ final class DictationRuntime: @unchecked Sendable {
             self.speechActivityDetected = false
             self.speechChunkStreak = 0
             self.maxObservedRMS = 0
+            self.maxObservedPeak = 0
             self.lastRecoverableInsertDiagnosticAt = nil
             self.accessibilityPermissionGranted = false
             return (startTask, pendingTask)

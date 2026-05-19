@@ -2,6 +2,9 @@ import ApplicationServices
 import Foundation
 
 enum MacAppStateContextSuggestionFacade {
+    private static var rejectedCandidateBackoffUntil: [String: Date] = [:]
+    private static let rejectedCandidateCooldown: TimeInterval = 60 * 60 * 12
+
     static func handleDictionaryCandidatesIfNeeded(
         isAutoAddEnabled: Bool,
         event: FinalTranscriptEvent,
@@ -43,6 +46,7 @@ enum MacAppStateContextSuggestionFacade {
             guard shouldAutoSuggestPersonPhrase(phrase) else { continue }
             let key = normalizedDictionaryKey(phrase, languageCode: scopedLanguage)
             guard !seenInTranscript.contains(key) else { continue }
+            guard !isCandidateInBackoff(key) else { continue }
             seenInTranscript.insert(key)
 
             let queueCountBefore = currentReviewQueueCount()
@@ -61,6 +65,7 @@ enum MacAppStateContextSuggestionFacade {
 
             let key = normalizedDictionaryKey(normalizedToken, languageCode: scopedLanguage)
             guard !seenInTranscript.contains(key) else { continue }
+            guard !isCandidateInBackoff(key) else { continue }
             seenInTranscript.insert(key)
 
             let category: DictionaryTermCategory =
@@ -99,26 +104,27 @@ enum MacAppStateContextSuggestionFacade {
         maxCharacters: Int = 320
     ) -> String? {
         let currentLanguageCode = selectedLanguage == .auto ? nil : selectedLanguage.rawValue
-        let filtered = dictionaryTerms
-            .filter { term in
-                guard
-                    let languageCode = term.languageCode?
-                        .trimmingCharacters(in: .whitespacesAndNewlines),
-                    !languageCode.isEmpty
-                else {
-                    return true
-                }
-                guard let currentLanguageCode else { return true }
-                return languageCode.caseInsensitiveCompare(currentLanguageCode) == .orderedSame
+        let filtered = dictionaryTerms.filter { term in
+            guard
+                let languageCode = term.languageCode?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                !languageCode.isEmpty
+            else {
+                return true
             }
-            .map(\.term)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            guard let currentLanguageCode else { return true }
+            return languageCode.caseInsensitiveCompare(currentLanguageCode) == .orderedSame
+        }
 
         guard !filtered.isEmpty else { return nil }
 
+        let rankedTerms = rankDictionaryTerms(
+            filtered,
+            currentLanguageCode: currentLanguageCode
+        )
+
         var result = "Preferred terms: "
-        for term in filtered {
+        for term in rankedTerms {
             let candidate = result == "Preferred terms: " ? "\(result)\(term)" : "\(result), \(term)"
             if candidate.count > maxCharacters { break }
             result = candidate
@@ -272,6 +278,91 @@ enum MacAppStateContextSuggestionFacade {
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .lowercased()
         return commonAutoAddStopwords.contains(normalized)
+    }
+
+    static func registerRejectedCandidate(_ term: String, languageCode: String?) {
+        let key = normalizedDictionaryKey(term, languageCode: languageCode)
+        rejectedCandidateBackoffUntil[key] = Date().addingTimeInterval(rejectedCandidateCooldown)
+    }
+
+    private static func isCandidateInBackoff(_ key: String) -> Bool {
+        pruneExpiredRejectedBackoffEntries()
+        guard let until = rejectedCandidateBackoffUntil[key] else {
+            return false
+        }
+        return until > Date()
+    }
+
+    private static func pruneExpiredRejectedBackoffEntries() {
+        let now = Date()
+        rejectedCandidateBackoffUntil = rejectedCandidateBackoffUntil.filter { $0.value > now }
+    }
+
+    private static func rankDictionaryTerms(
+        _ terms: [DictionaryTerm],
+        currentLanguageCode: String?
+    ) -> [String] {
+        let deduped = dedupeDictionaryTerms(terms)
+        return deduped
+            .sorted { lhs, rhs in
+                let lhsScore = dictionaryPriorityScore(lhs, currentLanguageCode: currentLanguageCode)
+                let rhsScore = dictionaryPriorityScore(rhs, currentLanguageCode: currentLanguageCode)
+                if lhsScore != rhsScore {
+                    return lhsScore > rhsScore
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+            .map(\.term)
+    }
+
+    private static func dedupeDictionaryTerms(_ terms: [DictionaryTerm]) -> [DictionaryTerm] {
+        var seen: Set<String> = []
+        var deduped: [DictionaryTerm] = []
+        for term in terms {
+            let normalized = normalizedDictionaryKey(term.term, languageCode: term.languageCode)
+            if seen.contains(normalized) {
+                continue
+            }
+            seen.insert(normalized)
+            deduped.append(term)
+        }
+        return deduped
+    }
+
+    private static func dictionaryPriorityScore(
+        _ term: DictionaryTerm,
+        currentLanguageCode: String?
+    ) -> Int {
+        var score = 0
+
+        if let currentLanguageCode,
+            let languageCode = term.languageCode?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !languageCode.isEmpty,
+            languageCode.caseInsensitiveCompare(currentLanguageCode) == .orderedSame
+        {
+            score += 20
+        }
+
+        switch term.category {
+        case .personName, .clientName:
+            score += 15
+        case .companyJargon, .industryLanguage:
+            score += 10
+        case .personalTerm:
+            score += 7
+        case .custom:
+            score += 4
+        }
+
+        if term.source == .manual {
+            score += 4
+        }
+
+        if term.term.count <= 24 {
+            score += 2
+        }
+
+        return score
     }
 }
 

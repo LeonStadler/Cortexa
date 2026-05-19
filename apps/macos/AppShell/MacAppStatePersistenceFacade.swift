@@ -204,6 +204,12 @@ final class MacAppStatePersistenceFacade {
     }
 
     func rejectDictionaryCandidate(_ candidateID: UUID) {
+        if let rejectedCandidate = currentDictionaryReviewQueue().first(where: { $0.id == candidateID }) {
+            MacAppStateContextSuggestionFacade.registerRejectedCandidate(
+                rejectedCandidate.proposedTerm,
+                languageCode: rejectedCandidate.languageCode
+            )
+        }
         setDictionaryReviewQueue(currentDictionaryReviewQueue().filter { $0.id != candidateID })
         persistDictionary()
     }
