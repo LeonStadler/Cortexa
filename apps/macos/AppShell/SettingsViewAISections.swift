@@ -83,21 +83,33 @@ extension SettingsView {
 
                 if appState.aiShowsWritingStyleControls {
                     LabeledContent {
-                        Picker(
-                            text("Stil / Ton", "Style / Tone"),
-                            selection: $appState.aiWritingStyle
-                        ) {
-                            ForEach(appState.availableAIWritingStyles) { style in
-                                Text(
-                                    style.localizedDisplayName(
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Picker(
+                                text("Stil / Ton", "Style / Tone"),
+                                selection: $appState.aiWritingStyle
+                            ) {
+                                ForEach(appState.availableAIWritingStyles) { style in
+                                    Text(
+                                        style.localizedDisplayName(
+                                            interfaceLanguageCode: effectiveLanguage
+                                                .embeddedInterfaceCode)
+                                    ).tag(style)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .settingsFormMenuPickerSlot(minWidth: 220)
+
+                            Text(
+                                text("Ausgewählt:", "Selected:")
+                                    + " "
+                                    + appState.aiWritingStyle.localizedDisplayName(
                                         interfaceLanguageCode: effectiveLanguage
                                             .embeddedInterfaceCode)
-                                ).tag(style)
-                            }
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .settingsFormMenuPickerSlot(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
                             title: text("Stil / Ton", "Style / Tone"),
@@ -112,18 +124,30 @@ extension SettingsView {
 
                 if appState.aiShowsSalutationControls {
                     LabeledContent {
-                        Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
-                            ForEach(AISalutation.allCases) { salutation in
-                                Text(
-                                    salutation.localizedDisplayName(
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
+                                ForEach(AISalutation.allCases) { salutation in
+                                    Text(
+                                        salutation.localizedDisplayName(
+                                            interfaceLanguageCode: effectiveLanguage
+                                                .embeddedInterfaceCode)
+                                    ).tag(salutation)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .settingsFormMenuPickerSlot(minWidth: 220)
+
+                            Text(
+                                text("Ausgewählt:", "Selected:")
+                                    + " "
+                                    + appState.aiSalutation.localizedDisplayName(
                                         interfaceLanguageCode: effectiveLanguage
                                             .embeddedInterfaceCode)
-                                ).tag(salutation)
-                            }
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .settingsFormMenuPickerSlot(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
                             title: text("Anrede", "Salutation"),
@@ -138,18 +162,30 @@ extension SettingsView {
 
                 if appState.aiShowsModeControls {
                     LabeledContent {
-                        Picker(text("Formatierung", "Formatting"), selection: $appState.aiFormattingMode) {
-                            ForEach(AIFormattingMode.allCases) { mode in
-                                Text(
-                                    mode.localizedDisplayName(
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Picker(text("Formatierung", "Formatting"), selection: $appState.aiFormattingMode) {
+                                ForEach(AIFormattingMode.allCases) { mode in
+                                    Text(
+                                        mode.localizedDisplayName(
+                                            interfaceLanguageCode: effectiveLanguage
+                                                .embeddedInterfaceCode)
+                                    ).tag(mode)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .settingsFormMenuPickerSlot(minWidth: 220)
+
+                            Text(
+                                text("Ausgewählt:", "Selected:")
+                                    + " "
+                                    + appState.aiFormattingMode.localizedDisplayName(
                                         interfaceLanguageCode: effectiveLanguage
                                             .embeddedInterfaceCode)
-                                ).tag(mode)
-                            }
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .settingsFormMenuPickerSlot(minWidth: 220)
                     } label: {
                         SettingsFieldLabel(
                             title: text("Formatierung", "Formatting"),
