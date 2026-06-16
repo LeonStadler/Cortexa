@@ -44,8 +44,14 @@ xcuserdata/
 # IDE / Editor
 .vscode/
 .idea/
+/.codex-home/
+/.cursor/
+/.xcode-derived/
 .cursor/*.log
 *.swp
+
+# Accidental codesign artifact from malformed redirects
+:-
 
 # Distribution artifacts
 *.dmg
