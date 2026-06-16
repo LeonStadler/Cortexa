@@ -11,6 +11,8 @@ final class VoiceModelDownloadClient: NSObject, @unchecked Sendable {
     private var downloadContinuation: CheckedContinuation<Void, Error>?
     private var destinationURL: URL?
     private var hasFinished = false
+    private var lastReportedFraction: Double = 0
+    private var fallbackTotalBytes: Int64?
     private lazy var session: URLSession = {
         URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
     }()
@@ -22,9 +24,12 @@ final class VoiceModelDownloadClient: NSObject, @unchecked Sendable {
     func download(
         from sourceURL: URL,
         to destinationURL: URL,
+        expectedDownloadBytes: Int64? = nil,
         progressHandler: @escaping @Sendable (VoiceModelInstallProgress) -> Void
     ) async throws {
         hasFinished = false
+        lastReportedFraction = 0
+        fallbackTotalBytes = expectedDownloadBytes
         self.progressHandler = progressHandler
         self.destinationURL = destinationURL
 
@@ -61,23 +66,25 @@ extension VoiceModelDownloadClient: URLSessionDownloadDelegate {
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        let expectedTotal =
+        let httpTotal =
             totalBytesExpectedToWrite > 0
             ? totalBytesExpectedToWrite
             : downloadTask.countOfBytesExpectedToReceive
-        let fraction: Double
-        if expectedTotal > 0 {
-            fraction = min(Double(totalBytesWritten) / Double(expectedTotal), 0.95)
-        } else {
-            fraction = 0
-        }
+        let computed = VoiceModelDownloadProgressMath.computeProgress(
+            receivedBytes: totalBytesWritten,
+            httpTotalBytes: httpTotal,
+            fallbackTotalBytes: fallbackTotalBytes,
+            previousFraction: lastReportedFraction
+        )
+        lastReportedFraction = computed.fractionCompleted
 
         progressHandler?(
             VoiceModelInstallProgress(
                 phase: .downloading,
-                fractionCompleted: fraction,
+                fractionCompleted: computed.fractionCompleted,
                 receivedBytes: totalBytesWritten,
-                totalBytes: expectedTotal > 0 ? expectedTotal : nil
+                totalBytes: computed.totalBytes,
+                isIndeterminate: computed.isIndeterminate
             )
         )
     }

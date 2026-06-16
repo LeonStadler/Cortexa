@@ -295,16 +295,28 @@ struct VoiceModelOperationProgressView: View {
         VStack(alignment: .leading, spacing: 6) {
             switch operation {
             case .installing(let progress):
-                ProgressView(value: progress.fractionCompleted)
-                    .progressViewStyle(.linear)
-                HStack {
-                    Text(statusText(for: progress))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    Text("\(progress.percentComplete)%")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                if progress.isIndeterminate || progress.phase == .downloading && progress.totalBytes == nil {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                    Text(
+                        german
+                            ? "Verbindung wird aufgebaut …"
+                            : "Establishing connection …"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                    ProgressView(value: progress.fractionCompleted)
+                        .progressViewStyle(.linear)
+                    HStack {
+                        Text(statusText(for: progress))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        Text("\(progress.percentComplete)%")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
                 }
             case .removing:
                 ProgressView()
