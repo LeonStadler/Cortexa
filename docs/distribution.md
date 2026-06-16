@@ -5,7 +5,8 @@
 1. **Build dependencies and runtime.**
    - Run `./scripts/build_whisper_xcframework.sh` (see `docs/build-xcframework.md`) to produce `artifacts/whisper/whisper-cli` and, when requested, `artifacts/whisper/whisper.xcframework`.
    - Download the required ggml models with `./scripts/download_models.sh`.
-   - Bundle the CLI and models into `apps/macos/AppShell/Resources/Runtime` using `./scripts/prepare_runtime_bundle.sh` so the app can install a bundled runtime at launch.
+   - Bundle the CLI into `apps/macos/AppShell/Resources/Runtime` using `./scripts/prepare_runtime_bundle.sh` (Release: no bundled `.bin`; the standard model downloads during first-run onboarding).
+   - For local dev/smoke tests, pass `--include-default-model` to bundle `ggml-base.bin` alongside the CLI.
 
 2. **Regenerate the Xcode project if schema or package changes were introduced.**
    - `./scripts/generate_macos_xcodeproj.sh` keeps `apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj` aligned with `project.yml`.

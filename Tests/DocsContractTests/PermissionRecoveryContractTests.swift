@@ -30,8 +30,8 @@
             )
 
             XCTAssertTrue(settingsView.contains("generalPermissionsContent"))
-            XCTAssertTrue(generalSections.contains("nach einem Rebuild"))
-            XCTAssertTrue(generalSections.contains("entfernen und neu hinzufügen"))
+            XCTAssertTrue(generalSections.contains("Nach einem Rebuild"))
+            XCTAssertTrue(generalSections.contains("Neu verknüpfen"))
             XCTAssertTrue(generalSections.contains("Bedienungshilfen"))
         }
 

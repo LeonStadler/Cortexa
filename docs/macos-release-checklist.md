@@ -19,9 +19,18 @@ export SPARKLE_PUBLIC_ED_KEY='DEIN_SPARKLE_PUBLIC_ED_KEY'
 
 Erwartung:
 - `whisper-cli` ist im Runtime-Bundle vorhanden
-- mindestens ein ggml-Modell ist vorhanden
+- **kein** gebündeltes ggml-Modell im Release-Bundle (`modelFileNames: []`)
+- `runtime-manifest.json` ist vorhanden
 - `WisprLocalMac.xcodeproj` wurde neu generiert
 - `MARKETING_VERSION` entspricht `VERSION`
+
+## 2b. First-Run-Onboarding (manuell)
+
+1. Frische Installation (oder Onboarding-Key löschen: `wispr.onboarding.completedVersion`) → Onboarding-Fenster erscheint, kein Modell vor Download.
+2. Standard-Download: Größe in Details ≈ Progress-Total (~141 MB).
+3. Pro-Download (optional in Settings): Progress steigt ohne Sprung von 0→50 %.
+4. Bestehende Installation mit `ggml-base.bin` in Application Support → kein Onboarding.
+5. Pro entfernen → bleibt nach Neustart weg.
 
 ## 3. Debug-Smoke-Test
 
