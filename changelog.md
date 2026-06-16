@@ -12,6 +12,10 @@
 
 ## Fixes
 
+- 2026-06-16: macOS-Berechtigungsstatus nach Rebuild/TCC-Mismatch konsistent gemacht und Dev-Start stabilisiert.
+  - Dateien: `apps/macos/AppShell/BuildPermissionFingerprint.swift`, `apps/macos/AppShell/PermissionCoordinator.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/AppLifecycleCoordinator.swift`, `apps/macos/AppShell/SettingsWindowPresenter.swift`, `apps/macos/AppShell/MenuBarContentView.swift`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `scripts/smoke_test_macos_app.sh`, `Tests/AppShellSupportTests/BuildPermissionFingerprintTests.swift`, `Tests/AppShellSupportTests/PermissionCoordinatorTests.swift`, `README.md`, `VERSION`
+  - Funktionalität: Die App erkennt veraltete TCC-Einträge nach Debug-Rebuilds (Build-Fingerprint), refresht Berechtigungen beim Start/Settings-/Menüleisten-Öffnen mehrfach stabilisiert, zeigt „Neu verknüpfen“-Hinweise in Settings und Menüleiste, startet im Smoke-Script per `open(1)` statt direktem Binary-Start und unterstützt `--skip-build` für schnellere lokale Iteration ohne Signatur-Reset.
+
 - 2026-04-20: Menüleisten-AI-Steuerung auf direkte Picker zurückgestellt und LLM-Label ohne statischen Selection-Suffix wiederhergestellt.
   - Dateien: `apps/macos/AppShell/MenuBarContentView.swift`, `VERSION`
   - Funktionalität: Das kompakte LLM-Menü zeigt wieder nur den Titel `LLM Modell` statt eines festen `LLM Modell: ...`-Labels. Die AI-Optionen für Stil, Anrede und Formatierung sind in der nicht-kompakten Menüleiste wieder direkt als Picker verfügbar (nicht als zusätzliche Untermenüs), sodass die Bedienung dem bisherigen Verhalten entspricht.

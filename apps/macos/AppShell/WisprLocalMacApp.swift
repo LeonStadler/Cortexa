@@ -8,6 +8,21 @@ private enum WisprSmokeLaunch {
     }
 }
 
+/// Beendet frische Starts, wenn bereits eine Instanz mit derselben Bundle-ID läuft (z. B. direkter Binary-Start + `open`/AppleScript).
+private enum SingleInstanceGuard {
+    static func exitIfAnotherInstanceIsRunning() {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let otherInstances = NSRunningApplication.runningApplications(
+            withBundleIdentifier: bundleIdentifier
+        )
+        .filter { $0.processIdentifier != currentPID }
+        guard let existing = otherInstances.first else { return }
+        existing.activate(options: [.activateIgnoringOtherApps])
+        exit(0)
+    }
+}
+
 /// Hält den einmaligen `didFinishLaunching`-Observer, ohne `var`-Capture in einer `@Sendable`-Closure.
 private final class SmokeOpenSettingsLaunchObserver {
     private var notificationToken: NSObjectProtocol?
@@ -46,6 +61,8 @@ struct WisprLocalMacApp: App {
     private let settingsWindowPresenter: SettingsWindowPresenter
 
     init() {
+        SingleInstanceGuard.exitIfAnotherInstanceIsRunning()
+
         let configuration = MacAppConfiguration.load()
         let updaterController = SparkleUpdaterController(configuration: configuration)
         let appState = MacAppState(configuration: configuration)

@@ -107,10 +107,10 @@ final class AppLifecycleCoordinator {
     }
 
     func handleDidFinishLaunching() {
-        onRefreshPermissionStates()
+        onRefreshPermissionsAfterExternalEvent("launch")
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 200_000_000)
-            self?.onRefreshPermissionStates()
+            self?.onRefreshPermissionsAfterExternalEvent("launch-delayed")
         }
     }
 

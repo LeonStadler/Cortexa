@@ -18,6 +18,7 @@ PREVIOUS_SIGNING_SUMMARY="${SIGNING_ARTIFACT_DIR}/debug-signing.previous.txt"
 PREVIOUS_SIGNING_RAW="${SIGNING_ARTIFACT_DIR}/debug-signing.previous.raw.txt"
 KEEP_RUNNING=0
 SKIP_LAUNCH=0
+SKIP_BUILD=0
 EXERCISE_UI=1
 
 log() {
@@ -54,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_LAUNCH=1
       shift
       ;;
+    --skip-build)
+      SKIP_BUILD=1
+      shift
+      ;;
     --no-ui)
       EXERCISE_UI=0
       shift
@@ -78,19 +83,27 @@ log "Preparing runtime bundle"
 log "Generating macOS Xcode project"
 "${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh" --check
 
-if [[ -d "${DERIVED_DATA_PATH}" ]]; then
-  log "Removing previous derived data"
-  rm -rf "${DERIVED_DATA_PATH}"
-fi
+if [[ "${SKIP_BUILD}" -eq 0 ]]; then
+  if [[ -d "${DERIVED_DATA_PATH}" ]]; then
+    log "Removing previous derived data"
+    rm -rf "${DERIVED_DATA_PATH}"
+  fi
 
-log "Building debug app"
-xcodebuild \
-  -project "${PROJECT_PATH}" \
-  -scheme "${SCHEME}" \
-  -configuration Debug \
-  -derivedDataPath "${DERIVED_DATA_PATH}" \
-  -destination "platform=macOS" \
-  build
+  log "Building debug app"
+  xcodebuild \
+    -project "${PROJECT_PATH}" \
+    -scheme "${SCHEME}" \
+    -configuration Debug \
+    -derivedDataPath "${DERIVED_DATA_PATH}" \
+    -destination "platform=macOS" \
+    build
+
+  # Prevent Spotlight from indexing rapidly changing build artifacts.
+  touch "${DERIVED_DATA_PATH}/.metadata_never_index"
+else
+  log "Skipping build (--skip-build); reusing existing app at ${APP_PATH}"
+  [[ -d "${APP_PATH}" ]] || error "No built app at ${APP_PATH}. Run without --skip-build first."
+fi
 
 [[ -d "${APP_PATH}" ]] || error "Built app not found at ${APP_PATH}"
 [[ -x "${APP_BINARY}" ]] || error "App binary missing at ${APP_BINARY}"
@@ -120,7 +133,7 @@ if [[ -f "${CURRENT_SIGNING_RAW}" ]]; then
 fi
 
 set +e
-codesign -dvvv --requirements :- "${APP_PATH}" >"${CURRENT_SIGNING_RAW}" 2>&1
+codesign -dvvv -r- "${APP_PATH}" >"${CURRENT_SIGNING_RAW}" 2>&1
 CODESIGN_STATUS=$?
 set -e
 
@@ -210,23 +223,29 @@ if [[ "${SKIP_LAUNCH}" -eq 1 ]]; then
   exit 0
 fi
 
+log "Killing any previous WisprLocalMac process"
+pkill -f "WisprLocalMac.app/Contents/MacOS/WisprLocalMac" >/dev/null 2>&1 || true
+
+LAUNCH_ARGS=()
 if [[ "${EXERCISE_UI}" -eq 1 ]]; then
-  require_command osascript
+  LAUNCH_ARGS=(--wispr-smoke-open-settings)
 fi
 
-log "Killing any previous WisprLocalMac process"
-pkill -f "${APP_BINARY}" >/dev/null 2>&1 || true
-
-log "Launching app binary"
+log "Launching app via open(1) (LaunchServices/TCC-stable)"
 rm -f "${LOG_PATH}"
-"${APP_BINARY}" >"${LOG_PATH}" 2>&1 &
-APP_PID=$!
+if [[ ${#LAUNCH_ARGS[@]} -gt 0 ]]; then
+  open "${APP_PATH}" --args "${LAUNCH_ARGS[@]}"
+else
+  open "${APP_PATH}"
+fi
 sleep 4
 
-if ! kill -0 "${APP_PID}" >/dev/null 2>&1; then
+APP_PID="$(pgrep -f "${APP_BINARY}" | head -n 1 || true)"
+
+if [[ -z "${APP_PID}" ]] || ! kill -0 "${APP_PID}" >/dev/null 2>&1; then
   echo "--- app log ---"
   cat "${LOG_PATH}" 2>/dev/null || true
-  error "App process exited immediately."
+  error "App process not running after launch."
 fi
 
 log "App process is running with pid ${APP_PID}"
@@ -236,15 +255,7 @@ log "  Models: ${MODEL_COUNT}"
 log "  Log: ${LOG_PATH}"
 
 if [[ "${EXERCISE_UI}" -eq 1 ]]; then
-  log "Activating app and opening Settings via keyboard shortcut"
-  osascript >/dev/null <<'APPLESCRIPT' || log "UI exercise could not be completed automatically; continuing with process verification."
-tell application "WisprLocalMac" to activate
-delay 0.5
-tell application "System Events"
-  keystroke "," using {command down}
-end tell
-APPLESCRIPT
-
+  log "Waiting for in-app Settings open (--wispr-smoke-open-settings)"
   sleep 2
   if ! kill -0 "${APP_PID}" >/dev/null 2>&1; then
     echo "--- app log ---"

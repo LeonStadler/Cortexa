@@ -48,7 +48,8 @@ struct MenuBarContentView: View {
     }
 
     private var visibleMenuBarLanguages: [DictationLanguage] {
-        let configured = appState.visibleMenuBarLanguages.compactMap(DictationLanguage.init(rawValue:))
+        let configured = appState.visibleMenuBarLanguages.compactMap(
+            DictationLanguage.init(rawValue:))
         return [.auto] + configured
     }
 
@@ -133,21 +134,6 @@ struct MenuBarContentView: View {
         }
         .foregroundStyle(.secondary)
         .lineLimit(1)
-    }
-
-    private var currentAIWritingStyleTitle: String {
-        appState.aiWritingStyle.localizedDisplayName(
-            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-    }
-
-    private var currentAISalutationTitle: String {
-        appState.aiSalutation.localizedDisplayName(
-            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-    }
-
-    private var currentAIFormattingModeTitle: String {
-        appState.aiFormattingMode.localizedDisplayName(
-            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
     }
 
     private var menuBarLLMAddModelButton: some View {
@@ -380,13 +366,25 @@ struct MenuBarContentView: View {
                     .foregroundStyle(.secondary)
             }
             if appState.microphonePermissionStatus != .granted {
-                Button(text("Mikrofonzugriff öffnen", "Open microphone access")) {
-                    appState.openMicrophoneSettings()
+                if appState.microphonePermissionStaleAfterRebuild {
+                    Button(text("Mikrofon neu verknüpfen", "Rebind microphone")) {
+                        appState.rebindMicrophonePermissions()
+                    }
+                } else {
+                    Button(text("Mikrofon freigeben", "Grant microphone access")) {
+                        appState.requestMicrophoneAccessFromSettings()
+                    }
                 }
             }
             if appState.accessibilityPermissionStatus != .granted {
-                Button(text("Bedienungshilfen öffnen", "Open accessibility access")) {
-                    appState.openAccessibilitySettings()
+                if appState.accessibilityPermissionStaleAfterRebuild {
+                    Button(text("Bedienungshilfen neu verknüpfen", "Rebind accessibility")) {
+                        appState.rebindAccessibilityPermissions()
+                    }
+                } else {
+                    Button(text("Bedienungshilfen freigeben", "Grant accessibility access")) {
+                        appState.requestAccessibilityAccessFromSettings()
+                    }
                 }
             }
             Divider()
@@ -405,10 +403,7 @@ struct MenuBarContentView: View {
         } label: {
             if appState.compactMenuBarDesign {
                 MenuActionLabel(
-                    title:
-                        "\(text("LLM Modell", "LLM model")): "
-                        + (appState.selectedAIModel.map(aiModelMenuRowTitle(for:))
-                            ?? text("Auswählen…", "Choose…")),
+                    title: text("LLM Modell", "LLM model"),
                     shortcutGlyph: nil,
                     shortcutText: nil
                 )
@@ -521,82 +516,40 @@ struct MenuBarContentView: View {
     @ViewBuilder
     private var menuBarNonCompactAIDetailPickers: some View {
         if appState.aiShowsWritingStyleControls {
-            Menu {
+            Picker(text("Stil", "Style"), selection: $appState.aiWritingStyle) {
                 ForEach(appState.availableAIWritingStyles) { style in
-                    Button {
-                        appState.aiWritingStyle = style
-                    } label: {
-                        let title = style.localizedDisplayName(
+                    Text(
+                        style.localizedDisplayName(
                             interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        Text(
-                            verbatim: (style == appState.aiWritingStyle ? "✓ " : "\u{3000}")
-                                + title
-                        )
-                    }
+                    )
+                    .tag(style)
                 }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(text("Stil", "Style"))
-                    Spacer(minLength: 8)
-                    Text(currentAIWritingStyleTitle)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(appState.selectedAIModel?.availability.isAvailable != true)
         }
 
         if appState.aiShowsSalutationControls {
-            Menu {
+            Picker(text("Anrede", "Salutation"), selection: $appState.aiSalutation) {
                 ForEach(AISalutation.allCases) { salutation in
-                    Button {
-                        appState.aiSalutation = salutation
-                    } label: {
-                        let title = salutation.localizedDisplayName(
+                    Text(
+                        salutation.localizedDisplayName(
                             interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        Text(
-                            verbatim: (salutation == appState.aiSalutation ? "✓ " : "\u{3000}")
-                                + title
-                        )
-                    }
+                    )
+                    .tag(salutation)
                 }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(text("Anrede", "Salutation"))
-                    Spacer(minLength: 8)
-                    Text(currentAISalutationTitle)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(appState.selectedAIModel?.availability.isAvailable != true)
         }
 
         if appState.aiShowsModeControls {
-            Menu {
+            Picker(text("Formatierung", "Formatting"), selection: $appState.aiFormattingMode) {
                 ForEach(AIFormattingMode.allCases) { mode in
-                    Button {
-                        appState.aiFormattingMode = mode
-                    } label: {
-                        let title = mode.localizedDisplayName(
+                    Text(
+                        mode.localizedDisplayName(
                             interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        Text(
-                            verbatim: (mode == appState.aiFormattingMode ? "✓ " : "\u{3000}")
-                                + title
-                        )
-                    }
+                    )
+                    .tag(mode)
                 }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(text("Formatierung", "Formatting"))
-                    Spacer(minLength: 8)
-                    Text(currentAIFormattingModeTitle)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(appState.selectedAIModel?.availability.isAvailable != true)
         }
@@ -645,7 +598,9 @@ struct MenuBarContentView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker(text("Sprachmodell", "Voice model"), selection: selectedVoiceModelBinding) {
+                    Picker(
+                        text("Sprachmodell", "Voice model"), selection: selectedVoiceModelBinding
+                    ) {
                         ForEach(menuBarVoiceProviders) { provider in
                             if let models = voiceModelsByProviderID[provider.id], !models.isEmpty {
                                 Section(provider.displayName) {

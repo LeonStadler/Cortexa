@@ -20,6 +20,9 @@ final class SettingsWindowPresenter {
         } else {
             window.makeKeyAndOrderFront(nil)
         }
+        Task { @MainActor in
+            appState.refreshPermissionStatesWithStabilization()
+        }
     }
 
     private var existingWindow: NSWindow? {

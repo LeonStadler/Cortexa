@@ -93,6 +93,7 @@ Ohne Script geht es direkt in Xcode so:
 ### macOS — implementierte Funktionen (Kurzliste)
 
 Features implemented in macOS app shell:
+
 - Finalize Insert at locked original cursor target
 - Streaming Insert with immutable target binding
 - Snippet replacement + snippet import/export (JSON)
@@ -156,7 +157,13 @@ Bundle prüfen:
 ./scripts/smoke_test_macos_app.sh
 ```
 
-Prüft u. a. Debug-Build, Bundle, `whisper-cli`, Modelle, kurzer Lauf; optional UI-Aktivierung. Varianten: `--keep-running`, `--no-ui`, `--skip-launch`.
+Prüft u. a. Debug-Build, Bundle, `whisper-cli`, Modelle, kurzer Lauf; optional UI-Aktivierung. Varianten: `--keep-running`, `--skip-build`, `--no-ui`, `--skip-launch`.
+
+Schneller Dev-Loop ohne Rebuild (TCC-Einträge bleiben stabil):
+
+```bash
+./scripts/smoke_test_macos_app.sh --skip-build --keep-running
+```
 
 ## iOS / iPadOS
 

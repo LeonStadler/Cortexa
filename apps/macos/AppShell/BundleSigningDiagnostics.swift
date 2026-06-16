@@ -20,7 +20,7 @@ enum BundleSigningDiagnostics {
         let bundleURL = bundle.bundleURL
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        process.arguments = ["-dvvv", "--requirements", ":-", bundleURL.path]
+        process.arguments = ["-dvvv", "-r-", bundleURL.path]
 
         let pipe = Pipe()
         process.standardOutput = pipe

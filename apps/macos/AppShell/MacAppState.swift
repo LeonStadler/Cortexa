@@ -7,7 +7,6 @@ import AudioCore
 import CapabilityCore
 import Carbon
 import Foundation
-import LicenseCore
 import ServiceManagement
 import SnippetCore
 import SwiftUI
@@ -32,39 +31,6 @@ struct TranscriptHistoryEntry: Identifiable, Codable, Equatable {
         self.text = text
         self.languageCode = languageCode
         self.mode = mode
-    }
-}
-
-enum LicensePresentationState {
-    case notConfigured
-    case notSet
-    case active(tier: String)
-    case invalid(reason: String)
-
-    var label: String {
-        switch self {
-        case .notConfigured:
-            return "Nicht konfiguriert"
-        case .notSet:
-            return "Nicht gesetzt"
-        case .active(let tier):
-            return "Aktiv: \(tier)"
-        case .invalid(let reason):
-            return "Ungültig: \(reason)"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .active:
-            return .green
-        case .notConfigured:
-            return .orange
-        case .invalid:
-            return .red
-        case .notSet:
-            return .secondary
-        }
     }
 }
 
@@ -725,12 +691,9 @@ final class MacAppState: ObservableObject {
     @Published var lastTranscript: String = ""
     @Published var microphonePermissionStatus: PermissionStatus = .notDetermined
     @Published var accessibilityPermissionStatus: PermissionStatus = .notDetermined
+    @Published var microphonePermissionStaleAfterRebuild = false
+    @Published var accessibilityPermissionStaleAfterRebuild = false
 
-    @Published var licenseInput: String = ""
-    @Published var storedLicenseSummary: String?
-    @Published var licenseStatusText: String = "No license"
-    @Published var licenseValid: Bool = false
-    @Published var licensePresentationState: LicensePresentationState = .notSet
     @Published var updaterStatusText: String = "Updater wird initialisiert..."
     @Published var updaterConfigured: Bool = false
     @Published var updaterFeedURLText: String = ""
@@ -757,10 +720,6 @@ final class MacAppState: ObservableObject {
 
     var holdShortcutDisplayText: String {
         holdShortcut.displayName
-    }
-
-    var isLicenseUIEnabledForDevelopment: Bool {
-        appConfiguration.isLicenseUIEnabledForDevelopment
     }
 
     var latestDictationText: String {
@@ -1145,7 +1104,6 @@ final class MacAppState: ObservableObject {
     private var aiProcessingService = AIProcessingService()
     private let appConfiguration: MacAppConfiguration
 
-    private let licenseController: LicenseController
     private var permissionCoordinator: PermissionCoordinator!
     private var appLifecycleCoordinator: AppLifecycleCoordinator!
     var sessionEntryController: SessionEntryController!
@@ -1316,12 +1274,6 @@ final class MacAppState: ObservableObject {
         self.debugLogger = AuditLogger(
             fileURL: AppShellStoragePaths.debugLogStorageURL(rootDirectory: storageRootDirectory)
         )
-        self.licenseController = LicenseController(
-            configuration: configuration,
-            cacheFileURL: AppShellStoragePaths.legacyLicenseCacheURL(
-                rootDirectory: storageRootDirectory
-            )
-        )
         self.remoteProviderAPIKeyDraft =
             preferences.selectedRemoteProviderID.flatMap {
                 aiRemoteProviderSecretStore.loadAPIKey(providerID: $0)
@@ -1341,9 +1293,6 @@ final class MacAppState: ObservableObject {
             },
             currentUpdaterStatusText: { [weak self] in
                 self?.updaterStatusText ?? ""
-            },
-            currentLicenseStatusText: { [weak self] in
-                self?.licenseStatusText ?? ""
             },
             currentDebugModeEnabled: { [weak self] in
                 self?.debugModeEnabled ?? false
@@ -1377,6 +1326,12 @@ final class MacAppState: ObservableObject {
             setAccessibilityPermissionStatus: { [weak self] status in
                 self?.accessibilityPermissionStatus = status
             },
+            setAccessibilityPermissionStaleAfterRebuild: { [weak self] stale in
+                self?.accessibilityPermissionStaleAfterRebuild = stale
+            },
+            setMicrophonePermissionStaleAfterRebuild: { [weak self] stale in
+                self?.microphonePermissionStaleAfterRebuild = stale
+            },
             registerSelectedHotkey: { [weak self] force in
                 self?.registerSelectedHotkey(force: force)
             },
@@ -1407,29 +1362,31 @@ final class MacAppState: ObservableObject {
         self.sessionEntryController = SessionEntryController(
             dictationRuntime: dictationRuntime,
             currentStartOptions: { [weak self] in
-                self?.currentStartOptions() ?? DictationStartOptions(
-                    mode: .finalize,
-                    language: .german,
-                    translationOutput: .original,
-                    performance: .auto,
-                    selectedVoiceProviderID: LocalVoiceModelCatalog.defaultProviderID,
-                    selectedVoiceModelID: LocalVoiceModelCatalog.defaultModelID,
-                    liveRewriteScope: .currentSentence,
-                    snippetRules: [],
-                    finalResultDeliveryMode: .insert,
-                    clipboardFallbackWhenNoTarget: false,
-                    simulateKeypresses: false,
-                    restoreClipboardAfterPaste: false,
-                    autoSendAfterPaste: false,
-                    muteMusicWhileDictating: false,
-                    asrInitialPrompt: nil,
-                    dictionaryTerms: [],
-                    liveContextText: nil,
-                    finalContextText: nil,
-                    aiProcessing: AIProcessingConfiguration(enabled: false, selectedModelID: nil),
-                    audioProcessing: AudioProcessingConfiguration(),
-                    soundFeedback: SoundFeedbackConfiguration()
-                )
+                self?.currentStartOptions()
+                    ?? DictationStartOptions(
+                        mode: .finalize,
+                        language: .german,
+                        translationOutput: .original,
+                        performance: .auto,
+                        selectedVoiceProviderID: LocalVoiceModelCatalog.defaultProviderID,
+                        selectedVoiceModelID: LocalVoiceModelCatalog.defaultModelID,
+                        liveRewriteScope: .currentSentence,
+                        snippetRules: [],
+                        finalResultDeliveryMode: .insert,
+                        clipboardFallbackWhenNoTarget: false,
+                        simulateKeypresses: false,
+                        restoreClipboardAfterPaste: false,
+                        autoSendAfterPaste: false,
+                        muteMusicWhileDictating: false,
+                        asrInitialPrompt: nil,
+                        dictionaryTerms: [],
+                        liveContextText: nil,
+                        finalContextText: nil,
+                        aiProcessing: AIProcessingConfiguration(
+                            enabled: false, selectedModelID: nil),
+                        audioProcessing: AudioProcessingConfiguration(),
+                        soundFeedback: SoundFeedbackConfiguration()
+                    )
             },
             refreshPermissionStates: { [weak self] in
                 self?.refreshPermissionStates()
@@ -1492,7 +1449,8 @@ final class MacAppState: ObservableObject {
                 self?.snippetRules = rules
             },
             currentSelectedLanguageLocaleIdentifier: { [weak self] in
-                self?.selectedLanguage.locale.identifier ?? DictationLanguage.german.locale.identifier
+                self?.selectedLanguage.locale.identifier
+                    ?? DictationLanguage.german.locale.identifier
             },
             appendDiagnostic: { [weak self] line in
                 self?.appendDiagnostic(line)
@@ -1644,7 +1602,8 @@ final class MacAppState: ObservableObject {
                     }
                 },
                 handlePermissionInteractionFinished: { [weak self] in
-                    self?.permissionCoordinator.refreshPermissionStatesAfterUserFacingPermissionStep()
+                    self?.permissionCoordinator
+                        .refreshPermissionStatesAfterUserFacingPermissionStep()
                 }
             )
         )
@@ -1672,10 +1631,10 @@ final class MacAppState: ObservableObject {
         updateCapabilitySummary()
         rebuildAIProcessingStack(reason: "initial-load")
         updateUpdaterState()
-        loadExistingLicense()
         dictationRuntime.setVoiceModelActiveDuration(voiceModelActiveDuration)
         dictationRuntime.prepareRuntime()
         refreshPermissionStates()
+        permissionCoordinator.beginLaunchPermissionStabilization()
         if !skipStartupSystemHooks {
             DispatchQueue.main.async { [weak self] in
                 self?.refreshPermissionStates()
@@ -1733,6 +1692,14 @@ final class MacAppState: ObservableObject {
 
     func openAccessibilitySettings() {
         permissionCoordinator.openAccessibilitySettings()
+    }
+
+    func rebindAccessibilityPermissions() {
+        permissionCoordinator.rebindAccessibilityPermissions()
+    }
+
+    func rebindMicrophonePermissions() {
+        permissionCoordinator.rebindMicrophonePermissions()
     }
 
     func addSnippet(trigger: String, replacement: String) {
@@ -1795,51 +1762,6 @@ final class MacAppState: ObservableObject {
         }
     }
 
-    func activateLicense() {
-        let snapshot = licenseController.activate(licenseKey: licenseInput)
-        applyLicenseSnapshot(snapshot, clearInput: snapshot.isValid)
-
-        if case .active(let tier) = snapshot.status {
-            appendAudit("license.activate tier=\(tier)")
-        }
-    }
-
-    func deactivateLicense() {
-        licenseController.deactivate()
-        applyLicenseSnapshot(
-            LicenseStatusSnapshot(status: .notSet, maskedKey: nil), clearInput: true)
-        appendAudit("license.deactivate")
-    }
-
-    private func loadExistingLicense() {
-        let snapshot = licenseController.loadExistingStatus()
-        applyLicenseSnapshot(snapshot, clearInput: true)
-    }
-
-    private func applyLicenseSnapshot(_ snapshot: LicenseStatusSnapshot, clearInput: Bool) {
-        if clearInput {
-            licenseInput = ""
-        }
-
-        storedLicenseSummary = snapshot.maskedKey
-        licenseValid = snapshot.isValid
-
-        switch snapshot.status {
-        case .notConfigured:
-            licenseStatusText = "Lizenzprüfung nicht konfiguriert"
-            licensePresentationState = .notConfigured
-        case .notSet:
-            licenseStatusText = "Keine Lizenz gesetzt"
-            licensePresentationState = .notSet
-        case .active(let tier):
-            licenseStatusText = "Aktiv: \(tier)"
-            licensePresentationState = .active(tier: tier)
-        case .invalid(let reason):
-            licenseStatusText = "Ungültig: \(reason)"
-            licensePresentationState = .invalid(reason: reason)
-        }
-    }
-
     private func pruneHistoryIfNeeded() {
         transcriptHistoryController.pruneHistoryIfNeeded()
     }
@@ -1897,10 +1819,12 @@ final class MacAppState: ObservableObject {
     }
 
     private func sessionConfigurationInput() -> SessionConfigurationInput {
-        let liveContextText = contextAwarenessMode.appliesToLive
+        let liveContextText =
+            contextAwarenessMode.appliesToLive
             ? bestEffortFocusedContextText(maxLength: 220)
             : nil
-        let finalContextText = contextAwarenessMode.appliesToFinal
+        let finalContextText =
+            contextAwarenessMode.appliesToFinal
             ? bestEffortFocusedContextText(maxLength: 600)
             : nil
 

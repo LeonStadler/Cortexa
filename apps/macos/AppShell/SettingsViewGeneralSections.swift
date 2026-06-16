@@ -236,7 +236,7 @@ extension SettingsView {
         if matches(["support", "spenden", "donate", "website", "webseite"]) {
             Text(
                 text(
-                    "WisprLocal ist proprietäre Software und wird nicht als Open Source veröffentlicht. Support, Lizenzierung und Hintergrund zum Projekt findest du auf der Website.",
+                    "WisprLocal ist proprietäre Software und wird nicht als Open Source veröffentlicht. Support, Nutzung und Hintergrund zum Projekt findest du auf der Website.",
                     "WisprLocal is proprietary software and is not distributed as open source. Visit the website for support, licensing, and project information."
                 )
             )
@@ -258,13 +258,41 @@ extension SettingsView {
         ]) {
             Text(
                 text(
-                    "Freigaben kannst du hier prüfen. „Freigabe anfragen“ öffnet den Systemdialog; „Öffnen“ führt zu den Datenschutz-Einstellungen. Direkt nach einem App-Neustart kann der Status einmal kurz hinterherhängen – dann erneut öffnen oder kurz warten. Falls Bedienungshilfen nach einem Rebuild weiter blockieren, in den Systemeinstellungen WisprLocalMac einmal entfernen und neu hinzufügen.",
-                    "You can verify access here. “Request access” shows the system prompt; “Open” goes to Privacy settings. Right after launching the app, the status row can briefly lag—open again or wait a moment."
+                    "Freigaben kannst du hier prüfen. „Freigabe anfragen“ öffnet den Systemdialog; „Öffnen“ führt zu den Datenschutz-Einstellungen. Direkt nach einem App-Neustart kann der Status kurz hinterherhängen — die App liest ihn mehrfach neu ein. Nach einem Rebuild kann macOS in den Systemeinstellungen noch „an“ zeigen, obwohl dieser Build nicht verknüpft ist — dann erscheint unten ein Hinweis zum Neu-Verknüpfen.",
+                    "You can verify access here. “Request access” shows the system prompt; “Open” goes to Privacy settings. After a restart the status can lag briefly—the app re-reads it several times. After a rebuild, macOS may still show “on” in System Settings while this build is not linked—use the rebind hint below when it appears."
                 )
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+
+            if appState.microphonePermissionStaleAfterRebuild {
+                PermissionRecoveryBanner(
+                    title: text(
+                        "Mikrofon: älterer Build in Systemeinstellungen",
+                        "Microphone: stale build entry"),
+                    message: text(
+                        "Die Systemeinstellungen können noch eine alte Freigabe zeigen. WisprLocalMac unter Datenschutz → Mikrofon entfernen, App neu starten und „Freigabe anfragen“ erneut nutzen.",
+                        "System Settings may still list an old grant. Remove WisprLocalMac under Privacy → Microphone, restart the app, then use “Request access” again."
+                    ),
+                    actionTitle: text("Neu verknüpfen", "Rebind"),
+                    action: { appState.rebindMicrophonePermissions() }
+                )
+            }
+
+            if appState.accessibilityPermissionStaleAfterRebuild {
+                PermissionRecoveryBanner(
+                    title: text(
+                        "Bedienungshilfen: Rebuild nicht verknüpft",
+                        "Accessibility: rebuild not linked"),
+                    message: text(
+                        "Typisch nach `./scripts/smoke_test_macos_app.sh`: Systemeinstellungen zeigen WisprLocalMac aktiv, macOS vertraut diesem Binary aber nicht. Eintrag in Bedienungshilfen entfernen (−), dann „Freigabe anfragen“ und WisprLocalMac neu aktivieren.",
+                        "Common after `./scripts/smoke_test_macos_app.sh`: System Settings may show WisprLocalMac as enabled while macOS does not trust this binary. Remove the Accessibility entry (−), then “Request access” and enable WisprLocalMac again."
+                    ),
+                    actionTitle: text("Neu verknüpfen", "Rebind"),
+                    action: { appState.rebindAccessibilityPermissions() }
+                )
+            }
 
             PermissionStatusRow(
                 title: text("Mikrofon", "Microphone"),
@@ -274,7 +302,8 @@ extension SettingsView {
                     ? text("Freigabe anfragen", "Request access")
                     : text("Öffnen", "Open"),
                 actionHint: appState.microphonePermissionStatus == .notDetermined
-                    ? text("Systemdialog zur Mikrofonfreigabe", "System prompt for microphone access")
+                    ? text(
+                        "Systemdialog zur Mikrofonfreigabe", "System prompt for microphone access")
                     : text("Mikrofon-Einstellungen öffnen", "Open microphone settings"),
                 action: {
                     if appState.microphonePermissionStatus == .notDetermined {
