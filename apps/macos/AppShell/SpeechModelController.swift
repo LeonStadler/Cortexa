@@ -161,8 +161,12 @@ final class SpeechModelController {
             )
             return
         }
-        setSelectedVoiceProviderID(descriptor.providerID)
-        setSelectedVoiceModelID(descriptor.id)
+        if currentSelectedVoiceProviderID() != descriptor.providerID {
+            setSelectedVoiceProviderID(descriptor.providerID)
+        }
+        if currentSelectedVoiceModelID() != descriptor.id {
+            setSelectedVoiceModelID(descriptor.id)
+        }
     }
 
     func assignSelectedVoiceModelToCurrentLanguage() {
@@ -238,33 +242,47 @@ final class SpeechModelController {
         }
 
         if !currentVoiceProviders().contains(where: { $0.id == currentSelectedVoiceProviderID() }) {
-            setSelectedVoiceProviderID(LocalVoiceModelCatalog.defaultProviderID)
+            if currentSelectedVoiceProviderID() != LocalVoiceModelCatalog.defaultProviderID {
+                setSelectedVoiceProviderID(LocalVoiceModelCatalog.defaultProviderID)
+            }
         }
 
         if let selectedVoiceModel,
             selectedVoiceModel.providerID != currentSelectedVoiceProviderID()
         {
-            setSelectedVoiceModelID(
+            let fallbackModelID =
                 currentVoiceModels().first(where: {
                     $0.providerID == currentSelectedVoiceProviderID()
                 })?.id
-                    ?? LocalVoiceModelCatalog.defaultModelID
-            )
+                ?? LocalVoiceModelCatalog.defaultModelID
+            if currentSelectedVoiceModelID() != fallbackModelID {
+                setSelectedVoiceModelID(fallbackModelID)
+            }
         }
 
         if selectedVoiceModel == nil || selectedVoiceModel.map(isVoiceModelInstalled) == false {
             if let defaultModel = currentVoiceModels().first(where: {
                 $0.id == LocalVoiceModelCatalog.defaultModelID
             }) {
-                setSelectedVoiceProviderID(defaultModel.providerID)
-                setSelectedVoiceModelID(defaultModel.id)
+                if currentSelectedVoiceProviderID() != defaultModel.providerID {
+                    setSelectedVoiceProviderID(defaultModel.providerID)
+                }
+                if currentSelectedVoiceModelID() != defaultModel.id {
+                    setSelectedVoiceModelID(defaultModel.id)
+                }
             } else if let providerFallback = currentVoiceModels().first(where: {
                 $0.providerID == currentSelectedVoiceProviderID()
             }) {
-                setSelectedVoiceModelID(providerFallback.id)
+                if currentSelectedVoiceModelID() != providerFallback.id {
+                    setSelectedVoiceModelID(providerFallback.id)
+                }
             } else if let anyFallback = currentVoiceModels().first {
-                setSelectedVoiceProviderID(anyFallback.providerID)
-                setSelectedVoiceModelID(anyFallback.id)
+                if currentSelectedVoiceProviderID() != anyFallback.providerID {
+                    setSelectedVoiceProviderID(anyFallback.providerID)
+                }
+                if currentSelectedVoiceModelID() != anyFallback.id {
+                    setSelectedVoiceModelID(anyFallback.id)
+                }
             }
         }
 
