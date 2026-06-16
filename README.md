@@ -1,4 +1,4 @@
-# WisprLocal
+# Cortexa - Local Wisper
 
 Offline-first Diktat und Transkription für **macOS** (Schwerpunkt) und **iOS/iPadOS** (Tastatur-Extension-Workflow). Technische Ziele und Modulgrenzen unten; **vollständige Funktions-/Implementierungsmatrix:** [`docs/features-and-implementation.md`](docs/features-and-implementation.md).
 
