@@ -46,8 +46,8 @@ log "Preparing runtime bundle"
 
 [[ -x "${RUNTIME_DIR}/whisper-cli" ]] || error "Bundled whisper-cli fehlt unter ${RUNTIME_DIR}/whisper-cli"
 [[ -f "${RUNTIME_DIR}/runtime-manifest.json" ]] || error "runtime-manifest.json fehlt unter ${RUNTIME_DIR}"
-MODEL_COUNT=$(find "${RUNTIME_DIR}/models" -maxdepth 1 -type f -name '*.bin' | wc -l | tr -d ' ')
-[[ "${MODEL_COUNT}" -eq 1 ]] || error "Erwartet genau ein gebündeltes Modell in ${RUNTIME_DIR}/models, gefunden: ${MODEL_COUNT}"
+MODEL_COUNT=$(find "${RUNTIME_DIR}/models" -maxdepth 1 -type f -name '*.bin' 2>/dev/null | wc -l | tr -d ' ')
+[[ "${MODEL_COUNT}" -eq 0 ]] || error "Release erwartet keine gebündelten .bin-Modelle in ${RUNTIME_DIR}/models, gefunden: ${MODEL_COUNT}"
 
 log "Regenerating macOS Xcode project with production variables"
 "${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh" --check

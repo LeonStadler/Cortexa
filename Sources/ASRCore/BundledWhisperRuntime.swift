@@ -121,6 +121,7 @@ public enum BundledWhisperRuntimeInstaller {
         resourceSubdirectory: String = "Runtime",
         appName: String = "WisprLocal",
         preserveAdditionalModels: Bool = true,
+        syncModels: Bool = true,
         suppressedBundledModelFileNames: Set<String> = VoiceModelSuppressionStore.shared
             .suppressedFileNames(),
         fileManager: FileManager = .default
@@ -137,7 +138,23 @@ public enum BundledWhisperRuntimeInstaller {
             destinationRuntimeDirectory: nil,
             appName: appName,
             preserveAdditionalModels: preserveAdditionalModels,
+            syncModels: syncModels,
             suppressedBundledModelFileNames: suppressedBundledModelFileNames,
+            fileManager: fileManager
+        )
+    }
+
+    public static func syncRuntimeCLIOnly(
+        bundle: Bundle = .main,
+        resourceSubdirectory: String = "Runtime",
+        appName: String = "WisprLocal",
+        fileManager: FileManager = .default
+    ) throws -> InstalledWhisperRuntime {
+        try installBundledRuntime(
+            bundle: bundle,
+            resourceSubdirectory: resourceSubdirectory,
+            appName: appName,
+            syncModels: false,
             fileManager: fileManager
         )
     }
@@ -147,6 +164,7 @@ public enum BundledWhisperRuntimeInstaller {
         destinationRuntimeDirectory: URL? = nil,
         appName: String = "WisprLocal",
         preserveAdditionalModels: Bool = false,
+        syncModels: Bool = true,
         suppressedBundledModelFileNames: Set<String> = VoiceModelSuppressionStore.shared
             .suppressedFileNames(),
         fileManager: FileManager = .default
@@ -164,10 +182,6 @@ public enum BundledWhisperRuntimeInstaller {
         let modelFiles = try fileManager.contentsOfDirectory(at: sourceModels, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension.lowercased() == "bin" }
 
-        guard !modelFiles.isEmpty else {
-            throw BundledWhisperRuntimeError.noModelsFound(sourceModels)
-        }
-
         let availableModelFileNames = modelFiles
             .map(\.lastPathComponent)
             .sorted()
@@ -177,10 +191,12 @@ public enum BundledWhisperRuntimeInstaller {
             availableModelFileNames: availableModelFileNames,
             sourceModelsDirectory: sourceModels
         )
-        let bundledModelFileNames = bundledModelFileNamesToSync(
-            manifest: manifest,
-            defaultModelFileName: defaultModelFileName
-        )
+        let bundledModelFileNames = syncModels
+            ? bundledModelFileNamesToSync(
+                manifest: manifest,
+                defaultModelFileName: defaultModelFileName
+            )
+            : []
         try validateManifestIntegrity(
             manifest: manifest,
             availableModelFileNames: availableModelFileNames,
@@ -195,12 +211,13 @@ public enum BundledWhisperRuntimeInstaller {
         let destinationCLI = destinationRoot.appendingPathComponent(cliName)
         let destinationManifest = destinationRoot.appendingPathComponent(manifestFileName)
 
+        let effectivePreserveAdditionalModels = preserveAdditionalModels || !syncModels
         try fileManager.createDirectory(at: destinationModels, withIntermediateDirectories: true)
         try pruneStaleRuntimeAssets(
             destinationRoot: destinationRoot,
             destinationModels: destinationModels,
             expectedModelFileNames: Set(bundledModelFileNames),
-            preserveAdditionalModels: preserveAdditionalModels,
+            preserveAdditionalModels: effectivePreserveAdditionalModels,
             fileManager: fileManager
         )
 
@@ -328,7 +345,10 @@ public enum BundledWhisperRuntimeInstaller {
         manifest: BundledWhisperRuntimeManifest?,
         defaultModelFileName: String
     ) -> [String] {
-        if let declaredModelFileNames = manifest?.modelFileNames, !declaredModelFileNames.isEmpty {
+        if let declaredModelFileNames = manifest?.modelFileNames {
+            if declaredModelFileNames.isEmpty {
+                return []
+            }
             return declaredModelFileNames.sorted()
         }
         return [defaultModelFileName]
@@ -340,13 +360,22 @@ public enum BundledWhisperRuntimeInstaller {
         sourceModelsDirectory: URL
     ) throws -> String {
         if let manifest {
-            guard availableModelFileNames.contains(manifest.defaultModelFileName) else {
-                throw BundledWhisperRuntimeError.manifestDefaultModelMissing(manifest.defaultModelFileName, sourceModelsDirectory)
+            if availableModelFileNames.contains(manifest.defaultModelFileName) {
+                return manifest.defaultModelFileName
             }
-            return manifest.defaultModelFileName
+            if availableModelFileNames.isEmpty,
+                manifest.modelFileNames?.isEmpty ?? false
+            {
+                return manifest.defaultModelFileName
+            }
+            throw BundledWhisperRuntimeError.manifestDefaultModelMissing(
+                manifest.defaultModelFileName, sourceModelsDirectory)
         }
 
-        return availableModelFileNames[0]
+        guard let firstAvailable = availableModelFileNames.first else {
+            throw BundledWhisperRuntimeError.noModelsFound(sourceModelsDirectory)
+        }
+        return firstAvailable
     }
 
     private static func validateManifestIntegrity(
@@ -364,8 +393,13 @@ public enum BundledWhisperRuntimeInstaller {
         if let declaredModelFileNames = manifest.modelFileNames {
             let declared = declaredModelFileNames.sorted()
             let available = availableModelFileNames.sorted()
-            guard declared == available else {
-                throw BundledWhisperRuntimeError.manifestModelFileNamesMismatch(declared, available, sourceModelsDirectory)
+            if declared.isEmpty, available.isEmpty {
+                // Release bundles ship CLI + manifest without bundled .bin files.
+            } else {
+                guard declared == available else {
+                    throw BundledWhisperRuntimeError.manifestModelFileNamesMismatch(
+                        declared, available, sourceModelsDirectory)
+                }
             }
         }
 

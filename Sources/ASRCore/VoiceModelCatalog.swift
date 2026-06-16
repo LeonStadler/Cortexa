@@ -28,6 +28,7 @@ public enum VoiceModelLanguageScope: String, Codable, Equatable, Sendable {
 public enum VoiceModelInstallState: String, Codable, Equatable, Sendable {
     case bundled
     case downloadable
+    case requiredFirstRun
     case unavailable
 }
 
@@ -41,6 +42,7 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
     public let speedScore: Int
     public let accuracyScore: Int
     public let sizeLabel: String
+    public let expectedDownloadBytes: Int64?
     public let installState: VoiceModelInstallState
     public let localFileName: String?
     public let downloadIdentifier: String?
@@ -55,6 +57,7 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
         speedScore: Int,
         accuracyScore: Int,
         sizeLabel: String,
+        expectedDownloadBytes: Int64? = nil,
         installState: VoiceModelInstallState,
         localFileName: String? = nil,
         downloadIdentifier: String? = nil
@@ -68,6 +71,7 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
         self.speedScore = speedScore
         self.accuracyScore = accuracyScore
         self.sizeLabel = sizeLabel
+        self.expectedDownloadBytes = expectedDownloadBytes
         self.installState = installState
         self.localFileName = localFileName
         self.downloadIdentifier = downloadIdentifier
@@ -97,6 +101,16 @@ public struct VoiceLanguageOverride: Codable, Equatable, Sendable {
 public enum LocalVoiceModelCatalog {
     public static let defaultProviderID = VoiceProviderID.whisperCpp.rawValue
     public static let defaultModelID = "whisper.standard"
+    public static let defaultModelFileName = "ggml-base.bin"
+
+    /// Hugging Face `ggml-base.bin` (2024-03 resolve/main).
+    public static let defaultModelExpectedBytes: Int64 = 147_964_096
+    /// Hugging Face `ggml-small.bin`.
+    public static let proModelExpectedBytes: Int64 = 487_601_958
+
+    public static func formattedDownloadSize(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
 
     public static func availableProviders(parakeetBinaryURL: URL? = nil)
         -> [VoiceProviderDescriptor]
@@ -155,25 +169,34 @@ public enum LocalVoiceModelCatalog {
         VoiceModelDescriptor(
             id: "whisper.pro", providerID: VoiceProviderID.whisperCpp.rawValue, displayName: "Pro",
             languageCode: nil, languageScope: .all, supportsTranslationToEnglish: true,
-            speedScore: 7, accuracyScore: 8, sizeLabel: "1.5 GB", installState: .downloadable,
+            speedScore: 7, accuracyScore: 8,
+            sizeLabel: formattedDownloadSize(proModelExpectedBytes),
+            expectedDownloadBytes: proModelExpectedBytes,
+            installState: .downloadable,
             localFileName: "ggml-small.bin", downloadIdentifier: "small"),
         VoiceModelDescriptor(
             id: "whisper.pro.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Pro (English)", languageCode: "en", languageScope: .english,
             supportsTranslationToEnglish: false, speedScore: 7, accuracyScore: 8,
-            sizeLabel: "1.5 GB", installState: .downloadable, localFileName: "ggml-small.en.bin",
+            sizeLabel: formattedDownloadSize(proModelExpectedBytes),
+            expectedDownloadBytes: proModelExpectedBytes,
+            installState: .downloadable, localFileName: "ggml-small.en.bin",
             downloadIdentifier: "small.en"),
         VoiceModelDescriptor(
             id: defaultModelID, providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Standard", languageCode: nil, languageScope: .all,
             supportsTranslationToEnglish: true, speedScore: 8, accuracyScore: 5,
-            sizeLabel: "500 MB", installState: .bundled, localFileName: "ggml-base.bin",
+            sizeLabel: formattedDownloadSize(defaultModelExpectedBytes),
+            expectedDownloadBytes: defaultModelExpectedBytes,
+            installState: .requiredFirstRun, localFileName: defaultModelFileName,
             downloadIdentifier: "base"),
         VoiceModelDescriptor(
             id: "whisper.standard.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Standard (English)", languageCode: "en", languageScope: .english,
             supportsTranslationToEnglish: false, speedScore: 8, accuracyScore: 5,
-            sizeLabel: "500 MB", installState: .downloadable, localFileName: "ggml-base.en.bin",
+            sizeLabel: formattedDownloadSize(defaultModelExpectedBytes),
+            expectedDownloadBytes: defaultModelExpectedBytes,
+            installState: .downloadable, localFileName: "ggml-base.en.bin",
             downloadIdentifier: "base.en"),
         VoiceModelDescriptor(
             id: "whisper.nano", providerID: VoiceProviderID.whisperCpp.rawValue,

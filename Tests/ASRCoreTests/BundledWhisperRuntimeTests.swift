@@ -293,6 +293,40 @@ final class BundledWhisperRuntimeTests: XCTestCase {
         }
     }
 
+    func testInstallRuntimeCLIOnlySyncsCLIWithoutBundledModels() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_cli_only_test_\(UUID().uuidString)")
+        let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
+        let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
+        let destinationRuntime = root.appendingPathComponent("destination/Runtime", isDirectory: true)
+        let destinationModels = destinationRuntime.appendingPathComponent("models", isDirectory: true)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: sourceModels, withIntermediateDirectories: true)
+        try fm.createDirectory(at: destinationModels, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho test\n".utf8).write(to: sourceRuntime.appendingPathComponent("whisper-cli"))
+
+        let manifest = BundledWhisperRuntimeManifest(
+            defaultModelFileName: "ggml-base.bin",
+            modelFileNames: []
+        )
+        try JSONEncoder().encode(manifest).write(to: sourceRuntime.appendingPathComponent("runtime-manifest.json"))
+        try Data([0x99]).write(to: destinationModels.appendingPathComponent("ggml-base.bin"))
+
+        let runtime = try BundledWhisperRuntimeInstaller.installRuntime(
+            from: sourceRuntime,
+            destinationRuntimeDirectory: destinationRuntime,
+            appName: "WisprLocalTest",
+            syncModels: false
+        )
+
+        XCTAssertTrue(fm.fileExists(atPath: runtime.cliURL.path))
+        XCTAssertEqual(runtime.defaultModelFileName, "ggml-base.bin")
+        XCTAssertEqual(runtime.availableModelFileNames, ["ggml-base.bin"])
+        XCTAssertFalse(fm.fileExists(atPath: sourceModels.appendingPathComponent("ggml-base.bin").path))
+    }
+
     func testInstallRuntimePrunesStaleDestinationModels() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("runtime_prune_test_\(UUID().uuidString)")

@@ -36,15 +36,20 @@ public actor VoiceModelInstaller {
     }
 
     public func installedRuntime(appName: String = "WisprLocal") throws -> InstalledWhisperRuntime {
+        try syncRuntimeCLI(appName: appName)
+    }
+
+    public func syncRuntimeCLI(appName: String = "WisprLocal") throws -> InstalledWhisperRuntime {
         try BundledWhisperRuntimeInstaller.installBundledRuntime(
             appName: appName,
+            syncModels: false,
             suppressedBundledModelFileNames: suppressionStore.suppressedFileNames()
         )
     }
 
     public func installedWhisperModelFileNames(appName: String = "WisprLocal") throws -> Set<String>
     {
-        let runtime = try installedRuntime(appName: appName)
+        let runtime = try syncRuntimeCLI(appName: appName)
         return Set(runtime.availableModelFileNames)
     }
 
@@ -91,7 +96,11 @@ public actor VoiceModelInstaller {
 
         let destinationURL = tempDirectory.appendingPathComponent(localFileName)
         let downloadClient = VoiceModelDownloadClient(fileManager: fileManager)
-        try await downloadClient.download(from: downloadURL, to: destinationURL) { progress in
+        try await downloadClient.download(
+            from: downloadURL,
+            to: destinationURL,
+            expectedDownloadBytes: descriptor.expectedDownloadBytes
+        ) { progress in
             progressHandler?(progress)
         }
 
@@ -132,7 +141,7 @@ public actor VoiceModelInstaller {
             try fileManager.removeItem(at: targetURL)
         }
 
-        if descriptor.installState != .bundled {
+        if descriptor.installState != .bundled && descriptor.installState != .requiredFirstRun {
             suppressionStore.suppress(localFileName)
         }
 

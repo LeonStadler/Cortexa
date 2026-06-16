@@ -77,8 +77,8 @@ require_command pgrep
 mkdir -p "${ROOT_DIR}/artifacts/mac"
 mkdir -p "${SIGNING_ARTIFACT_DIR}"
 
-log "Preparing runtime bundle"
-"${ROOT_DIR}/scripts/prepare_runtime_bundle.sh"
+log "Preparing runtime bundle (dev/smoke with default model)"
+"${ROOT_DIR}/scripts/prepare_runtime_bundle.sh" --include-default-model
 
 log "Generating macOS Xcode project"
 "${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh" --check
