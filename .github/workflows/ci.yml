@@ -40,7 +40,6 @@ jobs:
     runs-on: macos-latest
     needs: project-validation
     env:
-      WISPR_LICENSE_PUBLIC_KEY_BASE64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       SPARKLE_FEED_URL: https://example.com/appcast.xml
       SPARKLE_PUBLIC_ED_KEY: test-public-ed-key
     steps:
