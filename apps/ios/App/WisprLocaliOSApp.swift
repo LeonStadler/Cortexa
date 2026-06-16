@@ -44,7 +44,7 @@ struct IOSHomeView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    Text("Host app stores shared snippets, transcript history and keyboard handoff data in protected App Group files. License keys stay in Keychain.")
+                    Text("Host app stores shared snippets, transcript history and keyboard handoff data in protected App Group files.")
                         .font(.footnote)
                 }
 
@@ -142,36 +142,6 @@ struct IOSHomeView: View {
                             }
                         }
                     }
-                }
-
-                Section("License") {
-                    SecureField("License key", text: $appState.licenseInput)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    if let storedLicenseSummary = appState.storedLicenseSummary {
-                        Text("Stored key: \(storedLicenseSummary)")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack {
-                        Button("Activate") {
-                            appState.activateLicense()
-                        }
-                        .disabled(appState.licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button("Deactivate") {
-                            appState.deactivateLicense()
-                        }
-                    }
-
-                    Text("Activating a new key replaces the currently stored one.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Text(appState.licenseStatusText)
-                        .font(.footnote)
-                        .foregroundStyle(appState.licenseValid ? .green : .secondary)
                 }
 
                 Section("Diagnostics") {

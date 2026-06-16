@@ -1,5 +1,4 @@
 import Foundation
-import LicenseCore
 import SnippetCore
 import SwiftUI
 
@@ -13,35 +12,25 @@ final class IOSAppState: ObservableObject {
         }
     }
     @Published var lastDiagnostics: String = "Ready"
-    @Published var licenseInput: String = ""
-    @Published var storedLicenseSummary: String?
-    @Published var licenseStatusText: String = "No license"
-    @Published var licenseValid: Bool = false
 
     private static let defaultLanguage = "de"
 
     private let storage = IOSSharedStorage()
     private let sharedDefaults: UserDefaults?
-    private let licenseStore = LicenseStore(
-        service: "com.wisprlocal.ios.license", account: "primary")
-    private let licenseVerifier: LicenseVerifier?
 
     init() {
         self.sharedDefaults = try? storage.sharedDefaults()
         self.selectedLanguageCode =
             self.sharedDefaults?.string(forKey: SharedDefaultsKeys.languageCode)
             ?? Self.defaultLanguage
-        self.licenseVerifier = try? LicenseVerifier()
 
         do {
             try storage.ensureSharedContainer()
-            try storage.clearLicenseCache()
         } catch {
             self.lastDiagnostics = "Shared App Group unavailable: \(error.localizedDescription)"
         }
 
         reload()
-        loadExistingLicense()
     }
 
     func reload() {
@@ -153,57 +142,6 @@ final class IOSAppState: ObservableObject {
         persistTranscriptHistory()
     }
 
-    func activateLicense() {
-        if EmbeddedLicenseKeys.isPlaceholderConfigured {
-            licenseStatusText = "Development build: configure real public key first."
-            licenseValid = false
-            return
-        }
-
-        let key = licenseInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else {
-            licenseStatusText = "License key is empty"
-            licenseValid = false
-            return
-        }
-
-        guard let licenseVerifier else {
-            licenseStatusText = "License verifier unavailable"
-            licenseValid = false
-            return
-        }
-
-        switch licenseVerifier.verify(key) {
-        case .valid(let payload):
-            do {
-                try licenseStore.saveLicenseKey(key)
-                try storage.clearLicenseCache()
-                licenseValid = true
-                licenseStatusText = "Active: \(payload.productTier)"
-                storedLicenseSummary = Self.maskedLicense(key)
-                licenseInput = ""
-                try? storage.appendAudit("license.activate tier=\(payload.productTier)")
-            } catch {
-                licenseValid = false
-                licenseStatusText = "Could not store license"
-            }
-
-        case .invalid(let reason):
-            licenseValid = false
-            licenseStatusText = "Invalid: \(reason.localizedDescription)"
-        }
-    }
-
-    func deactivateLicense() {
-        licenseStore.removeLicenseKey()
-        licenseValid = false
-        licenseStatusText = "No license"
-        storedLicenseSummary = nil
-        licenseInput = ""
-        try? storage.clearLicenseCache()
-        try? storage.appendAudit("license.deactivate")
-    }
-
     private func persistSnippets() {
         do {
             try storage.saveSnippets(snippetRules)
@@ -220,44 +158,6 @@ final class IOSAppState: ObservableObject {
             writeDiagnostic("Transcript history saved: \(transcriptHistory.count)")
         } catch {
             writeDiagnostic("Transcript history save failed: \(error.localizedDescription)")
-        }
-    }
-
-    private func loadExistingLicense() {
-        if EmbeddedLicenseKeys.isPlaceholderConfigured {
-            licenseStatusText = "Development build: placeholder public key configured."
-            licenseValid = false
-            return
-        }
-
-        do {
-            if let key = try licenseStore.loadLicenseKey() {
-                try? storage.clearLicenseCache()
-                validateLoadedLicense(key)
-                return
-            }
-        } catch {
-            licenseStatusText = "License load failed"
-            licenseValid = false
-        }
-    }
-
-    private func validateLoadedLicense(_ key: String) {
-        guard let licenseVerifier else {
-            licenseStatusText = "License verifier unavailable"
-            licenseValid = false
-            return
-        }
-
-        switch licenseVerifier.verify(key) {
-        case .valid(let payload):
-            licenseStatusText = "Active: \(payload.productTier)"
-            licenseValid = true
-            storedLicenseSummary = Self.maskedLicense(key)
-        case .invalid(let reason):
-            licenseStatusText = "Invalid: \(reason.localizedDescription)"
-            licenseValid = false
-            storedLicenseSummary = Self.maskedLicense(key)
         }
     }
 
@@ -280,12 +180,4 @@ final class IOSAppState: ObservableObject {
         }
     }
 
-    private static func maskedLicense(_ key: String) -> String {
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count > 8 else {
-            return String(repeating: "•", count: max(trimmed.count, 4))
-        }
-
-        return "\(trimmed.prefix(4))••••\(trimmed.suffix(4))"
-    }
 }

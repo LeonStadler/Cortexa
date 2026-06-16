@@ -2,11 +2,23 @@
 
 ## Features
 
+- 2026-05-19: Lokale Lizenzschlüssel-Aktivierung aus App-Shells und Release-Pfad entfernt.
+  - Dateien: `apps/macos/AppShell/MacAppConfiguration.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/DiagnosticsController.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsFormPages.swift`, `apps/macos/AppShell/SettingsViewAdvancedSections.swift`, `apps/macos/AppShell/SettingsViewSearchSections.swift`, `apps/macos/AppShell/AppShellStoragePaths.swift`, `apps/macos/WisprLocalMac/project.yml`, `apps/macos/WisprLocalMac/WisprLocalMac-Info.plist`, `apps/ios/App/IOSAppState.swift`, `apps/ios/App/WisprLocaliOSApp.swift`, `apps/ios/App/IOSSharedStorage.swift`, `apps/ios/WisprLocaliOS/project.yml`, `scripts/preflight_macos_release.sh`, `scripts/generate_macos_xcodeproj.sh`, `README.md`, `apps/macos/README.md`, `docs/licensing.md`, `docs/distribution.md`, `docs/features-and-implementation.md`, `docs/system-design.md`, `docs/README.md`, `docs/macos-release-checklist.md`, `docs/ios-keyboard-plan.md`, `Tests/DocsContractTests/DocsContractTests.swift`, `Tests/AppShellSupportTests/DiagnosticsControllerTests.swift`, `Tests/AppShellSupportTests/MacAppStateLifecycleAndContextFacadeTests.swift`, `VERSION`
+  - Funktionalität: macOS und iOS benötigen keine lokale Lizenzschlüssel-Aktivierung mehr. Die Lizenz-UI, AppState-Verkabelung, Diagnoseausgabe, Info.plist-Keys und Release-Preflight-Pflicht für `WISPR_LICENSE_PUBLIC_KEY_BASE64` wurden entfernt; Shipping benötigt nur noch die Sparkle-Update-Konfiguration (`SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`).
+
 - 2026-04-14: Funktionsreichen macOS-Settings-/Runtime-Stand für Speech, AI und Provider-Management wiederhergestellt.
   - Dateien: `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/SettingsTab.swift`, `apps/macos/AppShell/SettingsFormPages.swift`, `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/AIProviderController.swift`, `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/SessionEntryController.swift`, `apps/macos/AppShell/MenuBarContentView.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/WisprLocalMac/project.yml`
   - Funktionalität: Die umfangreichen Speech-/AI-Einstellungen sind wieder aktiv (Provider-, Modell- und Formatierungssteuerung inkl. Kontextbewusstsein und Dictionary-Workflows). Zusätzlich wurden die zugehörigen AppShell-Controller und Settings-Komponenten als konsistentes Paket zurückgeführt, damit alle früheren UI- und State-Pfade wieder verfügbar sind.
 
 ## Fixes
+
+- 2026-04-20: Menüleisten-AI-Steuerung auf direkte Picker zurückgestellt und LLM-Label ohne statischen Selection-Suffix wiederhergestellt.
+  - Dateien: `apps/macos/AppShell/MenuBarContentView.swift`, `VERSION`
+  - Funktionalität: Das kompakte LLM-Menü zeigt wieder nur den Titel `LLM Modell` statt eines festen `LLM Modell: ...`-Labels. Die AI-Optionen für Stil, Anrede und Formatierung sind in der nicht-kompakten Menüleiste wieder direkt als Picker verfügbar (nicht als zusätzliche Untermenüs), sodass die Bedienung dem bisherigen Verhalten entspricht.
+
+- 2026-04-20: Startup-Crash durch rekursive Sprachmodell-Sanitization behoben und AI-Auswahlzustände in Menü/Settings klarer sichtbar gemacht.
+  - Dateien: `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/MenuBarContentView.swift`, `apps/macos/AppShell/SettingsViewAISections.swift`, `VERSION`
+  - Funktionalität: Die Sprachmodell-Sanitization setzt Provider/Modell nur noch bei tatsächlicher Änderung, wodurch rekursive `didSet`-Ketten und der daraus resultierende Stack-Overflow-Crash beim App-Start verhindert werden. Zusätzlich zeigt die Menüleiste `Auto` wieder als Sprachoption an und macht aktive LLM-/AI-Auswahlen sichtbarer; in den Settings werden die aktuell gewählten Werte für Stil, Anrede und Formatierung explizit unter den Pickern angezeigt.
 
 - 2026-04-20: Menüleisten-Auswahl für Sprache/LLM/AI-Details wieder klar sichtbar gemacht und `Auto` als Sprachoption korrekt ergänzt.
   - Dateien: `apps/macos/AppShell/MenuBarContentView.swift`, `VERSION`

@@ -1,71 +1,14 @@
-# Offline Licensing Design
-
-## Goals
-
-- No mandatory phone-home activation.
-- Fully local verification.
-- One-time purchase first.
-- Forward-compatible payload for future subscription mode.
-
-## Key format
-
-`WISPR1-<payload-base32>-<signature-base32>`
-
-- Payload: canonical JSON
-- Signature: Ed25519 over raw payload bytes
-
-## Payload fields
-
-- `productTier` (e.g. basic, pro)
-- `issueDate` (ISO-8601)
-- `expiryDate` (optional; for future time-boxed tokens)
-- `featureFlags` (array)
-
-## Verification flow
-
-1. Parse key format.
-2. Base32 decode payload + signature.
-3. Decode payload JSON.
-4. Verify Ed25519 signature using embedded public key.
-5. Validate expiry if present.
-
-## Storage
-
-- primary: Keychain (`kSecClassGenericPassword`)
-- no plaintext disk fallback for raw license keys
-
-## Anti-tamper (lightweight)
-
-- signed payload verification is the primary protection
-- no kernel hooks, no invasive anti-debug controls
-
-## Operational policy
-
-- License verification is local and synchronous.
-- App remains offline-functional after successful activation.
-- Invalid/expired licenses degrade gracefully with clear user messaging.
-
-## Current app integration (macOS)
-
-- Settings UI exposes:
-  - license key input
-  - activate/deactivate actions
-  - current validation status text
-- successful activation stores the raw key only in Keychain
-- on startup app tries Keychain, validates locally, and removes any legacy plaintext cache file left by older builds
-- the macOS app reads the production public key from the bundle key `WLMLicensePublicKeyBase64`
-- if no production key is injected, the UI stays usable but marks licensing as "not configured"
-
-## Production requirement before release
-
-- inject `WISPR_LICENSE_PUBLIC_KEY_BASE64` before generating the macOS Xcode project so `WLMLicensePublicKeyBase64` is present in the app bundle.
-- without injecting this key, activation UI works technically but real production keys cannot validate.
+# Proprietärer Status
 
 <a id="proprietary"></a>
 
 ## Proprietäre Software und Weitergabe
 
 - **WisprLocal** (Quellcode, Marken, gebündelte Produktassets) ist **keine Open-Source-Software** und ist für eine **öffentliche OSS-Veröffentlichung nicht vorgesehen**.
-- Das **Repository und diese Dokumentation** beschreiben interne Entwicklung, Builds und Releases. Sie begründen **keine** Lizenz zur Weitergabe, Bearbeitung oder Weiterveröffentlichung des Codes durch Dritte.
-- **Drittkomponenten** (z. B. whisper.cpp, Sparkle) unterliegen **eigenen Lizenzen** des jeweiligen Upstream-Projekts; die Pflicht zur Einhaltung dieser Lizenzen bleibt bei der Distribution der Binärprodukte bestehen.
-- Für **Kunden- oder Team-Zugang** gelten separate Vereinbarungen (Support, Lizenzschlüssel, NDA) unabhängig von diesem Repo.
+- Dieses Repository und diese Dokumentation beschreiben interne Entwicklung, Builds und Releases. Sie begründen keine Lizenz zur Weitergabe, Bearbeitung oder Weiterveröffentlichung des Codes durch Dritte.
+- Drittkomponenten, zum Beispiel whisper.cpp und Sparkle, unterliegen eigenen Lizenzen des jeweiligen Upstream-Projekts. Die Pflicht zur Einhaltung dieser Lizenzen bleibt bei der Distribution der Binärprodukte bestehen.
+- Für Kunden- oder Team-Zugang gelten separate Vereinbarungen zu Support, Nutzung und Weitergabe unabhängig von diesem Repo.
+
+## Produktzugang
+
+WisprLocal verwendet aktuell keine lokale Lizenzschlüssel-Aktivierung in den App-Shells. Releases werden über Signatur, Notarisierung und Sparkle-Updates ausgeliefert; Produktzugang und Distribution werden organisatorisch außerhalb der App geregelt.

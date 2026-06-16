@@ -25,7 +25,6 @@ Insertion must happen through system-supported surfaces.
 - `SessionCore`
 - `SnippetCore`
 - `CapabilityCore`
-- `LicenseCore`
 
 ## App Group strategy
 

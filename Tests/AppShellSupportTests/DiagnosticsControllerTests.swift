@@ -65,7 +65,6 @@ final class DiagnosticsControllerTests: XCTestCase {
             currentPermissionSummary: { state.permissionSummary },
             currentCapabilitySummary: { state.capabilitySummary },
             currentUpdaterStatusText: { state.updaterStatusText },
-            currentLicenseStatusText: { state.licenseStatusText },
             currentDebugModeEnabled: { state.debugModeEnabled },
             currentDiagnosticsText: { state.diagnosticsText },
             currentDebugLogText: { state.debugLogText },
@@ -80,7 +79,6 @@ private final class DiagnosticsControllerState {
     var permissionSummary: String
     var capabilitySummary: String
     var updaterStatusText: String
-    var licenseStatusText: String
     var debugModeEnabled: Bool
     var diagnosticsText: String
     var debugLogText: String
@@ -90,7 +88,6 @@ private final class DiagnosticsControllerState {
         permissionSummary: String = "Mic: granted",
         capabilitySummary: String = "Ready",
         updaterStatusText: String = "Idle",
-        licenseStatusText: String = "Inactive",
         debugModeEnabled: Bool = false,
         diagnosticsText: String = "",
         debugLogText: String = ""
@@ -99,7 +96,6 @@ private final class DiagnosticsControllerState {
         self.permissionSummary = permissionSummary
         self.capabilitySummary = capabilitySummary
         self.updaterStatusText = updaterStatusText
-        self.licenseStatusText = licenseStatusText
         self.debugModeEnabled = debugModeEnabled
         self.diagnosticsText = diagnosticsText
         self.debugLogText = debugLogText

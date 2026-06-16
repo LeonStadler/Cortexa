@@ -12,7 +12,6 @@ Stand: 2026-04-04. Diese Seite ordnet **sichtbare Produktfunktionen** den **Swif
 | Snippets                 | `SnippetCore` + UI, Import/Export JSON                    | Geteilt über App Group                                                                                                           |
 | Verlauf                  | Lokal in App Support, Export TXT                          | Nur Host-App, nicht vollständig in der Group exponiert                                                                           |
 | AI-Nachbearbeitung       | `AIProcessingCore` + Keychain für API-Keys                | Abhängig von Host-App-Stand                                                                                                      |
-| Offline-Lizenz           | `LicenseCore` + UI (interner UI-Schalter über Bundle-Key) | Host-App                                                                                                                         |
 | Auto-Update              | Sparkle (wenn Feed + Public Key gesetzt)                  | Wie iOS-Verteilungskanal                                                                                                         |
 
 ## Swift-Pakete (`Package.swift`)
@@ -26,8 +25,6 @@ Stand: 2026-04-04. Diese Seite ordnet **sichtbare Produktfunktionen** den **Swif
 | **TextTargetMac**    | AX-Snapshot, Binding, Insert/Patch                                   | Nur macOS-Target                                                                       |
 | **CapabilityCore**   | Geräteprofil, Presets fast/balanced/accurate/auto                    | Thermik/CPU/RAM → Laufzeitparameter                                                    |
 | **AIProcessingCore** | Apple On-Device + Remote OpenAI-kompatibel                           | Provider-Presets, `/models`, Prompt-Baukasten, Konfiguration                           |
-| **LicenseCore**      | WISPR1-Schlüssel, Ed25519, Keychain                                  | Kein Klartext-Fallback für Rohschlüssel                                                |
-
 Tests: jeweils unter `Tests/<Module>Tests`.
 
 ## macOS AppShell — Funktionsgruppen
@@ -84,10 +81,8 @@ Der Shell-Code ist inzwischen entlang von Runtime-Services, AppState-Controllern
 - Die Bedienungshilfen-Anzeige orientiert sich an derselben AX-Fokusprobe wie das spaetere Einfuegen; dadurch erscheinen keine falschen "aktiv"-Zustaende mehr, wenn der Fokuspfad fuer Textziele von macOS noch mit `apiDisabled` blockiert wird.
 - Deep Links in **Systemeinstellungen**.
 
-### Lizenz, Diagnose, Sicherheit
+### Diagnose und Sicherheit
 
-- Lizenz-UI nur wenn `WLMEnableInternalLicenseUI` gesetzt; Produktions-Key `WLMLicensePublicKeyBase64`.
-- Aktivierung: **Keychain-only secret persistence with legacy cache cleanup** bei alten Builds.
 - **Audit-Log** mit Rotation unter Application Support; optional **debug.log** (Runtime, `whisper-cli` Lifecycle).
 - Finale Zustellung protokolliert jetzt den verwendeten Einfuegepfad (`AX`, Zwischenablage-Fallback oder simulierte Tastatur) sowie Clipboard-Restore und Auto-Send.
 - Export **wispr-diagnostics.txt**; gehärtete Dateirechte für sensible lokale Dateien.
@@ -104,7 +99,7 @@ Siehe [../apps/ios/README.md](../apps/ios/README.md) und [ios-keyboard-plan.md](
 ## Release & Konfiguration (Kurz)
 
 - Version: Datei `VERSION` im Repo-Root; XcodeGen übernimmt Marketing/Build-Version.
-- Release-Umgebung: `WISPR_LICENSE_PUBLIC_KEY_BASE64`, `SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY` (siehe [distribution.md](distribution.md), Root-README).
+- Release-Umgebung: `SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY` (siehe [distribution.md](distribution.md), Root-README).
 
 ## Abhängigkeiten Dritter (Laufzeit)
 

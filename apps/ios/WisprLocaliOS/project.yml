@@ -28,8 +28,6 @@ targets:
         embed: true
       - package: WisprLocalPackage
         product: SnippetCore
-      - package: WisprLocalPackage
-        product: LicenseCore
 
   WisprLocalKeyboard:
     type: app-extension

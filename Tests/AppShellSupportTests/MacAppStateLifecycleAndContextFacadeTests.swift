@@ -7,10 +7,8 @@ import XCTest
 final class MacAppStateLifecycleAndContextFacadeTests: XCTestCase {
     func testUpdaterStateSnapshotReflectsConfiguredUpdater() {
         let configuration = MacAppConfiguration(
-            licensePublicKeyBase64: nil,
             sparkleFeedURL: URL(string: "https://example.com/appcast.xml"),
-            sparklePublicEDKey: "public-ed-key",
-            isLicenseUIEnabledForDevelopment: false
+            sparklePublicEDKey: "public-ed-key"
         )
         let facade = MacAppStateLifecyclePolicyFacade(
             appConfiguration: configuration,

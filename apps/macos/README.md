@@ -83,5 +83,5 @@ Operational notes:
 - Release archives can be created with `scripts/archive_macos_release.sh`.
 - Release exports, DMG creation and Sparkle appcasts are scripted via `scripts/export_macos_release.sh`, `scripts/create_macos_dmg.sh` and `scripts/generate_sparkle_appcast.sh`.
 - Sparkle is embedded into the app rather than run as a separate helper; the appcast/feed points at your release artifacts and the app handles checking and installing updates itself.
-- Optional production configuration is read from the app bundle `Info.plist`: `WLMLicensePublicKeyBase64`, `SUFeedURL`, `SUPublicEDKey`, `WLMEnableInternalLicenseUI`.
-- The license infrastructure is kept in the codebase for future internal development, but the public settings UI hides license and support controls unless `WLMEnableInternalLicenseUI` is explicitly enabled.
+- Optional production update configuration is read from the app bundle `Info.plist`: `SUFeedURL`, `SUPublicEDKey`.
+- The macOS AppShell no longer requires local license-key activation for development or release builds.

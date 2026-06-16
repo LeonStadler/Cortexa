@@ -2,7 +2,7 @@
 
 This folder now contains:
 
-- host app state + SwiftUI shell for shared snippets, local-only transcript history and offline license handling
+- host app state + SwiftUI shell for shared snippets and local-only transcript history
 - keyboard extension with latest approved transcript insertion and quick snippet buttons
 - XcodeGen project definition in `apps/ios/WisprLocaliOS/project.yml`
 - app-group entitlements for host app and extension

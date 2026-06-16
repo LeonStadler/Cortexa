@@ -41,7 +41,5 @@
   <string>$(SPARKLE_FEED_URL)</string>
   <key>SUPublicEDKey</key>
   <string>$(SPARKLE_PUBLIC_ED_KEY)</string>
-  <key>WLMLicensePublicKeyBase64</key>
-  <string>$(WISPR_LICENSE_PUBLIC_KEY_BASE64)</string>
 </dict>
 </plist>

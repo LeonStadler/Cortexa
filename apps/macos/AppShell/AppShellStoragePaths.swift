@@ -63,13 +63,6 @@ enum AppShellStoragePaths {
             .appendingPathComponent("debug.log", isDirectory: false)
     }
 
-    static func legacyLicenseCacheURL(
-        fileManager: FileManager = .default,
-        rootDirectory: URL? = nil
-    ) -> URL {
-        appSupportDirectory(fileManager: fileManager, rootDirectory: rootDirectory)
-            .appendingPathComponent("license-cache.json", isDirectory: false)
-    }
 }
 
 extension MacAppState {

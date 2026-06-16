@@ -314,8 +314,7 @@ struct SettingsView: View {
                 supportSectionTitle: text("Support", "Support"),
                 developerContent: erasedView { aboutDeveloperRows },
                 changelogContent: erasedView { aboutChangelogContent },
-                supportContent: appState.isLicenseUIEnabledForDevelopment
-                    ? erasedView { aboutSupportContent } : nil
+                supportContent: erasedView { aboutSupportContent }
             )
         case .dictionary:
             DictionarySettingsPage(
@@ -342,15 +341,12 @@ struct SettingsView: View {
                 storageLocationSectionTitle: text("Speicherort", "Storage location"),
                 updatesSectionTitle: text("Updates", "Updates"),
                 diagnosticsSectionTitle: text("Diagnose", "Diagnostics"),
-                licenseSectionTitle: text("Lizenz", "License"),
                 overviewContent: erasedView { advancedOverviewContent },
                 appInfoContent: erasedView { aboutAppInfoRows },
                 runtimeContent: erasedView { voiceModelRuntimeContent },
                 storageContent: erasedView { advancedStorageContent },
                 updatesContent: erasedView { updatesContent },
-                diagnosticsContent: erasedView { diagnosticsContent },
-                licenseContent: appState.isLicenseUIEnabledForDevelopment
-                    ? erasedView { licenseContent } : nil
+                diagnosticsContent: erasedView { diagnosticsContent }
             )
         }
     }

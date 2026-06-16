@@ -34,13 +34,8 @@ require_command rg
 require_command plutil
 require_command git
 
-validate_non_empty "WISPR_LICENSE_PUBLIC_KEY_BASE64" "${WISPR_LICENSE_PUBLIC_KEY_BASE64:-}"
 validate_non_empty "SPARKLE_FEED_URL" "${SPARKLE_FEED_URL:-}"
 validate_non_empty "SPARKLE_PUBLIC_ED_KEY" "${SPARKLE_PUBLIC_ED_KEY:-}"
-
-if ! printf '%s' "${WISPR_LICENSE_PUBLIC_KEY_BASE64}" | base64 --decode >/dev/null 2>&1; then
-  error "WISPR_LICENSE_PUBLIC_KEY_BASE64 ist kein gültiges Base64."
-fi
 
 if [[ "${SPARKLE_FEED_URL}" != https://* ]]; then
   error "SPARKLE_FEED_URL muss mit https:// beginnen."
@@ -59,7 +54,6 @@ log "Regenerating macOS Xcode project with production variables"
 plutil -lint "${INFO_PLIST}" >/dev/null
 rg -q 'SUPublicEDKey' "${INFO_PLIST}" || error "SUPublicEDKey fehlt in Info.plist"
 rg -q 'SUFeedURL' "${INFO_PLIST}" || error "SUFeedURL fehlt in Info.plist"
-rg -q 'WLMLicensePublicKeyBase64' "${INFO_PLIST}" || error "WLMLicensePublicKeyBase64 fehlt in Info.plist"
 EXPECTED_VERSION_PATTERN="$(printf '%s' "${APP_VERSION}" | sed 's/\./\\./g')"
 rg -q "MARKETING_VERSION = ${EXPECTED_VERSION_PATTERN};" "${PROJECT_FILE}" || error "MARKETING_VERSION im generierten Projekt entspricht nicht VERSION"
 EXPECTED_BUILD_NUMBER="$(printf '%s' "${APP_VERSION}" | tr -cd '0-9' | sed 's/^0*//')"

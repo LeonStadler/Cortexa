@@ -15,8 +15,7 @@ let package = Package(
         .library(name: "SessionCore", targets: ["SessionCore"]),
         .library(name: "SnippetCore", targets: ["SnippetCore"]),
         .library(name: "TextTargetMac", targets: ["TextTargetMac"]),
-        .library(name: "CapabilityCore", targets: ["CapabilityCore"]),
-        .library(name: "LicenseCore", targets: ["LicenseCore"])
+        .library(name: "CapabilityCore", targets: ["CapabilityCore"])
     ],
     targets: [
         .target(
@@ -43,16 +42,12 @@ let package = Package(
             name: "CapabilityCore"
         ),
         .target(
-            name: "LicenseCore"
-        ),
-        .target(
             name: "AppShellSupport",
             dependencies: [
                 "AIProcessingCore",
                 "ASRCore",
                 "AudioCore",
                 "CapabilityCore",
-                "LicenseCore",
                 "SessionCore",
                 "SnippetCore",
                 "TextTargetMac"
@@ -82,10 +77,6 @@ let package = Package(
         .testTarget(
             name: "SessionCoreTests",
             dependencies: ["SessionCore"]
-        ),
-        .testTarget(
-            name: "LicenseCoreTests",
-            dependencies: ["LicenseCore"]
         ),
         .testTarget(
             name: "CapabilityCoreTests",

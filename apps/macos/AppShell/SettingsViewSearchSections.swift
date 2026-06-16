@@ -82,9 +82,7 @@ extension SettingsView {
                 pageSection(id: "about", title: text("About", "About")) {
                     aboutDeveloperRows
                     aboutChangelogContent
-                    if appState.isLicenseUIEnabledForDevelopment {
-                        aboutSupportContent
-                    }
+                    aboutSupportContent
                 }
             )
         }
@@ -119,9 +117,6 @@ extension SettingsView {
                     voiceModelRuntimeContent
                     updatesContent
                     diagnosticsContent
-                    if appState.isLicenseUIEnabledForDevelopment {
-                        licenseContent
-                    }
                 }
             )
         }

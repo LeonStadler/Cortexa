@@ -320,17 +320,15 @@ struct AdvancedSettingsPage: View {
     let storageLocationSectionTitle: String
     let updatesSectionTitle: String
     let diagnosticsSectionTitle: String
-    let licenseSectionTitle: String
     let overviewContent: AnyView
     let appInfoContent: AnyView
     let runtimeContent: AnyView
     let storageContent: AnyView
     let updatesContent: AnyView
     let diagnosticsContent: AnyView
-    let licenseContent: AnyView?
 
     private var sections: [SettingsPageSection] {
-        var sections = [
+        [
             SettingsPageSection(id: "overview", title: nil, content: overviewContent),
             SettingsPageSection(id: "app", title: appSectionTitle, content: appInfoContent),
             SettingsPageSection(
@@ -350,12 +348,6 @@ struct AdvancedSettingsPage: View {
                 content: diagnosticsContent
             ),
         ]
-        if let licenseContent {
-            sections.append(
-                SettingsPageSection(id: "license", title: licenseSectionTitle, content: licenseContent)
-            )
-        }
-        return sections
     }
 
     var body: some View {

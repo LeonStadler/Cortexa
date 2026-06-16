@@ -10,7 +10,6 @@ final class DiagnosticsController {
     private let currentPermissionSummary: () -> String
     private let currentCapabilitySummary: () -> String
     private let currentUpdaterStatusText: () -> String
-    private let currentLicenseStatusText: () -> String
     private let currentDebugModeEnabled: () -> Bool
     private let currentDiagnosticsText: () -> String
     private let currentDebugLogText: () -> String
@@ -27,7 +26,6 @@ final class DiagnosticsController {
         currentPermissionSummary: @escaping () -> String,
         currentCapabilitySummary: @escaping () -> String,
         currentUpdaterStatusText: @escaping () -> String,
-        currentLicenseStatusText: @escaping () -> String,
         currentDebugModeEnabled: @escaping () -> Bool,
         currentDiagnosticsText: @escaping () -> String,
         currentDebugLogText: @escaping () -> String,
@@ -40,7 +38,6 @@ final class DiagnosticsController {
         self.currentPermissionSummary = currentPermissionSummary
         self.currentCapabilitySummary = currentCapabilitySummary
         self.currentUpdaterStatusText = currentUpdaterStatusText
-        self.currentLicenseStatusText = currentLicenseStatusText
         self.currentDebugModeEnabled = currentDebugModeEnabled
         self.currentDiagnosticsText = currentDiagnosticsText
         self.currentDebugLogText = currentDebugLogText
@@ -91,7 +88,6 @@ final class DiagnosticsController {
             "Permissions: \(currentPermissionSummary())",
             "Capability: \(currentCapabilitySummary())",
             "Updater: \(currentUpdaterStatusText())",
-            "License: \(currentLicenseStatusText())",
             "Technical logging: \(currentDebugModeEnabled() ? "enabled" : "disabled")",
             "",
             currentDiagnosticsText(),

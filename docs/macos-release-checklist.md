@@ -7,7 +7,6 @@ Diese Checkliste ist der letzte Nachweis, dass `WisprLocalMac` als reale macOS-M
 ## 1. Produktionsvariablen setzen
 
 ```bash
-export WISPR_LICENSE_PUBLIC_KEY_BASE64='DEIN_ED25519_PUBLIC_KEY_BASE64'
 export SPARKLE_FEED_URL='https://deine-domain.tld/appcast.xml'
 export SPARKLE_PUBLIC_ED_KEY='DEIN_SPARKLE_PUBLIC_ED_KEY'
 ```

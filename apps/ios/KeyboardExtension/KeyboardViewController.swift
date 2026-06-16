@@ -16,7 +16,6 @@ final class KeyboardViewController: UIInputViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        try? storage.clearLicenseCache()
         setupViews()
         registerObservers()
         reloadSharedState()

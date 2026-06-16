@@ -7,7 +7,7 @@
 | [features-and-implementation.md](features-and-implementation.md) | Funktionsumfang nach Plattform und Zuordnung zu Swift-Paketen / AppShell  |
 | [system-design.md](system-design.md)                             | Architektur, Datenflüsse, Session-State-Machine, Sicherheit & Performance |
 | [api-design.md](api-design.md)                                   | Öffentliche Protokolle, Konfigurationstypen, Pipeline-Reihenfolge         |
-| [licensing.md](licensing.md)                                     | Offline-Lizenzschlüssel (Ed25519), Keychain, proprietärer Status          |
+| [licensing.md](licensing.md)                                     | Proprietärer Status und interne Weitergabe                                |
 | [permissions-macos.md](permissions-macos.md)                     | Mikrofon, Bedienungshilfen, eingeschränkter Modus ohne AX                 |
 | [build-xcframework.md](build-xcframework.md)                     | whisper.cpp / XCFramework / Runtime-Bundle                                |
 | [distribution.md](distribution.md)                               | macOS-Archive, Export, Notarisierung, DMG, Sparkle, iOS-Build             |

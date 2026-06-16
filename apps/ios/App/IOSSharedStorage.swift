@@ -120,12 +120,6 @@ struct IOSSharedStorage {
         try fileManager.removeItem(at: url)
     }
 
-    func clearLicenseCache() throws {
-        let url = try sharedContainerURL().appendingPathComponent("ios-license-cache.json", isDirectory: false)
-        guard fileManager.fileExists(atPath: url.path) else { return }
-        try fileManager.removeItem(at: url)
-    }
-
     func appendAudit(_ line: String) throws {
         let url = try auditLogURL()
         let timestamp = ISO8601DateFormatter().string(from: Date())

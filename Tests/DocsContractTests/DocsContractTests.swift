@@ -19,24 +19,20 @@ final class DocsContractTests: XCTestCase {
         XCTAssertTrue(systemDesign.contains("live rewrite scope"))
     }
 
-    func testLicensingAndReadmeMatchDeactivateAndUpdateBehavior() throws {
+    func testLicensingAndReadmeMatchDistributionAndUpdateBehavior() throws {
         let licensing = try readRepositoryFile("docs/licensing.md")
         let readme = try readRepositoryFile("README.md")
 
-        XCTAssertTrue(licensing.contains("no plaintext disk fallback for raw license keys"))
-        XCTAssertTrue(
-            licensing.contains("removes any legacy plaintext cache file left by older builds")
-        )
-        XCTAssertTrue(
-            readme.contains("Keychain-only secret persistence with legacy cache cleanup")
-        )
+        XCTAssertTrue(licensing.contains("keine Open-Source-Software"))
+        XCTAssertTrue(licensing.contains("keine lokale Lizenzschlüssel-Aktivierung"))
+        XCTAssertFalse(readme.contains("WISPR_LICENSE_PUBLIC_KEY_BASE64"))
         XCTAssertTrue(readme.contains("permanent sichtbarem manuellen Check"))
     }
 
     func testVersionFileMatchesCurrentRepositoryVersion() throws {
         let version = try readRepositoryFile("VERSION").trimmingCharacters(
             in: .whitespacesAndNewlines)
-        XCTAssertEqual(version, "0.24.7")
+        XCTAssertEqual(version, "0.25.0")
     }
 
     private func readRepositoryFile(_ relativePath: String) throws -> String {

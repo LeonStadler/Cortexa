@@ -13,7 +13,6 @@ settings:
     CURRENT_PROJECT_VERSION: ${APP_BUILD_NUMBER}
     SPARKLE_FEED_URL: ${SPARKLE_FEED_URL}
     SPARKLE_PUBLIC_ED_KEY: ${SPARKLE_PUBLIC_ED_KEY}
-    WISPR_LICENSE_PUBLIC_KEY_BASE64: ${WISPR_LICENSE_PUBLIC_KEY_BASE64}
 packages:
   WisprLocalPackage:
     path: ../../..
@@ -62,8 +61,6 @@ targets:
         product: TextTargetMac
       - package: WisprLocalPackage
         product: CapabilityCore
-      - package: WisprLocalPackage
-        product: LicenseCore
       - package: Sparkle
         product: Sparkle
 schemes:

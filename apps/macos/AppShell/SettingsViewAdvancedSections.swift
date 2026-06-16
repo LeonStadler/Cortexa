@@ -3,7 +3,7 @@ import SwiftUI
 extension SettingsView {
     @ViewBuilder
     var diagnosticsContent: some View {
-        if matches(["diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) {
+        if matches(["diagnose", "diagnostics", "capability", "audit"]) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(appState.capabilitySummary)
                     .font(.footnote)
@@ -122,40 +122,6 @@ extension SettingsView {
                     }
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    var licenseContent: some View {
-        if matches(["diagnose", "diagnostics", "lizenz", "license", "capability", "audit"]) {
-            HStack {
-                SecureField(text("Lizenzschlüssel", "License key"), text: $appState.licenseInput)
-                    .textFieldStyle(.roundedBorder)
-                Button(text("Aktivieren", "Activate")) {
-                    appState.activateLicense()
-                }
-                .liquidGlassPrimaryButtonStyle()
-                .disabled(
-                    appState.licenseInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                Button(role: .destructive) {
-                    appState.deactivateLicense()
-                } label: {
-                    Text(text("Deaktivieren", "Deactivate"))
-                }
-                .liquidGlassDestructiveButtonStyle()
-            }
-
-            if let storedLicenseSummary = appState.storedLicenseSummary {
-                Text(text("Gespeicherter Schlüssel", "Stored key") + ": " + storedLicenseSummary)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-
-            Text(appState.licenseStatusText)
-                .foregroundStyle(appState.licensePresentationState.color)
-                .font(.footnote)
         }
     }
 

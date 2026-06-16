@@ -82,8 +82,7 @@ CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 
 ## Updater configuration
 
-- The generated macOS project exposes three build-time values that should be provided before a production release:
-  - `WISPR_LICENSE_PUBLIC_KEY_BASE64`
+- The generated macOS project exposes two build-time values that should be provided before a production release:
   - `SPARKLE_FEED_URL`
   - `SPARKLE_PUBLIC_ED_KEY`
 - `scripts/generate_macos_xcodeproj.sh` injects these values into the app `Info.plist`.

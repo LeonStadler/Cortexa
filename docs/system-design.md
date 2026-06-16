@@ -57,21 +57,16 @@ WisprLocal is an offline-first dictation/transcription product for Apple platfor
 - model catalog and quick-settings eligibility filtering
 - final-only or live-tail-plus-final processing modes
 
-8. `LicenseCore`
-
-- offline key format + verification
-- keychain storage for raw keys without plaintext disk fallback
-
-9. `AppShell`
+8. `AppShell`
 
 - macOS menu bar app + settings
 - iOS host app + keyboard extension shell
 - current macOS shell includes runtime install bootstrap, permission deep-links,
   snippet persistence/import/export UI, personal dictionary persistence/import/export UI,
-  language/performance selection, transcript history, license activation UI, and hotkey control
+  language/performance selection, transcript history, and hotkey control
 - optional context-aware AI post-processing (`off`, `finalOnly`, `liveOnly`, `liveAndFinal`)
 - optional media auto-pause/resume during dictation (best effort for Apple Music and Spotify)
-- local audit log for session/diagnostic/license events with simple rotation and hardened file permissions / file protection
+- local audit log for session/diagnostic events with simple rotation and hardened file permissions / file protection
 - persistent user settings (mode/language/performance/context/media-mute) via `UserDefaults`
  - iOS shell now includes a host app backed by app-group storage and a keyboard extension
    that can insert the latest shared transcript and shared snippet replacements
