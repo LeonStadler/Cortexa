@@ -79,8 +79,9 @@ final class SpeechModelController {
 
         Task { @MainActor [weak self] in
             guard let self else { return }
+            var installedFiles: Set<String> = []
             do {
-                let installedFiles = try await self.voiceModelInstaller
+                installedFiles = try await self.voiceModelInstaller
                     .installedWhisperModelFileNames()
                 self.setInstalledVoiceModelFileNames(installedFiles)
             } catch {
@@ -91,7 +92,28 @@ final class SpeechModelController {
             }
 
             self.sanitizeSpeechModelSelections()
+            self.reportLegacyInstalledModelsIfNeeded(installedFiles: installedFiles)
         }
+    }
+
+    private func reportLegacyInstalledModelsIfNeeded(installedFiles: Set<String>) {
+        let reportedKey = "wispr.speech.legacyModelDiagnostics"
+        var reported = Set(UserDefaults.standard.stringArray(forKey: reportedKey) ?? [])
+        let downloadableModels = LocalVoiceModelCatalog.availableModels(includeParakeet: false)
+            .filter { $0.installState == .downloadable && $0.id != LocalVoiceModelCatalog.defaultModelID }
+
+        for descriptor in downloadableModels {
+            guard let localFileName = descriptor.localFileName,
+                installedFiles.contains(localFileName),
+                !reported.contains(descriptor.id)
+            else { continue }
+            appendDiagnostic(
+                "Speech model from a previous version found on disk: \(descriptor.displayName)."
+            )
+            reported.insert(descriptor.id)
+        }
+
+        UserDefaults.standard.set(Array(reported), forKey: reportedKey)
     }
 
     func installVoiceModel(_ descriptor: VoiceModelDescriptor) {

@@ -14,6 +14,8 @@ final class SessionEntryController {
     private let currentSelectedLanguageRawValue: () -> String
     private let currentPerformanceProfileRawValue: () -> String
     private let currentDictationCapability: () -> DictationCapability
+    private let canStartDictation: () -> Bool
+    private let dictationBlockedReason: () -> String?
     private let isSessionActive: () -> Bool
     private let holdToDictateEnabled: () -> Bool
     private let shouldRestorePreviousApplicationBeforeStarting: () -> Bool
@@ -34,6 +36,8 @@ final class SessionEntryController {
         currentSelectedLanguageRawValue: @escaping () -> String,
         currentPerformanceProfileRawValue: @escaping () -> String,
         currentDictationCapability: @escaping () -> DictationCapability,
+        canStartDictation: @escaping () -> Bool = { true },
+        dictationBlockedReason: @escaping () -> String? = { nil },
         isSessionActive: @escaping () -> Bool,
         holdToDictateEnabled: @escaping () -> Bool,
         shouldRestorePreviousApplicationBeforeStarting: (() -> Bool)? = nil,
@@ -53,6 +57,8 @@ final class SessionEntryController {
         self.currentSelectedLanguageRawValue = currentSelectedLanguageRawValue
         self.currentPerformanceProfileRawValue = currentPerformanceProfileRawValue
         self.currentDictationCapability = currentDictationCapability
+        self.canStartDictation = canStartDictation
+        self.dictationBlockedReason = dictationBlockedReason
         self.isSessionActive = isSessionActive
         self.holdToDictateEnabled = holdToDictateEnabled
         self.shouldRestorePreviousApplicationBeforeStarting =
@@ -82,6 +88,7 @@ final class SessionEntryController {
         guard holdToDictateEnabled() else { return }
         guard !holdSessionActive else { return }
         guard !isSessionActive() else { return }
+        guard ensureDictationCanStart() else { return }
 
         cancelPendingRestoreStart()
         holdSessionActive = true
@@ -105,6 +112,7 @@ final class SessionEntryController {
             return
         }
 
+        guard ensureDictationCanStart() else { return }
         startTranscriptionForShortcut()
     }
 
@@ -121,6 +129,8 @@ final class SessionEntryController {
         appendAudit(
             "session.toggle.menuBar start mode=\(options.mode) language=\(currentSelectedLanguageRawValue()) profile=\(currentPerformanceProfileRawValue())"
         )
+
+        guard ensureDictationCanStart() else { return }
 
         AgentSessionDebugLog.append(
             hypothesisId: "H5",
@@ -152,6 +162,8 @@ final class SessionEntryController {
         cancelPendingRestoreStart()
         refreshPermissionStates()
 
+        guard ensureDictationCanStart() else { return }
+
         let options = currentStartOptions()
         appendAudit(
             "session.toggle start mode=\(options.mode) language=\(currentSelectedLanguageRawValue()) profile=\(currentPerformanceProfileRawValue())"
@@ -170,6 +182,18 @@ final class SessionEntryController {
         }
 
         dictationRuntime.toggle(options: options)
+    }
+
+    private func ensureDictationCanStart() -> Bool {
+        guard canStartDictation() else {
+            if let reason = dictationBlockedReason() {
+                appendDiagnostic(reason)
+            } else {
+                appendDiagnostic("Diktat ist derzeit nicht verfügbar.")
+            }
+            return false
+        }
+        return true
     }
 
     private func restorePreviousApplicationAndStart(

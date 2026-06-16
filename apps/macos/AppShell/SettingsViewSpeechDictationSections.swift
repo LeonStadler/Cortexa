@@ -236,15 +236,20 @@ extension SettingsView {
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
             }
+        } else if appState.isVoiceModelInstalled(model) {
+            if model.installState == .requiredFirstRun {
+                Text(text("Erforderlich für den Betrieb", "Required for operation"))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(text("Installiert", "Installed"))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
         } else {
-            Text(
-                appState.isVoiceModelInstalled(model)
-                    ? text("Installiert", "Installed")
-                    : text("Nicht installiert", "Not installed")
-            )
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(
-                appState.isVoiceModelInstalled(model) ? .secondary : .tertiary)
+            Text(text("Nicht installiert", "Not installed"))
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -259,7 +264,7 @@ extension SettingsView {
             .liquidGlassSecondaryButtonStyle()
             .disabled(appState.selectedVoiceModelID == model.id)
 
-            if model.installState != .bundled {
+            if model.installState != .bundled && model.installState != .requiredFirstRun {
                 Button(role: .destructive) {
                     appState.removeVoiceModel(model)
                 } label: {

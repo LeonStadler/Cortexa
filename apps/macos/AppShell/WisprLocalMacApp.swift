@@ -59,6 +59,7 @@ struct WisprLocalMacApp: App {
     @StateObject private var updaterController: SparkleUpdaterController
     @StateObject private var appState: MacAppState
     private let settingsWindowPresenter: SettingsWindowPresenter
+    private let onboardingWindowPresenter: OnboardingWindowPresenter
 
     init() {
         SingleInstanceGuard.exitIfAnotherInstanceIsRunning()
@@ -67,6 +68,10 @@ struct WisprLocalMacApp: App {
         let updaterController = SparkleUpdaterController(configuration: configuration)
         let appState = MacAppState(configuration: configuration)
         let settingsWindowPresenter = SettingsWindowPresenter(appState: appState)
+        let onboardingWindowPresenter = OnboardingWindowPresenter(
+            appState: appState,
+            onboardingStore: appState.onboardingStore
+        )
         appState.bindUpdater(updaterController)
         appState.bindOpenSettingsHandler {
             settingsWindowPresenter.show()
@@ -74,10 +79,15 @@ struct WisprLocalMacApp: App {
         _updaterController = StateObject(wrappedValue: updaterController)
         _appState = StateObject(wrappedValue: appState)
         self.settingsWindowPresenter = settingsWindowPresenter
+        self.onboardingWindowPresenter = onboardingWindowPresenter
         BundleSigningDiagnostics.logStartupIdentityIfDebug()
 
         if WisprSmokeLaunch.shouldOpenSettingsAfterLaunch {
             SmokeOpenSettingsLaunchObserver.start(appState: appState)
+        } else {
+            DispatchQueue.main.async {
+                onboardingWindowPresenter.showIfNeeded()
+            }
         }
     }
 

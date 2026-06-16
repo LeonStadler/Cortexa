@@ -44,6 +44,10 @@ final class AppShellTestDictationRuntime: DictationRuntimeControlling {
         prepareRuntimeCallCount += 1
     }
 
+    func prepareRuntimeIfModelAvailable() {
+        prepareRuntimeCallCount += 1
+    }
+
     func setVoiceModelActiveDuration(_ duration: VoiceModelActiveDuration) {
         setVoiceModelActiveDurationCalls.append(duration)
     }

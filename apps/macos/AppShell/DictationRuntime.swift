@@ -370,14 +370,34 @@ final class DictationRuntime: @unchecked Sendable {
 
     func prepareRuntime() {
         cancelRuntimeUnloadTask()
-        guard !runtimePrepared else { return }
         publishDebug("runtime.prepare.begin")
 
         do {
-            let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(
+            _ = try BundledWhisperRuntimeInstaller.syncRuntimeCLIOnly(
+                bundle: .main, appName: "WisprLocal")
+            publishDiagnostic("ASR CLI runtime ready.")
+            publishDebug("runtime.prepare.cli_synced")
+        } catch {
+            publishStatus("Error")
+            publishDiagnostic("ASR init failed: \(error.localizedDescription)")
+            publishDebug("runtime.prepare.failed error=\(error.localizedDescription)")
+        }
+    }
+
+    func prepareRuntimeIfModelAvailable() {
+        prepareRuntime()
+        guard !runtimePrepared else { return }
+
+        do {
+            let runtime = try BundledWhisperRuntimeInstaller.syncRuntimeCLIOnly(
                 bundle: .main, appName: "WisprLocal")
             let bootstrapModel = runtime.modelsDirectoryURL.appendingPathComponent(
                 runtime.defaultModelFileName)
+            guard FileManager.default.fileExists(atPath: bootstrapModel.path) else {
+                publishDiagnostic("Standard speech model is not installed yet.")
+                publishDebug("runtime.prepare.skip model_missing=\(runtime.defaultModelFileName)")
+                return
+            }
             let bootstrapConfig = ASRConfig(
                 languageHint: "de",
                 initialPrompt: nil,
@@ -393,7 +413,7 @@ final class DictationRuntime: @unchecked Sendable {
             loadedModelPath = bootstrapModel
             loadedConfig = bootstrapConfig
             runtimePrepared = true
-            publishDiagnostic("ASR runtime ready (bundled model loaded).")
+            publishDiagnostic("ASR runtime ready (standard model loaded).")
             publishDebug("runtime.prepare.ready model=\(bootstrapModel.lastPathComponent)")
             scheduleRuntimeUnloadIfNeeded()
 
@@ -481,11 +501,12 @@ final class DictationRuntime: @unchecked Sendable {
             return
         }
 
-        prepareRuntime()
+        prepareRuntimeIfModelAvailable()
         guard runtimePrepared else {
             withSessionLock {
                 isStarting = false
             }
+            publishDiagnostic("Standard speech model is not installed yet.")
             return
         }
         cancelRuntimeUnloadTask()
@@ -1351,7 +1372,7 @@ final class DictationRuntime: @unchecked Sendable {
     private func configureEngine(for options: DictationStartOptions, runtimeMode: DictationMode)
         throws
     {
-        let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(
+        let runtime = try BundledWhisperRuntimeInstaller.syncRuntimeCLIOnly(
             bundle: .main, appName: "WisprLocal")
         let preset = selectEnginePreset(options: options, runtimeMode: runtimeMode)
         let modelDescriptor = selectedVoiceModelDescriptor(for: options, runtime: runtime)
@@ -1499,8 +1520,9 @@ final class DictationRuntime: @unchecked Sendable {
                 supportsTranslationToEnglish: true,
                 speedScore: 8,
                 accuracyScore: 5,
-                sizeLabel: "500 MB",
-                installState: .bundled,
+                sizeLabel: LocalVoiceModelCatalog.formattedDownloadSize(
+                    LocalVoiceModelCatalog.defaultModelExpectedBytes),
+                installState: .requiredFirstRun,
                 localFileName: runtime.defaultModelFileName,
                 downloadIdentifier: "base"
             )

@@ -210,6 +210,12 @@ struct MenuBarContentView: View {
         case "Error":
             return text("Aufmerksamkeit erforderlich", "Needs attention")
         case "Idle":
+            if !appState.isOnboardingComplete {
+                return text("Einrichtung offen", "Setup required")
+            }
+            if !appState.isStandardModelInstalled {
+                return text("Modell fehlt", "Model missing")
+            }
             switch appState.dictationCapability {
             case .fullSystemInsertion:
                 return text("Bereit", "Ready")
@@ -241,6 +247,12 @@ struct MenuBarContentView: View {
         }
         if appState.recordingStatus == "Error" {
             return appState.statusHintText
+        }
+        if !appState.isOnboardingComplete {
+            return text("Onboarding abschließen", "Complete onboarding")
+        }
+        if !appState.isStandardModelInstalled {
+            return text("Standardmodell installieren", "Install standard model")
         }
         if appState.hasPermissionProblems {
             return appState.menuBarCompactPermissionHint

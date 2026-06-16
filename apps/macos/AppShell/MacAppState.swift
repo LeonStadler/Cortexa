@@ -87,6 +87,7 @@ protocol DictationRuntimeControlling: AnyObject {
     var onPermissionInteractionFinished: (() -> Void)? { get set }
 
     func prepareRuntime()
+    func prepareRuntimeIfModelAvailable()
     func setVoiceModelActiveDuration(_ duration: VoiceModelActiveDuration)
     func toggle(options: DictationStartOptions)
     func cancel()
@@ -727,6 +728,12 @@ final class MacAppState: ObservableObject {
     }
 
     var dictationCapability: DictationCapability {
+        if !onboardingStore.isComplete {
+            return .unavailable
+        }
+        if !isStandardModelInstalled {
+            return .unavailable
+        }
         if microphonePermissionStatus != .granted {
             return .unavailable
         }
@@ -736,6 +743,33 @@ final class MacAppState: ObservableObject {
         }
 
         return .limitedTranscription
+    }
+
+    var isOnboardingComplete: Bool {
+        onboardingStore.isComplete
+    }
+
+    var isStandardModelInstalled: Bool {
+        installedVoiceModelFileNames.contains(LocalVoiceModelCatalog.defaultModelFileName)
+    }
+
+    var isStandardModelDownloadBusy: Bool {
+        guard
+            let standardModel = voiceModels.first(where: {
+                $0.id == LocalVoiceModelCatalog.defaultModelID
+            })
+        else { return false }
+        return speechModelController.isVoiceModelBusy(standardModel)
+    }
+
+    var dictationBlockedReason: String? {
+        if !onboardingStore.isComplete {
+            return "Einrichtung erforderlich — bitte den Onboarding-Assistenten abschließen."
+        }
+        if !isStandardModelInstalled {
+            return "Standard-Sprachmodell fehlt — bitte im Onboarding oder in den Einstellungen installieren."
+        }
+        return nil
     }
 
     var hotkeyHintText: String {
@@ -1100,7 +1134,9 @@ final class MacAppState: ObservableObject {
     private let capabilityProfiler = CapabilityProfiler()
     private let aiRemoteProviderSecretStore: AIRemoteProviderSecretStoring
     private let runtimeEventBridge: DictationRuntimeEventBridging
+    private let relaxDictationRequirementsForTests: Bool
     private let voiceModelInstaller = VoiceModelInstaller()
+    let onboardingStore: OnboardingStore
     private var aiProcessingService = AIProcessingService()
     private let appConfiguration: MacAppConfiguration
 
@@ -1196,6 +1232,8 @@ final class MacAppState: ObservableObject {
         self.runtimeEventBridge = runtimeEventBridge
         self.hotkeyManager = hotkeyManager
         self.aiRemoteProviderSecretStore = aiRemoteProviderSecretStore
+        self.relaxDictationRequirementsForTests = skipStartupSystemHooks
+        self.onboardingStore = OnboardingStore(userDefaults: userDefaults)
         self.preferencesStore = MacAppPreferencesStore(userDefaults: userDefaults)
         self.sessionConfigurationBuilder = SessionConfigurationBuilder()
 
@@ -1413,6 +1451,16 @@ final class MacAppState: ObservableObject {
             currentDictationCapability: { [weak self] in
                 self?.dictationCapability ?? .unavailable
             },
+            canStartDictation: { [weak self] in
+                guard let self else { return false }
+                if self.relaxDictationRequirementsForTests {
+                    return true
+                }
+                return self.onboardingStore.isComplete && self.isStandardModelInstalled
+            },
+            dictationBlockedReason: { [weak self] in
+                self?.dictationBlockedReason
+            },
             isSessionActive: { [weak self] in
                 self?.isSessionActive ?? false
             },
@@ -1569,6 +1617,11 @@ final class MacAppState: ObservableObject {
         )
 
         refreshVoiceModelCatalog()
+        if skipStartupSystemHooks {
+            onboardingStore.markComplete()
+        } else {
+            onboardingStore.migrateIfStandardModelAlreadyInstalled()
+        }
         sanitizeAIProcessingSelections()
         sanitizeSpeechModelSelections()
         sanitizeVisibleMenuBarLanguages()
@@ -1633,6 +1686,9 @@ final class MacAppState: ObservableObject {
         updateUpdaterState()
         dictationRuntime.setVoiceModelActiveDuration(voiceModelActiveDuration)
         dictationRuntime.prepareRuntime()
+        if onboardingStore.isComplete {
+            dictationRuntime.prepareRuntimeIfModelAvailable()
+        }
         refreshPermissionStates()
         permissionCoordinator.beginLaunchPermissionStabilization()
         if !skipStartupSystemHooks {
@@ -1647,6 +1703,11 @@ final class MacAppState: ObservableObject {
 
     deinit {
         dockPolicySettingsReopenWorkItem?.cancel()
+    }
+
+    func onboardingDidComplete() {
+        dictationRuntime.prepareRuntimeIfModelAvailable()
+        appendAudit("onboarding.completed")
     }
 
     private func sanitizeAIProcessingSelections() {
@@ -1861,7 +1922,11 @@ final class MacAppState: ObservableObject {
         updateCapabilitySummary()
         rebuildAIProcessingStack(reason: reason)
         permissionCoordinator.refreshPermissionsAfterExternalEvent(reason: reason)
-        dictationRuntime.prepareRuntime()
+        if onboardingStore.isComplete {
+            dictationRuntime.prepareRuntimeIfModelAvailable()
+        } else {
+            dictationRuntime.prepareRuntime()
+        }
         updateUpdaterState()
         appendAudit("lifecycle.refresh reason=\(reason)")
     }

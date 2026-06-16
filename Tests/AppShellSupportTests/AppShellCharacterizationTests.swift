@@ -16,7 +16,7 @@ final class AppShellCharacterizationTests: XCTestCase {
         XCTAssertEqual(PermissionStatus.accessibility(isTrusted: false), .denied)
     }
 
-    func testPermissionRefreshDebouncesTransientAccessibilityDenial() async throws {
+    func testPermissionRefreshReflectsAccessibilityDenial() async throws {
         let permissions = StubPermissionController(
             microphone: .granted,
             accessibility: .granted
@@ -28,12 +28,7 @@ final class AppShellCharacterizationTests: XCTestCase {
         permissions.accessibilityStatusValue = .denied
         state.refreshPermissionStates()
 
-        XCTAssertEqual(state.accessibilityPermissionStatus, .granted)
-
-        let debouncedUpdateApplied = await eventually {
-            state.accessibilityPermissionStatus == .denied
-        }
-        XCTAssertTrue(debouncedUpdateApplied)
+        XCTAssertEqual(state.accessibilityPermissionStatus, .denied)
     }
 
     func testRequestAccessibilityAccessFromSettingsPromptsRuntimeWhenDenied() async throws {
@@ -459,6 +454,10 @@ private final class StubDictationRuntime: DictationRuntimeControlling {
     private(set) var promptAccessibilityTrustCallCount = 0
 
     func prepareRuntime() {
+        prepareRuntimeCallCount += 1
+    }
+
+    func prepareRuntimeIfModelAvailable() {
         prepareRuntimeCallCount += 1
     }
 

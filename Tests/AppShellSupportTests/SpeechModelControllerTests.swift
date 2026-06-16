@@ -123,6 +123,25 @@
             XCTAssertTrue(controller.canUseVoiceModel(englishModel, for: .auto))
         }
 
+        func testIsVoiceModelInstalledReturnsFalseWithoutFileOnDisk() {
+            let state = SpeechModelControllerState(
+                selectedLanguage: .auto,
+                translationOutputMode: .original,
+                selectedVoiceProviderID: LocalVoiceModelCatalog.defaultProviderID,
+                selectedVoiceModelID: LocalVoiceModelCatalog.defaultModelID,
+                voiceLanguageOverrides: [],
+                voiceProviders: LocalVoiceModelCatalog.availableProviders(),
+                voiceModels: LocalVoiceModelCatalog.availableModels(includeParakeet: false),
+                installedVoiceModelFileNames: [],
+                voiceModelOperationStates: [:]
+            )
+
+            let controller = makeController(state: state)
+            let standardModel = LocalVoiceModelCatalog.model(id: LocalVoiceModelCatalog.defaultModelID)!
+
+            XCTAssertFalse(controller.isVoiceModelInstalled(standardModel))
+        }
+
         func testIsVoiceModelInstalledReturnsFalseWhileRemoving() {
             let proModel = LocalVoiceModelCatalog.model(id: "whisper.pro")!
             let state = SpeechModelControllerState(
