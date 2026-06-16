@@ -20,8 +20,8 @@ final class SpeechModelController {
     private let setVoiceModels: ([VoiceModelDescriptor]) -> Void
     private let currentInstalledVoiceModelFileNames: () -> Set<String>
     private let setInstalledVoiceModelFileNames: (Set<String>) -> Void
-    private let currentVoiceModelOperationInFlightIDs: () -> Set<String>
-    private let setVoiceModelOperationInFlightIDs: (Set<String>) -> Void
+    private let currentVoiceModelOperationStates: () -> [String: VoiceModelOperationKind]
+    private let setVoiceModelOperationStates: ([String: VoiceModelOperationKind]) -> Void
     private let appendDiagnostic: (String) -> Void
 
     init(
@@ -42,8 +42,8 @@ final class SpeechModelController {
         setVoiceModels: @escaping ([VoiceModelDescriptor]) -> Void,
         currentInstalledVoiceModelFileNames: @escaping () -> Set<String>,
         setInstalledVoiceModelFileNames: @escaping (Set<String>) -> Void,
-        currentVoiceModelOperationInFlightIDs: @escaping () -> Set<String>,
-        setVoiceModelOperationInFlightIDs: @escaping (Set<String>) -> Void,
+        currentVoiceModelOperationStates: @escaping () -> [String: VoiceModelOperationKind],
+        setVoiceModelOperationStates: @escaping ([String: VoiceModelOperationKind]) -> Void,
         appendDiagnostic: @escaping (String) -> Void
     ) {
         self.voiceModelInstaller = voiceModelInstaller
@@ -63,8 +63,8 @@ final class SpeechModelController {
         self.setVoiceModels = setVoiceModels
         self.currentInstalledVoiceModelFileNames = currentInstalledVoiceModelFileNames
         self.setInstalledVoiceModelFileNames = setInstalledVoiceModelFileNames
-        self.currentVoiceModelOperationInFlightIDs = currentVoiceModelOperationInFlightIDs
-        self.setVoiceModelOperationInFlightIDs = setVoiceModelOperationInFlightIDs
+        self.currentVoiceModelOperationStates = currentVoiceModelOperationStates
+        self.setVoiceModelOperationStates = setVoiceModelOperationStates
         self.appendDiagnostic = appendDiagnostic
     }
 
@@ -100,18 +100,23 @@ final class SpeechModelController {
             return
         }
 
-        setVoiceModelOperationInFlightIDs(currentVoiceModelOperationInFlightIDs().union([descriptor.id]))
+        setOperation(
+            .installing(VoiceModelInstallProgress(phase: .preparing, fractionCompleted: 0)),
+            for: descriptor.id)
         appendDiagnostic("Installiere Speech-Modell \(descriptor.displayName)...")
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer {
-                self.setVoiceModelOperationInFlightIDs(
-                    self.currentVoiceModelOperationInFlightIDs().subtracting([descriptor.id]))
+                self.clearOperation(for: descriptor.id)
             }
 
             do {
-                let runtime = try await self.voiceModelInstaller.install(descriptor)
+                let runtime = try await self.voiceModelInstaller.install(descriptor) { progress in
+                    Task { @MainActor [weak self] in
+                        self?.setOperation(.installing(progress), for: descriptor.id)
+                    }
+                }
                 self.setInstalledVoiceModelFileNames(Set(runtime.availableModelFileNames))
                 self.sanitizeSpeechModelSelections()
                 self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde installiert.")
@@ -129,14 +134,22 @@ final class SpeechModelController {
             return
         }
 
-        setVoiceModelOperationInFlightIDs(currentVoiceModelOperationInFlightIDs().union([descriptor.id]))
+        let previousInstalledFileNames = currentInstalledVoiceModelFileNames()
+        let localFileName = descriptor.localFileName
+
+        setOperation(.removing, for: descriptor.id)
+        if let localFileName {
+            var optimisticInstalled = previousInstalledFileNames
+            optimisticInstalled.remove(localFileName)
+            setInstalledVoiceModelFileNames(optimisticInstalled)
+        }
+        sanitizeSpeechModelSelections()
         appendDiagnostic("Entferne Speech-Modell \(descriptor.displayName)...")
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer {
-                self.setVoiceModelOperationInFlightIDs(
-                    self.currentVoiceModelOperationInFlightIDs().subtracting([descriptor.id]))
+                self.clearOperation(for: descriptor.id)
             }
 
             do {
@@ -147,6 +160,8 @@ final class SpeechModelController {
                 self.sanitizeSpeechModelSelections()
                 self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde entfernt.")
             } catch {
+                self.setInstalledVoiceModelFileNames(previousInstalledFileNames)
+                self.sanitizeSpeechModelSelections()
                 self.appendDiagnostic(
                     "Speech-Modell \(descriptor.displayName) konnte nicht entfernt werden: \(error.localizedDescription)"
                 )
@@ -170,7 +185,9 @@ final class SpeechModelController {
     }
 
     func assignSelectedVoiceModelToCurrentLanguage() {
-        guard currentSelectedLanguage() != .auto, let descriptor = selectedVoiceModel else { return }
+        guard currentSelectedLanguage() != .auto, let descriptor = selectedVoiceModel else {
+            return
+        }
         var overrides = currentVoiceLanguageOverrides()
         overrides.removeAll { $0.languageCode == currentSelectedLanguage().rawValue }
         overrides.append(
@@ -199,7 +216,19 @@ final class SpeechModelController {
         )
     }
 
+    func voiceModelOperationState(for descriptor: VoiceModelDescriptor) -> VoiceModelOperationKind?
+    {
+        currentVoiceModelOperationStates()[descriptor.id]
+    }
+
     func isVoiceModelInstalled(_ descriptor: VoiceModelDescriptor) -> Bool {
+        if case .removing = voiceModelOperationState(for: descriptor) {
+            return false
+        }
+        if case .installing = voiceModelOperationState(for: descriptor) {
+            return false
+        }
+
         guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
             return descriptor.installState == .bundled
         }
@@ -208,7 +237,7 @@ final class SpeechModelController {
     }
 
     func isVoiceModelBusy(_ descriptor: VoiceModelDescriptor) -> Bool {
-        currentVoiceModelOperationInFlightIDs().contains(descriptor.id)
+        voiceModelOperationState(for: descriptor) != nil
     }
 
     func canUseVoiceModel(_ descriptor: VoiceModelDescriptor, for language: DictationLanguage)
@@ -301,9 +330,10 @@ final class SpeechModelController {
 
         setVoiceLanguageOverrides(
             currentVoiceLanguageOverrides().filter { overrideEntry in
-                guard let descriptor = currentVoiceModels().first(where: {
-                    $0.id == overrideEntry.modelID
-                })
+                guard
+                    let descriptor = currentVoiceModels().first(where: {
+                        $0.id == overrideEntry.modelID
+                    })
                 else {
                     return false
                 }
@@ -323,5 +353,17 @@ final class SpeechModelController {
 
     private var selectedVoiceModelSupportsTranslation: Bool {
         selectedVoiceModel?.supportsTranslationToEnglish ?? false
+    }
+
+    private func setOperation(_ operation: VoiceModelOperationKind, for modelID: String) {
+        var states = currentVoiceModelOperationStates()
+        states[modelID] = operation
+        setVoiceModelOperationStates(states)
+    }
+
+    private func clearOperation(for modelID: String) {
+        var states = currentVoiceModelOperationStates()
+        states.removeValue(forKey: modelID)
+        setVoiceModelOperationStates(states)
     }
 }

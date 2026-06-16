@@ -682,7 +682,7 @@ final class MacAppState: ObservableObject {
     @Published private(set) var voiceProviders: [VoiceProviderDescriptor] = []
     @Published private(set) var voiceModels: [VoiceModelDescriptor] = []
     @Published private(set) var installedVoiceModelFileNames: Set<String> = []
-    @Published private(set) var voiceModelOperationInFlightIDs: Set<String> = []
+    @Published private(set) var voiceModelOperationStates: [String: VoiceModelOperationKind] = [:]
 
     @Published var recordingStatus: String = "Idle"
     @Published var diagnosticsText: String = "Initializing ASR runtime..."
@@ -1557,11 +1557,11 @@ final class MacAppState: ObservableObject {
             setInstalledVoiceModelFileNames: { [weak self] fileNames in
                 self?.installedVoiceModelFileNames = fileNames
             },
-            currentVoiceModelOperationInFlightIDs: { [weak self] in
-                self?.voiceModelOperationInFlightIDs ?? []
+            currentVoiceModelOperationStates: { [weak self] in
+                self?.voiceModelOperationStates ?? [:]
             },
-            setVoiceModelOperationInFlightIDs: { [weak self] ids in
-                self?.voiceModelOperationInFlightIDs = ids
+            setVoiceModelOperationStates: { [weak self] states in
+                self?.voiceModelOperationStates = states
             },
             appendDiagnostic: { [weak self] line in
                 self?.appendDiagnostic(line)

@@ -141,6 +141,11 @@ extension MacAppState {
         speechModelController.isVoiceModelBusy(descriptor)
     }
 
+    func voiceModelOperationState(for descriptor: VoiceModelDescriptor) -> VoiceModelOperationKind?
+    {
+        speechModelController.voiceModelOperationState(for: descriptor)
+    }
+
     func canUseVoiceModel(_ descriptor: VoiceModelDescriptor, for language: DictationLanguage)
         -> Bool
     {

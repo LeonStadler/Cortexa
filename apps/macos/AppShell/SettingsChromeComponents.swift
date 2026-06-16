@@ -1,3 +1,4 @@
+import ASRCore
 import AppKit
 import Carbon
 import SwiftUI
@@ -283,5 +284,62 @@ struct PermissionRecoveryBanner: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.orange.opacity(0.25), lineWidth: 1)
         )
+    }
+}
+
+struct VoiceModelOperationProgressView: View {
+    let operation: VoiceModelOperationKind
+    let german: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            switch operation {
+            case .installing(let progress):
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                HStack {
+                    Text(statusText(for: progress))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Text("\(progress.percentComplete)%")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            case .removing:
+                ProgressView()
+                    .progressViewStyle(.linear)
+                Text(
+                    german
+                        ? "Modell wird von der Festplatte entfernt …" : "Removing model from disk …"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func statusText(for progress: VoiceModelInstallProgress) -> String {
+        switch progress.phase {
+        case .preparing:
+            return german ? "Download wird vorbereitet …" : "Preparing download …"
+        case .downloading:
+            if let receivedBytes = progress.receivedBytes,
+                let totalBytes = progress.totalBytes,
+                totalBytes > 0
+            {
+                let received = ByteCountFormatter.string(
+                    fromByteCount: receivedBytes, countStyle: .file)
+                let total = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+                return german
+                    ? "Herunterladen: \(received) von \(total)"
+                    : "Downloading: \(received) of \(total)"
+            }
+            return german ? "Herunterladen …" : "Downloading …"
+        case .finalizing:
+            return german ? "Modell wird installiert …" : "Installing model …"
+        }
     }
 }

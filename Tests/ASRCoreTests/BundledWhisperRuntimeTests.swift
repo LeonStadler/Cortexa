@@ -86,6 +86,7 @@ final class BundledWhisperRuntimeTests: XCTestCase {
         let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
         let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
         let destinationRuntime = root.appendingPathComponent("destination/Runtime", isDirectory: true)
+        let destinationModels = destinationRuntime.appendingPathComponent("models", isDirectory: true)
 
         defer { try? fm.removeItem(at: root) }
 
@@ -110,6 +111,69 @@ final class BundledWhisperRuntimeTests: XCTestCase {
         XCTAssertEqual(runtime.defaultModelFileName, "ggml-small.bin")
         XCTAssertEqual(runtime.manifest, manifest)
         XCTAssertTrue(fm.fileExists(atPath: destinationRuntime.appendingPathComponent("runtime-manifest.json").path))
+        XCTAssertTrue(fm.fileExists(atPath: destinationModels.appendingPathComponent("ggml-base.bin").path))
+        XCTAssertTrue(fm.fileExists(atPath: destinationModels.appendingPathComponent("ggml-small.bin").path))
+    }
+
+    func testInstallRuntimeOnlySyncsDefaultModelWhenExtraModelsPresentWithoutManifest() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_default_only_test_\(UUID().uuidString)")
+        let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
+        let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
+        let destinationRuntime = root.appendingPathComponent("destination/Runtime", isDirectory: true)
+        let destinationModels = destinationRuntime.appendingPathComponent("models", isDirectory: true)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: sourceModels, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho test\n".utf8).write(to: sourceRuntime.appendingPathComponent("whisper-cli"))
+        try Data([0x01]).write(to: sourceModels.appendingPathComponent("ggml-base.bin"))
+        try Data([0x02]).write(to: sourceModels.appendingPathComponent("ggml-small.bin"))
+
+        let runtime = try BundledWhisperRuntimeInstaller.installRuntime(
+            from: sourceRuntime,
+            destinationRuntimeDirectory: destinationRuntime,
+            appName: "WisprLocalTest"
+        )
+
+        XCTAssertEqual(runtime.defaultModelFileName, "ggml-base.bin")
+        XCTAssertEqual(runtime.availableModelFileNames, ["ggml-base.bin"])
+        XCTAssertTrue(fm.fileExists(atPath: destinationModels.appendingPathComponent("ggml-base.bin").path))
+        XCTAssertFalse(fm.fileExists(atPath: destinationModels.appendingPathComponent("ggml-small.bin").path))
+    }
+
+    func testInstallRuntimeSkipsSuppressedBundledModelAndRemovesExistingCopy() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_suppressed_test_\(UUID().uuidString)")
+        let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
+        let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
+        let destinationRuntime = root.appendingPathComponent("destination/Runtime", isDirectory: true)
+        let destinationModels = destinationRuntime.appendingPathComponent("models", isDirectory: true)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: sourceModels, withIntermediateDirectories: true)
+        try fm.createDirectory(at: destinationModels, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho test\n".utf8).write(to: sourceRuntime.appendingPathComponent("whisper-cli"))
+        try Data([0x01]).write(to: sourceModels.appendingPathComponent("ggml-base.bin"))
+        try Data([0x02]).write(to: sourceModels.appendingPathComponent("ggml-small.bin"))
+        try Data([0x99]).write(to: destinationModels.appendingPathComponent("ggml-small.bin"))
+
+        let manifest = BundledWhisperRuntimeManifest(
+            defaultModelFileName: "ggml-base.bin",
+            modelFileNames: ["ggml-base.bin", "ggml-small.bin"]
+        )
+        try JSONEncoder().encode(manifest).write(to: sourceRuntime.appendingPathComponent("runtime-manifest.json"))
+
+        let runtime = try BundledWhisperRuntimeInstaller.installRuntime(
+            from: sourceRuntime,
+            destinationRuntimeDirectory: destinationRuntime,
+            appName: "WisprLocalTest",
+            suppressedBundledModelFileNames: ["ggml-small.bin"]
+        )
+
+        XCTAssertEqual(runtime.availableModelFileNames, ["ggml-base.bin"])
+        XCTAssertFalse(fm.fileExists(atPath: destinationModels.appendingPathComponent("ggml-small.bin").path))
     }
 
     func testInstallRuntimeVerifiesManifestChecksumsWhenPresent() throws {

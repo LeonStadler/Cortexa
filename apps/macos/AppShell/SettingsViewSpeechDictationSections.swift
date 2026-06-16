@@ -1,3 +1,4 @@
+import ASRCore
 import SwiftUI
 
 extension SettingsView {
@@ -10,7 +11,8 @@ extension SettingsView {
                         .foregroundStyle(.secondary)
                 } else {
                     Picker(
-                        text("Voice-Modell", "Voice model"), selection: $appState.selectedVoiceModelID
+                        text("Voice-Modell", "Voice model"),
+                        selection: $appState.selectedVoiceModelID
                     ) {
                         ForEach(appState.visibleSelectableVoiceModels) { model in
                             Text(model.displayName).tag(model.id)
@@ -186,50 +188,26 @@ extension SettingsView {
         if speechHasMatches {
             ForEach(appState.visibleVoiceModels) { model in
                 LabeledContent {
-                    HStack(alignment: .center, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(model.displayName)
-                            Text(
-                                "\(model.languageCode?.uppercased() ?? "ALL") • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)"
-                            )
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.displayName)
+                                Text(
+                                    "\(model.languageCode?.uppercased() ?? "ALL") • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)"
+                                )
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 12)
+                            voiceModelStatusLabel(for: model)
+                            voiceModelActionButtons(for: model)
                         }
-                        Spacer(minLength: 12)
-                        Text(
-                            appState.isVoiceModelInstalled(model)
-                                ? text("Installiert", "Installed")
-                                : text("Nicht installiert", "Not installed")
-                        )
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(
-                            appState.isVoiceModelInstalled(model) ? .secondary : .tertiary)
-                        if appState.isVoiceModelInstalled(model) {
-                            Button(text("Als Standard verwenden", "Use as default")) {
-                                appState.setSelectedVoiceModel(model)
-                            }
-                            .liquidGlassSecondaryButtonStyle()
-                            .disabled(
-                                appState.selectedVoiceModelID == model.id
-                                    || appState.isVoiceModelBusy(model))
 
-                            if model.installState != .bundled {
-                                Button(role: .destructive) {
-                                    appState.removeVoiceModel(model)
-                                } label: {
-                                    Text(text("Entfernen", "Remove"))
-                                }
-                                .liquidGlassDestructiveButtonStyle()
-                                .disabled(appState.isVoiceModelBusy(model))
-                            }
-                        } else {
-                            Button(text("Installieren", "Install")) {
-                                appState.installVoiceModel(model)
-                            }
-                            .liquidGlassPrimaryButtonStyle()
-                            .disabled(
-                                model.installState == .unavailable
-                                    || appState.isVoiceModelBusy(model))
+                        if let operation = appState.voiceModelOperationState(for: model) {
+                            VoiceModelOperationProgressView(
+                                operation: operation,
+                                german: effectiveLanguage.embeddedInterfaceCode.hasPrefix("de")
+                            )
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -237,6 +215,64 @@ extension SettingsView {
                     EmptyView()
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func voiceModelStatusLabel(for model: VoiceModelDescriptor) -> some View {
+        if let operation = appState.voiceModelOperationState(for: model) {
+            switch operation {
+            case .installing(let progress):
+                Text(
+                    text(
+                        "Installiere \(progress.percentComplete) %",
+                        "Installing \(progress.percentComplete)%"
+                    )
+                )
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+            case .removing:
+                Text(text("Wird entfernt …", "Removing …"))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Text(
+                appState.isVoiceModelInstalled(model)
+                    ? text("Installiert", "Installed")
+                    : text("Nicht installiert", "Not installed")
+            )
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(
+                appState.isVoiceModelInstalled(model) ? .secondary : .tertiary)
+        }
+    }
+
+    @ViewBuilder
+    private func voiceModelActionButtons(for model: VoiceModelDescriptor) -> some View {
+        if appState.isVoiceModelBusy(model) {
+            EmptyView()
+        } else if appState.isVoiceModelInstalled(model) {
+            Button(text("Als Standard verwenden", "Use as default")) {
+                appState.setSelectedVoiceModel(model)
+            }
+            .liquidGlassSecondaryButtonStyle()
+            .disabled(appState.selectedVoiceModelID == model.id)
+
+            if model.installState != .bundled {
+                Button(role: .destructive) {
+                    appState.removeVoiceModel(model)
+                } label: {
+                    Text(text("Entfernen", "Remove"))
+                }
+                .liquidGlassDestructiveButtonStyle()
+            }
+        } else {
+            Button(text("Installieren", "Install")) {
+                appState.installVoiceModel(model)
+            }
+            .liquidGlassPrimaryButtonStyle()
+            .disabled(model.installState == .unavailable)
         }
     }
 
@@ -340,7 +376,8 @@ extension SettingsView {
 
             Toggle(isOn: $appState.muteMusicWhileDictating) {
                 SettingsFieldLabel(
-                    title: text("Musik während des Diktats pausieren", "Pause music while dictating"),
+                    title: text(
+                        "Musik während des Diktats pausieren", "Pause music while dictating"),
                     helpText: text(
                         "Pausiert Apple Music und Spotify best-effort beim Start und setzt nur Player fort, die Wispr selbst pausiert hat.",
                         "Best-effort pauses Apple Music and Spotify on start and resumes only players that Wispr paused itself."

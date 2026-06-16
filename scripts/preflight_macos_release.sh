@@ -45,8 +45,9 @@ log "Preparing runtime bundle"
 "${ROOT_DIR}/scripts/prepare_runtime_bundle.sh"
 
 [[ -x "${RUNTIME_DIR}/whisper-cli" ]] || error "Bundled whisper-cli fehlt unter ${RUNTIME_DIR}/whisper-cli"
+[[ -f "${RUNTIME_DIR}/runtime-manifest.json" ]] || error "runtime-manifest.json fehlt unter ${RUNTIME_DIR}"
 MODEL_COUNT=$(find "${RUNTIME_DIR}/models" -maxdepth 1 -type f -name '*.bin' | wc -l | tr -d ' ')
-[[ "${MODEL_COUNT}" -ge 1 ]] || error "Keine ggml-Modelle in ${RUNTIME_DIR}/models gefunden."
+[[ "${MODEL_COUNT}" -eq 1 ]] || error "Erwartet genau ein gebündeltes Modell in ${RUNTIME_DIR}/models, gefunden: ${MODEL_COUNT}"
 
 log "Regenerating macOS Xcode project with production variables"
 "${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh" --check

@@ -9,13 +9,13 @@ public enum VoiceModelInstallerError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case let .unsupportedProvider(providerID):
+        case .unsupportedProvider(let providerID):
             return "Voice provider \(providerID) is not supported for local installation."
-        case let .modelNotDownloadable(modelID):
+        case .modelNotDownloadable(let modelID):
             return "Voice model \(modelID) cannot be downloaded."
-        case let .missingDownloadURL(modelID):
+        case .missingDownloadURL(let modelID):
             return "Voice model \(modelID) has no download URL."
-        case let .missingLocalFileName(modelID):
+        case .missingLocalFileName(let modelID):
             return "Voice model \(modelID) has no local file mapping."
         case .removalWouldLeaveNoDefaultModel:
             return "The default bundled model must remain installed."
@@ -25,23 +25,34 @@ public enum VoiceModelInstallerError: Error, LocalizedError {
 
 public actor VoiceModelInstaller {
     private let fileManager: FileManager
-    private let session: URLSession
+    private let suppressionStore: VoiceModelSuppressionStore
 
-    public init(fileManager: FileManager = .default, session: URLSession = .shared) {
+    public init(
+        fileManager: FileManager = .default,
+        suppressionStore: VoiceModelSuppressionStore = .shared
+    ) {
         self.fileManager = fileManager
-        self.session = session
+        self.suppressionStore = suppressionStore
     }
 
     public func installedRuntime(appName: String = "WisprLocal") throws -> InstalledWhisperRuntime {
-        try BundledWhisperRuntimeInstaller.installBundledRuntime(appName: appName)
+        try BundledWhisperRuntimeInstaller.installBundledRuntime(
+            appName: appName,
+            suppressedBundledModelFileNames: suppressionStore.suppressedFileNames()
+        )
     }
 
-    public func installedWhisperModelFileNames(appName: String = "WisprLocal") throws -> Set<String> {
+    public func installedWhisperModelFileNames(appName: String = "WisprLocal") throws -> Set<String>
+    {
         let runtime = try installedRuntime(appName: appName)
         return Set(runtime.availableModelFileNames)
     }
 
-    public func install(_ descriptor: VoiceModelDescriptor, appName: String = "WisprLocal") async throws -> InstalledWhisperRuntime {
+    public func install(
+        _ descriptor: VoiceModelDescriptor,
+        appName: String = "WisprLocal",
+        progressHandler: (@Sendable (VoiceModelInstallProgress) -> Void)? = nil
+    ) async throws -> InstalledWhisperRuntime {
         guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
             throw VoiceModelInstallerError.unsupportedProvider(descriptor.providerID)
         }
@@ -55,22 +66,38 @@ public actor VoiceModelInstaller {
             throw VoiceModelInstallerError.missingDownloadURL(descriptor.id)
         }
 
+        suppressionStore.clearSuppression(for: localFileName)
+
+        progressHandler?(
+            VoiceModelInstallProgress(phase: .preparing, fractionCompleted: 0)
+        )
+
         let runtime = try installedRuntime(appName: appName)
         if runtime.availableModelFileNames.contains(localFileName) {
+            progressHandler?(
+                VoiceModelInstallProgress(phase: .finalizing, fractionCompleted: 1)
+            )
             return runtime
         }
 
-        let downloadURL = URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-\(downloadIdentifier).bin")!
-        let tempDirectory = fileManager.temporaryDirectory.appendingPathComponent("voice-model-download-\(UUID().uuidString)", isDirectory: true)
+        let downloadURL = URL(
+            string:
+                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-\(downloadIdentifier).bin"
+        )!
+        let tempDirectory = fileManager.temporaryDirectory.appendingPathComponent(
+            "voice-model-download-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: tempDirectory) }
 
         let destinationURL = tempDirectory.appendingPathComponent(localFileName)
-        let (downloadedURL, _) = try await session.download(from: downloadURL)
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
+        let downloadClient = VoiceModelDownloadClient(fileManager: fileManager)
+        try await downloadClient.download(from: downloadURL, to: destinationURL) { progress in
+            progressHandler?(progress)
         }
-        try fileManager.moveItem(at: downloadedURL, to: destinationURL)
+
+        progressHandler?(
+            VoiceModelInstallProgress(phase: .finalizing, fractionCompleted: 0.99)
+        )
 
         let targetURL = runtime.modelsDirectoryURL.appendingPathComponent(localFileName)
         if fileManager.fileExists(atPath: targetURL.path) {
@@ -78,10 +105,16 @@ public actor VoiceModelInstaller {
         }
         try fileManager.copyItem(at: destinationURL, to: targetURL)
 
+        progressHandler?(
+            VoiceModelInstallProgress(phase: .finalizing, fractionCompleted: 1)
+        )
+
         return try installedRuntime(appName: appName)
     }
 
-    public func remove(_ descriptor: VoiceModelDescriptor, appName: String = "WisprLocal") throws -> InstalledWhisperRuntime {
+    public func remove(_ descriptor: VoiceModelDescriptor, appName: String = "WisprLocal") throws
+        -> InstalledWhisperRuntime
+    {
         guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
             throw VoiceModelInstallerError.unsupportedProvider(descriptor.providerID)
         }
@@ -99,10 +132,16 @@ public actor VoiceModelInstaller {
             try fileManager.removeItem(at: targetURL)
         }
 
-        let remaining = try fileManager.contentsOfDirectory(at: runtime.modelsDirectoryURL, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension.lowercased() == "bin" }
-            .map(\.lastPathComponent)
-            .sorted()
+        if descriptor.installState != .bundled {
+            suppressionStore.suppress(localFileName)
+        }
+
+        let remaining = try fileManager.contentsOfDirectory(
+            at: runtime.modelsDirectoryURL, includingPropertiesForKeys: nil
+        )
+        .filter { $0.pathExtension.lowercased() == "bin" }
+        .map(\.lastPathComponent)
+        .sorted()
 
         return InstalledWhisperRuntime(
             rootDirectoryURL: runtime.rootDirectoryURL,

@@ -121,6 +121,8 @@ public enum BundledWhisperRuntimeInstaller {
         resourceSubdirectory: String = "Runtime",
         appName: String = "WisprLocal",
         preserveAdditionalModels: Bool = true,
+        suppressedBundledModelFileNames: Set<String> = VoiceModelSuppressionStore.shared
+            .suppressedFileNames(),
         fileManager: FileManager = .default
     ) throws -> InstalledWhisperRuntime {
         guard let sourceRuntime = bundledRuntimeDirectory(in: bundle, resourceSubdirectory: resourceSubdirectory) else {
@@ -135,6 +137,7 @@ public enum BundledWhisperRuntimeInstaller {
             destinationRuntimeDirectory: nil,
             appName: appName,
             preserveAdditionalModels: preserveAdditionalModels,
+            suppressedBundledModelFileNames: suppressedBundledModelFileNames,
             fileManager: fileManager
         )
     }
@@ -144,6 +147,8 @@ public enum BundledWhisperRuntimeInstaller {
         destinationRuntimeDirectory: URL? = nil,
         appName: String = "WisprLocal",
         preserveAdditionalModels: Bool = false,
+        suppressedBundledModelFileNames: Set<String> = VoiceModelSuppressionStore.shared
+            .suppressedFileNames(),
         fileManager: FileManager = .default
     ) throws -> InstalledWhisperRuntime {
         let sourceCLI = sourceRuntimeDirectory.appendingPathComponent(cliName)
@@ -172,6 +177,10 @@ public enum BundledWhisperRuntimeInstaller {
             availableModelFileNames: availableModelFileNames,
             sourceModelsDirectory: sourceModels
         )
+        let bundledModelFileNames = bundledModelFileNamesToSync(
+            manifest: manifest,
+            defaultModelFileName: defaultModelFileName
+        )
         try validateManifestIntegrity(
             manifest: manifest,
             availableModelFileNames: availableModelFileNames,
@@ -190,7 +199,7 @@ public enum BundledWhisperRuntimeInstaller {
         try pruneStaleRuntimeAssets(
             destinationRoot: destinationRoot,
             destinationModels: destinationModels,
-            expectedModelFileNames: Set(availableModelFileNames),
+            expectedModelFileNames: Set(bundledModelFileNames),
             preserveAdditionalModels: preserveAdditionalModels,
             fileManager: fileManager
         )
@@ -198,8 +207,20 @@ public enum BundledWhisperRuntimeInstaller {
         try copyIfChanged(from: sourceCLI, to: destinationCLI, fileManager: fileManager)
         try makeExecutable(destinationCLI, fileManager: fileManager)
 
-        for modelFile in modelFiles {
-            let target = destinationModels.appendingPathComponent(modelFile.lastPathComponent)
+        for modelFileName in bundledModelFileNames {
+            if suppressedBundledModelFileNames.contains(modelFileName) {
+                let suppressedTarget = destinationModels.appendingPathComponent(modelFileName)
+                if fileManager.fileExists(atPath: suppressedTarget.path) {
+                    try fileManager.removeItem(at: suppressedTarget)
+                }
+                continue
+            }
+
+            let modelFile = sourceModels.appendingPathComponent(modelFileName)
+            guard fileManager.fileExists(atPath: modelFile.path) else {
+                continue
+            }
+            let target = destinationModels.appendingPathComponent(modelFileName)
             try copyIfChanged(from: modelFile, to: target, fileManager: fileManager)
         }
 
@@ -301,6 +322,16 @@ public enum BundledWhisperRuntimeInstaller {
         } catch {
             throw BundledWhisperRuntimeError.invalidManifest(manifestURL)
         }
+    }
+
+    private static func bundledModelFileNamesToSync(
+        manifest: BundledWhisperRuntimeManifest?,
+        defaultModelFileName: String
+    ) -> [String] {
+        if let declaredModelFileNames = manifest?.modelFileNames, !declaredModelFileNames.isEmpty {
+            return declaredModelFileNames.sorted()
+        }
+        return [defaultModelFileName]
     }
 
     private static func resolveDefaultModelFileName(
