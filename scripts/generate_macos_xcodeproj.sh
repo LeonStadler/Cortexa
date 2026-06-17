@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="${ROOT_DIR}/apps/macos/WisprLocalMac"
 PROJECT_PATH="${PROJECT_DIR}/WisprLocalMac.xcodeproj"
+RUNTIME_DIR="${ROOT_DIR}/apps/macos/AppShell/Resources/Runtime"
 APP_MARKETING_VERSION="$(cat "${ROOT_DIR}/VERSION")"
 APP_BUILD_NUMBER="$(echo "${APP_MARKETING_VERSION}" | tr -cd '0-9')"
 APP_BUILD_NUMBER="$(echo "${APP_BUILD_NUMBER}" | sed 's/^0*//')"
@@ -80,6 +81,9 @@ if [[ "${REQUIRE_CLEAN}" -eq 1 ]] && ! git diff --quiet -- "${PROJECT_PATH}"; th
   echo "Refusing to regenerate ${PROJECT_PATH} because it already has local modifications." >&2
   exit 1
 fi
+
+# XcodeGen validates source directories before CI prepares the runtime bundle.
+mkdir -p "${RUNTIME_DIR}/models"
 
 (
   cd "${PROJECT_DIR}"
