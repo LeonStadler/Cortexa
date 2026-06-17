@@ -32,7 +32,7 @@ jobs:
 
       - name: Install XcodeGen
         run: |
-          brew untap aws/tap azure/bicep || true
+          brew trust aws/tap azure/bicep || true
           brew install xcodegen
 
       - name: Verify generated macOS project is up to date
@@ -55,7 +55,7 @@ jobs:
 
       - name: Install release tooling
         run: |
-          brew untap aws/tap azure/bicep || true
+          brew trust aws/tap azure/bicep || true
           brew install xcodegen
 
       - name: Build Whisper runtime
