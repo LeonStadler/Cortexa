@@ -31,7 +31,9 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          brew untap aws/tap azure/bicep || true
+          brew install xcodegen
 
       - name: Verify generated macOS project is up to date
         run: ./scripts/generate_macos_xcodeproj.sh --check
@@ -52,7 +54,9 @@ jobs:
           submodules: recursive
 
       - name: Install release tooling
-        run: brew install xcodegen
+        run: |
+          brew untap aws/tap azure/bicep || true
+          brew install xcodegen
 
       - name: Build Whisper runtime
         run: ENABLE_XCFRAMEWORK_BUILD=OFF ./scripts/build_whisper_xcframework.sh
