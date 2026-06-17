@@ -22,6 +22,16 @@ require_command() {
   fi
 }
 
+require_pattern() {
+  local pattern="$1"
+  local path="$2"
+  local message="$3"
+
+  if ! grep -Eq "${pattern}" "${path}"; then
+    error "${message}"
+  fi
+}
+
 validate_non_empty() {
   local name="$1"
   local value="$2"
@@ -30,9 +40,9 @@ validate_non_empty() {
   fi
 }
 
-require_command rg
 require_command plutil
 require_command git
+require_command grep
 
 validate_non_empty "SPARKLE_FEED_URL" "${SPARKLE_FEED_URL:-}"
 validate_non_empty "SPARKLE_PUBLIC_ED_KEY" "${SPARKLE_PUBLIC_ED_KEY:-}"
@@ -53,16 +63,16 @@ log "Regenerating macOS Xcode project with production variables"
 "${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh" --check
 
 plutil -lint "${INFO_PLIST}" >/dev/null
-rg -q 'SUPublicEDKey' "${INFO_PLIST}" || error "SUPublicEDKey fehlt in Info.plist"
-rg -q 'SUFeedURL' "${INFO_PLIST}" || error "SUFeedURL fehlt in Info.plist"
+require_pattern 'SUPublicEDKey' "${INFO_PLIST}" "SUPublicEDKey fehlt in Info.plist"
+require_pattern 'SUFeedURL' "${INFO_PLIST}" "SUFeedURL fehlt in Info.plist"
 EXPECTED_VERSION_PATTERN="$(printf '%s' "${APP_VERSION}" | sed 's/\./\\./g')"
-rg -q "MARKETING_VERSION = ${EXPECTED_VERSION_PATTERN};" "${PROJECT_FILE}" || error "MARKETING_VERSION im generierten Projekt entspricht nicht VERSION"
+require_pattern "MARKETING_VERSION = ${EXPECTED_VERSION_PATTERN};" "${PROJECT_FILE}" "MARKETING_VERSION im generierten Projekt entspricht nicht VERSION"
 EXPECTED_BUILD_NUMBER="$(printf '%s' "${APP_VERSION}" | tr -cd '0-9' | sed 's/^0*//')"
 if [[ -z "${EXPECTED_BUILD_NUMBER}" ]]; then
   EXPECTED_BUILD_NUMBER="1"
 fi
-rg -q "CURRENT_PROJECT_VERSION = ${EXPECTED_BUILD_NUMBER};" "${PROJECT_FILE}" || error "CURRENT_PROJECT_VERSION im generierten Projekt entspricht nicht VERSION"
-rg -q 'Assets\.xcassets' "${PROJECT_FILE}" || error "Asset-Katalog fehlt im generierten Projekt"
+require_pattern "CURRENT_PROJECT_VERSION = ${EXPECTED_BUILD_NUMBER};" "${PROJECT_FILE}" "CURRENT_PROJECT_VERSION im generierten Projekt entspricht nicht VERSION"
+require_pattern 'Assets\.xcassets' "${PROJECT_FILE}" "Asset-Katalog fehlt im generierten Projekt"
 
 log "Preflight erfolgreich"
 log "Runtime-Modelle: ${MODEL_COUNT}"

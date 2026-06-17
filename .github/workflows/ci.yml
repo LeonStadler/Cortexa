@@ -48,9 +48,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
-      - name: Install XcodeGen
+      - name: Install release tooling
         run: brew install xcodegen
+
+      - name: Build Whisper runtime
+        run: ENABLE_XCFRAMEWORK_BUILD=OFF ./scripts/build_whisper_xcframework.sh
+
+      - name: Download smoke-test model
+        run: ./scripts/download_models.sh
 
       - name: Run release preflight
         run: ./scripts/preflight_macos_release.sh
