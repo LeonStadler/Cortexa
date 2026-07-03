@@ -16,6 +16,20 @@
 
 ## Fixes
 
+- 2026-06-18: macOS-App-Export und lokale Smoke-Validierung stabilisiert.
+  - Dateien: `apps/macos/AppShell/WisprLocalMacApp.swift`, `scripts/smoke_test_macos_app.sh`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalität: Der Single-Instance-Guard nutzt unter macOS 14+ die nicht-deprecated Aktivierungs-API, wodurch die Release-Build-Warnung zu `activateIgnoringOtherApps` entfällt. Der macOS-Smoke-Test kann belegte DerivedData-Ordner robust beiseitelegen, statt an kurzzeitig offenen Xcode-Indexdateien abzubrechen. Die Repo-Version wurde als Patch-Bugfix auf `0.26.1` angehoben.
+
+## Chores
+
+- 2026-07-03: Cortexa-Logo als macOS-App-Branding integriert.
+  - Dateien: `apps/macos/AppShell/Resources/Assets.xcassets/AppIcon.appiconset`, `apps/macos/AppShell/Resources/Assets.xcassets/CortexaLogoHorizontal.imageset`, `apps/macos/AppShell/Resources/Assets.xcassets/CortexaLogoStacked.imageset`, `apps/macos/AppShell/MenuBarContentView.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalität: Das neue Cortexa-Favicon ersetzt die Dock-/AppIcon-PNGs in allen macOS-Größen. Die gelieferten Cortexa-Logo-SVGs liegen nun als Asset-Katalog-Imagesets vor; das Menüleisten-Popup zeigt unten das echte Cortexa-Logo, während das Statusleistensymbol selbst weiterhin das bestehende SF-Symbol nutzt. Die Repo-Version wurde als Patch-Chore auf `0.26.3` angehoben.
+
+- 2026-06-30: Eingebettetes `whisper.cpp` auf den benötigten lokalen Runtime-Build reduziert.
+  - Dateien: `third_party/whisper.cpp`, `scripts/build_whisper_xcframework.sh`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalität: Nicht benötigte upstream-Demos und Beispiele wie `wchess`, Android-, WASM-, Server-, Stream- und Editor-Beispiele sowie upstream-CI-, Test-, Sample-, Binding- und generierte Build-Verzeichnisse wurden entfernt. Erhalten bleibt nur der minimale `whisper-cli`-Build mit den notwendigen Common-Hilfsdateien und CMake-Vorlagen. Der Standard-Build erzeugt jetzt nur noch die lokale macOS-CLI; die XCFramework-Erzeugung bleibt explizit über `ENABLE_XCFRAMEWORK_BUILD=ON` verfügbar. Die Repo-Version wurde als Patch-Chore auf `0.26.2` angehoben.
+
 - 2026-06-16: Fortschrittsanzeige für Speech-Modell-Downloads und klares Entfernen-Feedback in den Settings.
   - Dateien: `Sources/ASRCore/VoiceModelInstallProgress.swift`, `Sources/ASRCore/VoiceModelDownloadClient.swift`, `Sources/ASRCore/VoiceModelInstaller.swift`, `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppStateFacadeActions.swift`, `Tests/ASRCoreTests/VoiceModelInstallProgressTests.swift`, `Tests/AppShellSupportTests/SpeechModelControllerTests.swift`, `VERSION`
   - Funktionalität: Modell-Installationen zeigen einen linearen Fortschrittsbalken mit Prozent und übertragenen Bytes. Entfernen zeigt einen „Wird entfernt …“-Zustand, aktualisiert die installierte Modellliste optimistisch und rollt bei Fehlern zurück.

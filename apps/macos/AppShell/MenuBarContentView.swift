@@ -195,6 +195,21 @@ struct MenuBarContentView: View {
         appState.transcriptHistory.count > menuBarHistoryPreviewItemLimit
     }
 
+    private var menuBarBrandFooter: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Image("CortexaLogoHorizontal")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: appState.compactMenuBarDesign ? 92 : 108, height: 22)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Cortexa")
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 2)
+    }
+
     private var insertionModeLabel: String {
         if appState.finalResultDeliveryMode == .clipboardOnly {
             return text("Zwischenablage", "Clipboard")
@@ -688,6 +703,10 @@ struct MenuBarContentView: View {
                     shortcutText: appState.showMenuBarShortcutHints ? "Command + Q" : nil
                 )
             }
+
+            Divider()
+
+            menuBarBrandFooter
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)

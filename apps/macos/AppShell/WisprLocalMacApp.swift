@@ -18,7 +18,11 @@ private enum SingleInstanceGuard {
         )
         .filter { $0.processIdentifier != currentPID }
         guard let existing = otherInstances.first else { return }
-        existing.activate(options: [.activateIgnoringOtherApps])
+        if #available(macOS 14.0, *) {
+            existing.activate()
+        } else {
+            existing.activate(options: [.activateIgnoringOtherApps])
+        }
         exit(0)
     }
 }

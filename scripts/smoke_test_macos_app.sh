@@ -86,7 +86,12 @@ log "Generating macOS Xcode project"
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   if [[ -d "${DERIVED_DATA_PATH}" ]]; then
     log "Removing previous derived data"
-    rm -rf "${DERIVED_DATA_PATH}"
+    if ! rm -rf "${DERIVED_DATA_PATH}" 2>/dev/null; then
+      STALE_DERIVED_DATA_PATH="${DERIVED_DATA_PATH}.stale.$(date +%Y%m%d%H%M%S)"
+      log "Previous derived data is still busy; moving it aside to ${STALE_DERIVED_DATA_PATH}"
+      mv "${DERIVED_DATA_PATH}" "${STALE_DERIVED_DATA_PATH}"
+      rm -rf "${STALE_DERIVED_DATA_PATH}" 2>/dev/null || true
+    fi
   fi
 
   log "Building debug app"
