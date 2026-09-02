@@ -8,6 +8,19 @@ private enum WisprSmokeLaunch {
     }
 }
 
+/// Erste sichtbare Oberfläche für Release-/DMG-Starts, damit eine reine Menüleisten-App nicht wie ein No-op wirkt.
+private enum FirstVisibleLaunch {
+    private static let didPresentKey = "cortexa.launch.didPresentInitialWindow"
+
+    static func shouldPresent(using defaults: UserDefaults = .standard) -> Bool {
+        !defaults.bool(forKey: didPresentKey)
+    }
+
+    static func markPresented(using defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: didPresentKey)
+    }
+}
+
 /// Beendet frische Starts, wenn bereits eine Instanz mit derselben Bundle-ID läuft (z. B. direkter Binary-Start + `open`/AppleScript).
 private enum SingleInstanceGuard {
     static func exitIfAnotherInstanceIsRunning() {
@@ -18,7 +31,11 @@ private enum SingleInstanceGuard {
         )
         .filter { $0.processIdentifier != currentPID }
         guard let existing = otherInstances.first else { return }
-        existing.activate(options: [.activateIgnoringOtherApps])
+        if #available(macOS 14.0, *) {
+            existing.activate()
+        } else {
+            existing.activate(options: [.activateIgnoringOtherApps])
+        }
         exit(0)
     }
 }
@@ -86,7 +103,14 @@ struct WisprLocalMacApp: App {
             SmokeOpenSettingsLaunchObserver.start(appState: appState)
         } else {
             DispatchQueue.main.async {
-                onboardingWindowPresenter.showIfNeeded()
+                if appState.isOnboardingComplete {
+                    guard FirstVisibleLaunch.shouldPresent() else { return }
+                    FirstVisibleLaunch.markPresented()
+                    appState.selectedSettingsTab = .general
+                    settingsWindowPresenter.show()
+                } else {
+                    onboardingWindowPresenter.showIfNeeded()
+                }
             }
         }
     }
@@ -99,6 +123,9 @@ struct WisprLocalMacApp: App {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: appState.menuBarIconName)
+                    .symbolRenderingMode(.monochrome)
+                    .imageScale(.medium)
+                    .foregroundStyle(.primary)
                 if !appState.menuBarTitle.isEmpty {
                     Text(appState.menuBarTitle)
                         .lineLimit(1)

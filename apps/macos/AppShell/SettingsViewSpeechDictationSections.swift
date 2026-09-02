@@ -1,26 +1,81 @@
 import ASRCore
 import SwiftUI
 
+enum SpeechModelAvailabilityFilter: String, CaseIterable, Identifiable {
+    case all
+    case installed
+    case notInstalled
+
+    var id: String { rawValue }
+
+    func localizedDisplayName(language: AppLanguage) -> String {
+        switch self {
+        case .all:
+            return language.text("Alle", "All")
+        case .installed:
+            return language.text("Installiert", "Installed")
+        case .notInstalled:
+            return language.text("Download", "Download")
+        }
+    }
+}
+
+enum SpeechModelLanguageFilter: String, CaseIterable, Identifiable {
+    case all
+    case multilingual
+    case englishOnly
+
+    var id: String { rawValue }
+
+    func localizedDisplayName(language: AppLanguage) -> String {
+        switch self {
+        case .all:
+            return language.text("Alle Sprachen", "All languages")
+        case .multilingual:
+            return language.text("Mehrsprachig", "Multilingual")
+        case .englishOnly:
+            return language.text("Nur Englisch", "English only")
+        }
+    }
+}
+
 extension SettingsView {
     @ViewBuilder
     var speechModelSelectionContent: some View {
         if speechHasMatches {
             LabeledContent {
                 if appState.visibleSelectableVoiceModels.isEmpty {
-                    Text(text("Keine installierten Modelle", "No installed models"))
+                    Text(text("Keine Modelle erkannt", "No models detected"))
                         .foregroundStyle(.secondary)
                 } else {
                     Picker(
                         text("Voice-Modell", "Voice model"),
-                        selection: $appState.selectedVoiceModelID
+                        selection: voiceModelSelectionBinding
                     ) {
                         ForEach(appState.visibleSelectableVoiceModels) { model in
-                            Text(model.displayName).tag(model.id)
+                            Text(voiceModelPickerTitle(for: model)).tag(model.id)
                         }
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .settingsFormMenuPickerSlot(minWidth: 240)
+                    .confirmationDialog(
+                        text("Modell herunterladen?", "Download model?"),
+                        isPresented: pendingVoiceModelInstallDialogBinding
+                    ) {
+                        Button(text("Download und auswählen", "Download and choose")) {
+                            if let model = pendingVoiceModelForInstallation {
+                                appState.installVoiceModel(model)
+                                pendingVoiceModelForInstallation = nil
+                            }
+                        }
+                        Button(text("Abbrechen", "Cancel"), role: .cancel) {}
+                    } message: {
+                        Text(
+                            pendingVoiceModelForInstallation.map(voiceModelInstallationMessage)
+                                ?? ""
+                        )
+                    }
                 }
             } label: {
                 SettingsFieldLabel(
@@ -173,10 +228,11 @@ extension SettingsView {
             }
         } else if speechHasMatches {
             Text(
-                text(
-                    "Dieses Modell unterstützt keine Übersetzung.",
-                    "This model does not support translation."
-                )
+                appState.speechTranslationUnavailableReason
+                    ?? text(
+                        "Dieses Modell unterstützt keine Übersetzung.",
+                        "This model does not support translation."
+                    )
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
@@ -186,7 +242,38 @@ extension SettingsView {
     @ViewBuilder
     var installedSpeechModelsContent: some View {
         if speechHasMatches {
-            ForEach(appState.visibleVoiceModels) { model in
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    TextField(text("Modelle suchen", "Search models"), text: $speechModelSearchText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(minWidth: 180)
+
+                    Picker(text("Status", "Status"), selection: $speechModelAvailabilityFilter) {
+                        ForEach(SpeechModelAvailabilityFilter.allCases) { filter in
+                            Text(filter.localizedDisplayName(language: effectiveLanguage))
+                                .tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 260)
+
+                    Picker(text("Sprache", "Language"), selection: $speechModelLanguageFilter) {
+                        ForEach(SpeechModelLanguageFilter.allCases) { filter in
+                            Text(filter.localizedDisplayName(language: effectiveLanguage))
+                                .tag(filter)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 150)
+                }
+
+                if filteredVoiceModelsForManagement.isEmpty {
+                    Text(text("Keine passenden Modelle gefunden.", "No matching models found."))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            ForEach(filteredVoiceModelsForManagement) { model in
                 LabeledContent {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(alignment: .center, spacing: 10) {
@@ -216,6 +303,87 @@ extension SettingsView {
                 }
             }
         }
+    }
+
+    private var filteredVoiceModelsForManagement: [VoiceModelDescriptor] {
+        let query = speechModelSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return appState.visibleVoiceModels.filter { model in
+            let matchesAvailability: Bool = {
+                switch speechModelAvailabilityFilter {
+                case .all:
+                    return true
+                case .installed:
+                    return appState.isVoiceModelInstalled(model)
+                case .notInstalled:
+                    return !appState.isVoiceModelInstalled(model)
+                }
+            }()
+            let matchesLanguage: Bool = {
+                switch speechModelLanguageFilter {
+                case .all:
+                    return true
+                case .multilingual:
+                    return model.languageCode == nil
+                case .englishOnly:
+                    return model.languageCode == DictationLanguage.english.rawValue
+                }
+            }()
+            let matchesSearch = query.isEmpty
+                || model.displayName.lowercased().contains(query)
+                || model.id.lowercased().contains(query)
+                || (model.languageCode?.lowercased().contains(query) ?? false)
+            return matchesAvailability && matchesLanguage && matchesSearch
+        }
+    }
+
+    private var voiceModelSelectionBinding: Binding<String> {
+        Binding(
+            get: { appState.selectedVoiceModelID },
+            set: { newValue in
+                guard let model = appState.visibleVoiceModels.first(where: { $0.id == newValue })
+                else { return }
+                if appState.isVoiceModelInstalled(model) {
+                    appState.setSelectedVoiceModel(model)
+                } else if model.installState != .unavailable {
+                    pendingVoiceModelForInstallation = model
+                }
+            }
+        )
+    }
+
+    private var pendingVoiceModelInstallDialogBinding: Binding<Bool> {
+        Binding(
+            get: { pendingVoiceModelForInstallation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingVoiceModelForInstallation = nil
+                }
+            }
+        )
+    }
+
+    private func voiceModelPickerTitle(for model: VoiceModelDescriptor) -> String {
+        let status: String
+        if appState.isVoiceModelBusy(model) {
+            status = text("lädt", "busy")
+        } else if appState.isVoiceModelInstalled(model) {
+            status = text("installiert", "installed")
+        } else if model.installState == .unavailable {
+            status = text("nicht verfügbar", "unavailable")
+        } else {
+            status = text("Download", "download")
+        }
+        return "\(model.displayName) · \(status)"
+    }
+
+    private func voiceModelInstallationMessage(for model: VoiceModelDescriptor) -> String {
+        let language = model.languageCode?.uppercased() ?? text("mehrsprachig", "multilingual")
+        let translation = model.supportsTranslationToEnglish ? text("ja", "yes") : text("nein", "no")
+        return text(
+            "\(model.displayName)\nSprache: \(language)\nGröße: \(model.sizeLabel)\nÜbersetzung: \(translation)\n\nDas Modell wird heruntergeladen und danach automatisch ausgewählt.",
+            "\(model.displayName)\nLanguage: \(language)\nSize: \(model.sizeLabel)\nTranslation: \(translation)\n\nThe model will download and then be selected automatically."
+        )
     }
 
     @ViewBuilder

@@ -10,6 +10,7 @@ struct SettingsViewShell: View {
     let selectedForm: AnyView
     let searchResultsForm: AnyView
     let accessibilityReduceMotion: Bool
+    let toolbarAccessoryContent: AnyView?
     let onRefreshPermissionStates: () -> Void
 
     private var searchQuery: String {
@@ -82,6 +83,11 @@ struct SettingsViewShell: View {
                     text("Seitenleiste ein- oder ausblenden", "Show or hide sidebar")
                 )
                 .help(text("Seitenleiste ein- oder ausblenden", "Show or hide sidebar"))
+            }
+            if let toolbarAccessoryContent {
+                ToolbarItem(placement: .primaryAction) {
+                    toolbarAccessoryContent
+                }
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {

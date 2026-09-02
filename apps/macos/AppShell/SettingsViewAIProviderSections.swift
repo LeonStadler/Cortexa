@@ -44,6 +44,9 @@ extension SettingsView {
                     providerEditorCard
                 }
             }
+            .onAppear {
+                appState.refreshAllRemoteProviderModels()
+            }
         }
     }
 
@@ -305,6 +308,11 @@ extension SettingsView {
                         appState.saveSelectedRemoteProvider()
                     }
                     .liquidGlassPrimaryButtonStyle()
+
+                    Button(text("Modelle aktualisieren", "Refresh models")) {
+                        appState.refreshSelectedRemoteProviderModels()
+                    }
+                    .liquidGlassSecondaryButtonStyle()
 
                     Spacer()
 

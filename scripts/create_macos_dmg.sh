@@ -4,9 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACTS_DIR="${ROOT_DIR}/artifacts/mac"
 EXPORT_PATH="${EXPORT_PATH:-${ARTIFACTS_DIR}/release}"
-APP_PATH="${APP_PATH:-${EXPORT_PATH}/WisprLocalMac.app}"
-DMG_PATH="${DMG_PATH:-${ARTIFACTS_DIR}/WisprLocalMac.dmg}"
-VOLUME_NAME="${DMG_VOLUME_NAME:-WisprLocalMac}"
+APP_PATH="${APP_PATH:-${EXPORT_PATH}/Cortexa.app}"
+DMG_PATH="${DMG_PATH:-${ARTIFACTS_DIR}/Cortexa.dmg}"
+VOLUME_NAME="${DMG_VOLUME_NAME:-Cortexa}"
 
 log() {
   echo "[create_macos_dmg] $*"

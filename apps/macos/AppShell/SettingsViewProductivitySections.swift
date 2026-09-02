@@ -368,18 +368,28 @@ extension SettingsView {
                 }
                 .liquidGlassPrimaryButtonStyle()
                 .disabled(!canCommitNewDictionaryTerm)
-
-                Button(text("JSON importieren", "Import JSON")) {
-                    appState.importDictionaryFromJSON()
-                }
-                .liquidGlassSecondaryButtonStyle()
-
-                Button(text("JSON exportieren", "Export JSON")) {
-                    appState.exportDictionaryToJSON()
-                }
-                .liquidGlassSecondaryButtonStyle()
             }
         }
+    }
+
+    @ViewBuilder
+    var dictionaryToolbarActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                appState.importDictionaryFromJSON()
+            } label: {
+                Label(text("JSON importieren", "Import JSON"), systemImage: "square.and.arrow.down")
+            }
+            .help(text("Dictionary als JSON importieren", "Import dictionary as JSON"))
+
+            Button {
+                appState.exportDictionaryToJSON()
+            } label: {
+                Label(text("JSON exportieren", "Export JSON"), systemImage: "square.and.arrow.up")
+            }
+            .help(text("Dictionary als JSON exportieren", "Export dictionary as JSON"))
+        }
+        .labelStyle(.iconOnly)
     }
 
     @ViewBuilder
@@ -429,6 +439,10 @@ extension SettingsView {
             if filteredDictionaryTerms.isEmpty {
                 Text(text("Keine Dictionary-Begriffe gespeichert.", "No dictionary terms saved."))
                     .foregroundStyle(.secondary)
+            } else if let editingTerm = filteredDictionaryTerms.first(where: {
+                $0.id == editingDictionaryTermID
+            }) {
+                dictionaryTermEditor(for: editingTerm)
             } else {
                 Table(filteredDictionaryTerms) {
                     TableColumn(text("Begriff", "Term")) { term in
@@ -456,8 +470,77 @@ extension SettingsView {
                         .accessibilityLabel(text("Begriff löschen", "Delete term"))
                     }
                     .width(ideal: 44)
+                    TableColumn("") { term in
+                        Button {
+                            beginEditingDictionaryTerm(term)
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(text("Begriff bearbeiten", "Edit term"))
+                    }
+                    .width(ideal: 44)
                 }
                 .frame(minHeight: 200)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dictionaryTermEditor(for term: DictionaryTerm) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(text("Begriff bearbeiten", "Edit term"))
+                .font(.headline)
+
+            LabeledContent(text("Begriff", "Term")) {
+                TextField(text("Begriff", "Term"), text: $editingDictionaryTerm)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 220)
+                    .onSubmit { commitEditingDictionaryTerm() }
+            }
+
+            LabeledContent(text("Kategorie", "Category")) {
+                Picker(text("Kategorie", "Category"), selection: $editingDictionaryCategory) {
+                    ForEach(DictionaryTermCategory.allCases) { category in
+                        Text(
+                            category.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                            )
+                        )
+                        .tag(category)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .settingsFormMenuPickerSlot(minWidth: 220)
+            }
+
+            LabeledContent(text("Sprachcode", "Language code")) {
+                TextField(text("Optional", "Optional"), text: $editingDictionaryLanguageCode)
+                    .textFieldStyle(.plain)
+                    .frame(minWidth: 120)
+                    .onSubmit { commitEditingDictionaryTerm() }
+            }
+
+            HStack(spacing: 10) {
+                Button(text("Speichern", "Save")) {
+                    commitEditingDictionaryTerm()
+                }
+                .liquidGlassPrimaryButtonStyle()
+                .disabled(!canCommitEditingDictionaryTerm)
+
+                Button(text("Abbrechen", "Cancel")) {
+                    cancelEditingDictionaryTerm()
+                }
+                .liquidGlassSecondaryButtonStyle()
+            }
+        }
+        .padding(12)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .onAppear {
+            if editingDictionaryTermID == term.id && editingDictionaryTerm.isEmpty {
+                beginEditingDictionaryTerm(term)
             }
         }
     }

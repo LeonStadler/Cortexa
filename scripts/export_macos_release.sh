@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACTS_DIR="${ROOT_DIR}/artifacts/mac"
-ARCHIVE_PATH="${ARCHIVE_PATH:-${ARTIFACTS_DIR}/WisprLocalMac.xcarchive}"
+ARCHIVE_PATH="${ARCHIVE_PATH:-${ARTIFACTS_DIR}/Cortexa.xcarchive}"
 EXPORT_PATH="${EXPORT_PATH:-${ARTIFACTS_DIR}/release}"
 EXPORT_OPTIONS_PLIST="${ARTIFACTS_DIR}/ExportOptions-macos.plist"
 

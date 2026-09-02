@@ -290,8 +290,8 @@ extension SettingsView {
                 SettingsFieldLabel(
                     title: text("Modell", "Model"),
                     helpText: text(
-                        "Zeigt alle aktuell erkannten lokalen und entfernten Modelle an, die WisprLocal verwenden kann.",
-                        "Shows all currently detected local and remote models that WisprLocal can use."
+                        "Zeigt alle aktuell erkannten lokalen und entfernten Modelle an, die Cortexa verwenden kann.",
+                        "Shows all currently detected local and remote models that Cortexa can use."
                     )
                 )
             }

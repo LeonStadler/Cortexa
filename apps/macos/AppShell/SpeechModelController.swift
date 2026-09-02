@@ -140,6 +140,12 @@ final class SpeechModelController {
                     }
                 }
                 self.setInstalledVoiceModelFileNames(Set(runtime.availableModelFileNames))
+                if self.currentSelectedVoiceProviderID() != descriptor.providerID {
+                    self.setSelectedVoiceProviderID(descriptor.providerID)
+                }
+                if self.currentSelectedVoiceModelID() != descriptor.id {
+                    self.setSelectedVoiceModelID(descriptor.id)
+                }
                 self.sanitizeSpeechModelSelections()
                 self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde installiert.")
             } catch {
@@ -277,11 +283,15 @@ final class SpeechModelController {
 
     func voiceLanguageOptions(for descriptor: VoiceModelDescriptor?) -> [DictationLanguage] {
         guard let descriptor, let languageCode = descriptor.languageCode else {
-            return DictationLanguage.allCases
+            return Self.autoFirstLanguageOptions(DictationLanguage.allCases)
         }
 
         let fixedLanguage = DictationLanguage(rawValue: languageCode) ?? .english
         return [.auto, fixedLanguage]
+    }
+
+    static func autoFirstLanguageOptions(_ options: [DictationLanguage]) -> [DictationLanguage] {
+        [.auto] + options.filter { $0 != .auto }
     }
 
     func sanitizeSpeechModelSelections() {
@@ -342,11 +352,6 @@ final class SpeechModelController {
                 voiceLanguageOptions(for: selectedVoiceModel).map(\.rawValue))
             if !availableLanguages.contains(currentSelectedLanguage().rawValue) {
                 setSelectedLanguage(.auto)
-            }
-            if let languageCode = selectedVoiceModel.languageCode,
-                currentSelectedLanguage() == .auto
-            {
-                setSelectedLanguage(DictationLanguage(rawValue: languageCode) ?? .english)
             }
         }
 

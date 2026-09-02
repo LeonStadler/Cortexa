@@ -16,12 +16,21 @@ struct SettingsView: View {
     @State private var showsTabInfoPopover = false
     @State var selectedRemoteProviderPreset: AIRemoteProviderPreset?
     @State var addProviderDisclosureExpanded = false
+    @State var speechModelSearchText: String = ""
+    @State var speechModelAvailabilityFilter: SpeechModelAvailabilityFilter = .all
+    @State var speechModelLanguageFilter: SpeechModelLanguageFilter = .all
     @State var newDictionaryTerm: String = ""
     @State var newDictionaryLanguageCode: String = ""
     @State var newDictionaryCategory: DictionaryTermCategory = .personalTerm
+    @State var editingDictionaryTermID: UUID?
+    @State var editingDictionaryTerm: String = ""
+    @State var editingDictionaryLanguageCode: String = ""
+    @State var editingDictionaryCategory: DictionaryTermCategory = .personalTerm
+    @State var pendingVoiceModelForInstallation: VoiceModelDescriptor?
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     let personalWebsiteURL = URL(string: "https://leon-stadler.com")!
+    let projectRepositoryURL = URL(string: "https://github.com/LeonStadler/Cortexa")!
 
     var appMarketingVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
@@ -84,6 +93,18 @@ struct SettingsView: View {
         !trimmedNewDictionaryTerm.isEmpty
     }
 
+    var trimmedEditingDictionaryTerm: String {
+        editingDictionaryTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedEditingDictionaryLanguageCode: String {
+        editingDictionaryLanguageCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var canCommitEditingDictionaryTerm: Bool {
+        editingDictionaryTermID != nil && !trimmedEditingDictionaryTerm.isEmpty
+    }
+
     func commitNewDictionaryTerm() {
         guard canCommitNewDictionaryTerm else { return }
         appState.addDictionaryTerm(
@@ -96,6 +117,33 @@ struct SettingsView: View {
         newDictionaryTerm = ""
         newDictionaryLanguageCode = ""
         newDictionaryCategory = .personalTerm
+    }
+
+    func beginEditingDictionaryTerm(_ term: DictionaryTerm) {
+        editingDictionaryTermID = term.id
+        editingDictionaryTerm = term.term
+        editingDictionaryLanguageCode = term.languageCode ?? ""
+        editingDictionaryCategory = term.category
+    }
+
+    func cancelEditingDictionaryTerm() {
+        editingDictionaryTermID = nil
+        editingDictionaryTerm = ""
+        editingDictionaryLanguageCode = ""
+        editingDictionaryCategory = .personalTerm
+    }
+
+    func commitEditingDictionaryTerm() {
+        guard let termID = editingDictionaryTermID, canCommitEditingDictionaryTerm else { return }
+        appState.updateDictionaryTerm(
+            termID: termID,
+            term: trimmedEditingDictionaryTerm,
+            category: editingDictionaryCategory,
+            languageCode: trimmedEditingDictionaryLanguageCode.isEmpty
+                ? nil
+                : trimmedEditingDictionaryLanguageCode
+        )
+        cancelEditingDictionaryTerm()
     }
 
     private var storedLanguage: AppLanguage {
@@ -229,6 +277,7 @@ struct SettingsView: View {
             selectedForm: AnyView(selectedForm),
             searchResultsForm: AnyView(searchResultsForm),
             accessibilityReduceMotion: accessibilityReduceMotion,
+            toolbarAccessoryContent: settingsToolbarAccessoryContent,
             onRefreshPermissionStates: {
                 appState.refreshPermissionStatesWithStabilization()
             }
@@ -249,15 +298,11 @@ struct SettingsView: View {
             )
         case .speech:
             SpeechSettingsPage(
-                quickExplainerSectionTitle: text("Kurz erklärt", "Quick explainer"),
-                providersSectionTitle: text("Anbieter", "Providers"),
                 modelSectionTitle: text("Modell", "Model"),
                 languageSectionTitle: text("Sprache", "Language"),
                 qualitySectionTitle: text("Qualität", "Quality"),
                 translationSectionTitle: text("Übersetzung", "Translation"),
-                installedModelsSectionTitle: text("Installierte Modelle", "Installed models"),
-                overviewContent: erasedView { speechOverviewContent },
-                providerContent: erasedView { speechProviderContent },
+                installedModelsSectionTitle: text("Modellverwaltung", "Model management"),
                 modelSelectionContent: erasedView { speechModelSelectionContent },
                 languageContent: erasedView { speechLanguageContent },
                 qualityContent: erasedView { speechQualityContent },
@@ -341,7 +386,6 @@ struct SettingsView: View {
                 storageLocationSectionTitle: text("Speicherort", "Storage location"),
                 updatesSectionTitle: text("Updates", "Updates"),
                 diagnosticsSectionTitle: text("Diagnose", "Diagnostics"),
-                overviewContent: erasedView { advancedOverviewContent },
                 appInfoContent: erasedView { aboutAppInfoRows },
                 runtimeContent: erasedView { voiceModelRuntimeContent },
                 storageContent: erasedView { advancedStorageContent },
@@ -368,6 +412,14 @@ struct SettingsView: View {
         appState.selectedSettingsTab
     }
 
+    private var settingsToolbarAccessoryContent: AnyView? {
+        switch currentSelectedTab {
+        case .dictionary:
+            return erasedView { dictionaryToolbarActions }
+        default:
+            return nil
+        }
+    }
 
     func copyToClipboard(_ string: String) {
         guard !string.isEmpty else { return }

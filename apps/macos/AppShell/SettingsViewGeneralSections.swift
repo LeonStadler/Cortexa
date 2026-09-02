@@ -24,20 +24,22 @@ extension SettingsView {
                 SettingsFieldLabel(
                     title: text("Beim Anmelden starten", "Launch on login"),
                     helpText: text(
-                        "Startet WisprLocal automatisch nach der macOS-Anmeldung.",
-                        "Starts WisprLocal automatically after you sign in to macOS."
+                        "Startet Cortexa automatisch nach der macOS-Anmeldung.",
+                        "Starts Cortexa automatically after you sign in to macOS."
                     )
                 )
             }
 
-            Toggle(isOn: $appState.automaticallyCheckForUpdates) {
-                SettingsFieldLabel(
-                    title: text("Updates automatisch prüfen", "Automatically check for updates"),
-                    helpText: text(
-                        "Prüft im Hintergrund regelmäßig über Sparkle, ob eine neuere Version verfügbar ist.",
-                        "Checks in the background via Sparkle to see whether a newer version is available."
+            if appState.updaterConfigured {
+                Toggle(isOn: $appState.automaticallyCheckForUpdates) {
+                    SettingsFieldLabel(
+                        title: text("Updates automatisch prüfen", "Automatically check for updates"),
+                        helpText: text(
+                            "Prüft im Hintergrund regelmäßig über Sparkle, ob eine neuere Version verfügbar ist.",
+                            "Checks in the background via Sparkle to see whether a newer version is available."
+                        )
                     )
-                )
+                }
             }
         }
     }
@@ -147,19 +149,30 @@ extension SettingsView {
     var updatesContent: some View {
         if matches(["update", "updates", "aktualisierung"]) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .center, spacing: 10) {
-                    Button(text("Nach Updates suchen", "Check for updates")) {
-                        appState.checkForUpdates()
-                    }
-                    .liquidGlassSecondaryButtonStyle()
-                    .disabled(!appState.updaterConfigured)
+                if appState.updaterConfigured {
+                    HStack(alignment: .center, spacing: 10) {
+                        Button(text("Nach Updates suchen", "Check for updates")) {
+                            appState.checkForUpdates()
+                        }
+                        .liquidGlassSecondaryButtonStyle()
 
-                    if !appState.updaterStatusText.isEmpty {
-                        Text(appState.updaterStatusText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                        if !appState.updaterStatusText.isEmpty {
+                            Text(appState.updaterStatusText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
+                } else {
+                    Text(
+                        text(
+                            "Automatische Updates sind für diesen Build nicht konfiguriert. Releases werden über GitHub bereitgestellt; Sparkle wird erst aktiv, wenn Feed-URL und Public-Key im Build gesetzt sind.",
+                            "Automatic updates are not configured for this build. Releases are distributed through GitHub; Sparkle becomes active only when the feed URL and public key are set in the build."
+                        )
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if !appState.updaterFeedURLText.isEmpty {
@@ -175,7 +188,7 @@ extension SettingsView {
     @ViewBuilder
     var aboutAppInfoRows: some View {
         LabeledContent(text("App", "App")) {
-            Text("WisprLocal")
+            Text("Cortexa")
         }
         LabeledContent(text("Version", "Version")) {
             Text("\(appMarketingVersion) (\(appBuildNumber))")
@@ -190,13 +203,21 @@ extension SettingsView {
             "about", "über", "ueber", "leon", "stadler", "website", "webseite", "proprietär",
             "proprietary", "lizenz", "intermedia", "design", "fotografie", "vorarlberg",
         ]) {
+            Image("CortexaLogoHorizontal")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 260, maxHeight: 72, alignment: .leading)
+                .foregroundStyle(.primary)
+                .accessibilityLabel(text("Cortexa-Logo", "Cortexa logo"))
+
             LabeledContent(text("Entwickler", "Developer")) {
                 Text("Leon Stadler")
             }
             Text(
                 text(
-                    "Ich bin in München aufgewachsen, lebe heute am Bodensee und arbeite an digitalen Produkten, die Design, Technik und Alltag sinnvoll verbinden. Schwerpunkte sind Webdesign, UX/UI, Prototyping und kreative technische Systeme — mit einem starken Blick auf ruhige, native Oberflächen.",
-                    "I grew up in Munich and now live near Lake Constance, building digital products that connect design, technology, and everyday work. My focus is web design, UX/UI, prototyping, and creative technical systems — with a strong preference for calm, native-feeling interfaces."
+                    "Ich entwickle digitale Produkte mit Fokus auf ruhige, native Oberflächen, gute Workflows und lokale Kontrolle.",
+                    "I build digital products focused on calm native interfaces, practical workflows, and local control."
                 )
             )
             .font(.subheadline)
@@ -205,8 +226,8 @@ extension SettingsView {
 
             Text(
                 text(
-                    "WisprLocal ist daraus entstanden: eine lokale, datensparsame Diktierlösung für den Mac, die sich nicht aufdrängt, sondern zuverlässig im Hintergrund mitarbeitet.",
-                    "WisprLocal grew out of that mindset: a local, privacy-conscious dictation tool for the Mac that stays out of the way while remaining dependable."
+                    "Cortexa ist eine lokale, datensparsame Diktierlösung für den Mac.",
+                    "Cortexa is a local, privacy-conscious dictation tool for the Mac."
                 )
             )
             .font(.subheadline)
@@ -236,18 +257,25 @@ extension SettingsView {
         if matches(["support", "spenden", "donate", "website", "webseite"]) {
             Text(
                 text(
-                    "WisprLocal ist proprietäre Software und wird nicht als Open Source veröffentlicht. Support, Nutzung und Hintergrund zum Projekt findest du auf der Website.",
-                    "WisprLocal is proprietary software and is not distributed as open source. Visit the website for support, licensing, and project information."
+                    "Cortexa ist quelloffen einsehbar, aber nicht als offenes Community-Projekt zur freien Mitarbeit organisiert. Issues, Releases und technische Details liegen im Repository.",
+                    "Cortexa is source-visible, but not organized as an open community contribution project. Issues, releases, and technical details live in the repository."
                 )
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
-            Link(destination: personalWebsiteURL) {
-                Label(text("Projekt unterstützen", "Support the project"), systemImage: "heart")
+            HStack(spacing: 10) {
+                Link(destination: projectRepositoryURL) {
+                    Label(text("Repository öffnen", "Open repository"), systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+                .liquidGlassPrimaryButtonStyle()
+
+                Link(destination: personalWebsiteURL) {
+                    Label(text("Website besuchen", "Visit website"), systemImage: "safari")
+                }
+                .liquidGlassSecondaryButtonStyle()
             }
-            .liquidGlassPrimaryButtonStyle()
         }
     }
 
@@ -256,24 +284,14 @@ extension SettingsView {
         if matches([
             "mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen",
         ]) {
-            Text(
-                text(
-                    "Freigaben kannst du hier prüfen. „Freigabe anfragen“ öffnet den Systemdialog; „Öffnen“ führt zu den Datenschutz-Einstellungen. Direkt nach einem App-Neustart kann der Status kurz hinterherhängen — die App liest ihn mehrfach neu ein. Nach einem Rebuild kann macOS in den Systemeinstellungen noch „an“ zeigen, obwohl dieser Build nicht verknüpft ist — dann erscheint unten ein Hinweis zum Neu-Verknüpfen.",
-                    "You can verify access here. “Request access” shows the system prompt; “Open” goes to Privacy settings. After a restart the status can lag briefly—the app re-reads it several times. After a rebuild, macOS may still show “on” in System Settings while this build is not linked—use the rebind hint below when it appears."
-                )
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-
             if appState.microphonePermissionStaleAfterRebuild {
                 PermissionRecoveryBanner(
                     title: text(
                         "Mikrofon: älterer Build in Systemeinstellungen",
                         "Microphone: stale build entry"),
                     message: text(
-                        "Die Systemeinstellungen können noch eine alte Freigabe zeigen. WisprLocalMac unter Datenschutz → Mikrofon entfernen, App neu starten und „Freigabe anfragen“ erneut nutzen.",
-                        "System Settings may still list an old grant. Remove WisprLocalMac under Privacy → Microphone, restart the app, then use “Request access” again."
+                        "Die Systemeinstellungen können noch eine alte Freigabe zeigen. Cortexa oder alte WisprLocalMac-Einträge unter Datenschutz → Mikrofon entfernen, App neu starten und „Freigabe anfragen“ erneut nutzen.",
+                        "System Settings may still list an old grant. Remove Cortexa or old WisprLocalMac entries under Privacy → Microphone, restart the app, then use “Request access” again."
                     ),
                     actionTitle: text("Neu verknüpfen", "Rebind"),
                     action: { appState.rebindMicrophonePermissions() }
@@ -286,60 +304,82 @@ extension SettingsView {
                         "Bedienungshilfen: Rebuild nicht verknüpft",
                         "Accessibility: rebuild not linked"),
                     message: text(
-                        "Typisch nach `./scripts/smoke_test_macos_app.sh`: Systemeinstellungen zeigen WisprLocalMac aktiv, macOS vertraut diesem Binary aber nicht. Eintrag in Bedienungshilfen entfernen (−), dann „Freigabe anfragen“ und WisprLocalMac neu aktivieren.",
-                        "Common after `./scripts/smoke_test_macos_app.sh`: System Settings may show WisprLocalMac as enabled while macOS does not trust this binary. Remove the Accessibility entry (−), then “Request access” and enable WisprLocalMac again."
+                        "Nach einem Rebuild, typisch nach `./scripts/smoke_test_macos_app.sh`: Systemeinstellungen zeigen Cortexa oder einen alten WisprLocalMac-Eintrag aktiv, macOS vertraut diesem Binary aber nicht. Eintrag in Bedienungshilfen entfernen (−), dann „Freigabe anfragen“ und Cortexa neu aktivieren.",
+                        "After a rebuild, commonly after `./scripts/smoke_test_macos_app.sh`: System Settings may show Cortexa or an old WisprLocalMac entry as enabled while macOS does not trust this binary. Remove the Accessibility entry (−), then “Request access” and enable Cortexa again."
                     ),
                     actionTitle: text("Neu verknüpfen", "Rebind"),
                     action: { appState.rebindAccessibilityPermissions() }
                 )
             }
 
-            PermissionStatusRow(
-                title: text("Mikrofon", "Microphone"),
-                status: appState.microphonePermissionStatus,
-                detail: text("Erforderlich für die Audioaufnahme.", "Required for audio capture."),
-                actionTitle: appState.microphonePermissionStatus == .notDetermined
-                    ? text("Freigabe anfragen", "Request access")
-                    : text("Öffnen", "Open"),
-                actionHint: appState.microphonePermissionStatus == .notDetermined
-                    ? text(
-                        "Systemdialog zur Mikrofonfreigabe", "System prompt for microphone access")
-                    : text("Mikrofon-Einstellungen öffnen", "Open microphone settings"),
-                action: {
-                    if appState.microphonePermissionStatus == .notDetermined {
-                        appState.requestMicrophoneAccessFromSettings()
-                    } else {
-                        appState.openMicrophoneSettings()
+            VStack(spacing: 0) {
+                PermissionStatusRow(
+                    title: text("Mikrofon", "Microphone"),
+                    status: appState.microphonePermissionStatus,
+                    detail: text("Audioaufnahme.", "Audio capture."),
+                    statusLabel: permissionStatusLabel(
+                        appState.microphonePermissionStatus,
+                        deniedLabel: text("Nicht freigegeben", "Not allowed")
+                    ),
+                    actionTitle: appState.microphonePermissionStatus == .notDetermined
+                        ? text("Freigabe anfragen", "Request access")
+                        : text("Öffnen", "Open"),
+                    actionHint: appState.microphonePermissionStatus == .notDetermined
+                        ? text(
+                            "Systemdialog zur Mikrofonfreigabe", "System prompt for microphone access")
+                        : text("Mikrofon-Einstellungen öffnen", "Open microphone settings"),
+                    action: {
+                        if appState.microphonePermissionStatus == .notDetermined {
+                            appState.requestMicrophoneAccessFromSettings()
+                        } else {
+                            appState.openMicrophoneSettings()
+                        }
                     }
-                }
-            )
+                )
 
-            PermissionStatusRow(
-                title: text("Bedienungshilfen", "Accessibility"),
-                status: appState.accessibilityPermissionStatus,
-                detail: text(
-                    "Erforderlich zum Einfügen in das aktive Textfeld.",
-                    "Required to insert into the active text field."),
-                actionTitle: appState.accessibilityPermissionStatus != .granted
-                    ? text("Freigabe anfragen", "Request access")
-                    : text("Öffnen", "Open"),
-                actionHint: appState.accessibilityPermissionStatus != .granted
-                    ? text(
-                        "Systemdialog zu Bedienungshilfen",
-                        "System prompt for Accessibility")
-                    : text("Bedienungshilfen öffnen", "Open accessibility settings"),
-                action: {
-                    if appState.accessibilityPermissionStatus != .granted {
-                        appState.requestAccessibilityAccessFromSettings()
-                    } else {
-                        appState.openAccessibilitySettings()
+                Divider()
+
+                PermissionStatusRow(
+                    title: text("Bedienungshilfen", "Accessibility"),
+                    status: appState.accessibilityPermissionStatus,
+                    detail: text("Einfügen ins aktive Textfeld.", "Insert into the active field."),
+                    statusLabel: permissionStatusLabel(
+                        appState.accessibilityPermissionStatus,
+                        deniedLabel: text("Nicht freigegeben", "Not allowed")
+                    ),
+                    actionTitle: appState.accessibilityPermissionStatus != .granted
+                        ? text("Freigabe anfragen", "Request access")
+                        : text("Öffnen", "Open"),
+                    actionHint: appState.accessibilityPermissionStatus != .granted
+                        ? text(
+                            "Systemdialog zu Bedienungshilfen",
+                            "System prompt for Accessibility")
+                        : text("Bedienungshilfen öffnen", "Open accessibility settings"),
+                    action: {
+                        if appState.accessibilityPermissionStatus != .granted {
+                            appState.requestAccessibilityAccessFromSettings()
+                        } else {
+                            appState.openAccessibilitySettings()
+                        }
                     }
-                }
-            )
+                )
+            }
+            .padding(.vertical, 6)
 
             Text(appState.dictationCapability.localizedSummary)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    func permissionStatusLabel(_ status: PermissionStatus, deniedLabel: String) -> String {
+        switch status {
+        case .granted:
+            return text("Freigegeben", "Allowed")
+        case .denied, .notDetermined:
+            return deniedLabel
+        case .restricted:
+            return text("Eingeschränkt", "Restricted")
         }
     }
 

@@ -153,6 +153,56 @@ final class MacAppStatePersistenceFacade {
         persistDictionary()
     }
 
+    func updateDictionaryTerm(
+        termID: UUID,
+        term rawTerm: String,
+        category: DictionaryTermCategory,
+        languageCode: String?
+    ) {
+        let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else {
+            appendDiagnostic("Dictionary: Begriff wurde nicht aktualisiert (leer).")
+            return
+        }
+
+        let normalizedLanguageCode = languageCode?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let updatedKey = Self.normalizedDictionaryKey(term, languageCode: normalizedLanguageCode)
+        let terms = currentDictionaryTerms()
+
+        guard let existing = terms.first(where: { $0.id == termID }) else {
+            appendDiagnostic("Dictionary: Begriff wurde nicht aktualisiert (nicht gefunden).")
+            return
+        }
+
+        guard !terms.contains(where: { candidate in
+            candidate.id != termID
+                && Self.normalizedDictionaryKey(
+                    candidate.term,
+                    languageCode: candidate.languageCode
+                ) == updatedKey
+        }) else {
+            appendDiagnostic("Dictionary: Begriff wurde nicht aktualisiert (Duplikat).")
+            return
+        }
+
+        let updated = DictionaryTerm(
+            id: existing.id,
+            term: term,
+            category: category,
+            source: existing.source,
+            languageCode: normalizedLanguageCode,
+            createdAt: existing.createdAt
+        )
+        setDictionaryTerms(
+            terms.map { candidate in
+                candidate.id == termID ? updated : candidate
+            }
+        )
+        persistDictionary()
+    }
+
     func queueDictionaryCandidate(
         _ rawTerm: String,
         category: DictionaryTermCategory = .custom,
@@ -310,6 +360,20 @@ extension MacAppState {
         persistenceFacade.removeDictionaryTerm(termID: termID)
     }
 
+    func updateDictionaryTerm(
+        termID: UUID,
+        term: String,
+        category: DictionaryTermCategory,
+        languageCode: String?
+    ) {
+        persistenceFacade.updateDictionaryTerm(
+            termID: termID,
+            term: term,
+            category: category,
+            languageCode: languageCode
+        )
+    }
+
     func queueDictionaryCandidate(
         _ rawTerm: String,
         category: DictionaryTermCategory = .custom,
@@ -352,5 +416,11 @@ extension MacAppState {
 
     func persistDictionary() {
         persistenceFacade.persistDictionary()
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

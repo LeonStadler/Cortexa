@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WHISPER_DIR="${ROOT_DIR}/third_party/whisper.cpp"
 OUTPUT_DIR="${ROOT_DIR}/artifacts/whisper"
 CLI_BUILD_DIR="${WHISPER_DIR}/build-macos-cli"
-ENABLE_XCFRAMEWORK_BUILD="${ENABLE_XCFRAMEWORK_BUILD:-auto}"
+ENABLE_XCFRAMEWORK_BUILD="${ENABLE_XCFRAMEWORK_BUILD:-OFF}"
 ENABLE_COREML_FOR_CLI_BUILD="${ENABLE_COREML_FOR_CLI_BUILD:-OFF}"
 XCFRAMEWORK_CANDIDATES=(
   "${WHISPER_DIR}/build/whisper.xcframework"
@@ -82,7 +82,13 @@ fi
 log "Building macOS whisper-cli (Release)"
 (
   cd "${WHISPER_DIR}"
-  cmake -S . -B "${CLI_BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release -DWHISPER_METAL=ON -DWHISPER_COREML="${ENABLE_COREML_FOR_CLI_BUILD}"
+  cmake -S . -B "${CLI_BUILD_DIR}" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DGGML_METAL=ON \
+    -DWHISPER_COREML="${ENABLE_COREML_FOR_CLI_BUILD}" \
+    -DWHISPER_BUILD_EXAMPLES=ON \
+    -DWHISPER_BUILD_TESTS=OFF \
+    -DWHISPER_BUILD_SERVER=OFF
   cmake --build "${CLI_BUILD_DIR}" --config Release -j
 )
 

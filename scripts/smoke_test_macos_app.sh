@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="${ROOT_DIR}/apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj"
 SCHEME="WisprLocalMac"
 DERIVED_DATA_PATH="${ROOT_DIR}/artifacts/mac/dev-deriveddata"
-APP_PATH="${DERIVED_DATA_PATH}/Build/Products/Debug/WisprLocalMac.app"
-APP_BINARY="${APP_PATH}/Contents/MacOS/WisprLocalMac"
+APP_PATH="${DERIVED_DATA_PATH}/Build/Products/Debug/Cortexa.app"
+APP_BINARY="${APP_PATH}/Contents/MacOS/Cortexa"
 APP_INFO_PLIST="${APP_PATH}/Contents/Info.plist"
 RUNTIME_DIR="${APP_PATH}/Contents/Resources/Runtime"
 FALLBACK_RUNTIME_DIR="${APP_PATH}/Contents/Resources"
@@ -86,7 +86,12 @@ log "Generating macOS Xcode project"
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   if [[ -d "${DERIVED_DATA_PATH}" ]]; then
     log "Removing previous derived data"
-    rm -rf "${DERIVED_DATA_PATH}"
+    if ! rm -rf "${DERIVED_DATA_PATH}" 2>/dev/null; then
+      STALE_DERIVED_DATA_PATH="${DERIVED_DATA_PATH}.stale.$(date +%Y%m%d%H%M%S)"
+      log "Previous derived data is still busy; moving it aside to ${STALE_DERIVED_DATA_PATH}"
+      mv "${DERIVED_DATA_PATH}" "${STALE_DERIVED_DATA_PATH}"
+      rm -rf "${STALE_DERIVED_DATA_PATH}" 2>/dev/null || true
+    fi
   fi
 
   log "Building debug app"
@@ -223,8 +228,8 @@ if [[ "${SKIP_LAUNCH}" -eq 1 ]]; then
   exit 0
 fi
 
-log "Killing any previous WisprLocalMac process"
-pkill -f "WisprLocalMac.app/Contents/MacOS/WisprLocalMac" >/dev/null 2>&1 || true
+log "Killing any previous Cortexa process"
+pkill -f "Cortexa.app/Contents/MacOS/Cortexa" >/dev/null 2>&1 || true
 
 LAUNCH_ARGS=()
 if [[ "${EXERCISE_UI}" -eq 1 ]]; then

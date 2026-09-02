@@ -2,7 +2,7 @@
 
 ## Ziel
 
-Diese Checkliste ist der letzte Nachweis, dass `WisprLocalMac` als reale macOS-Menüleisten-App stabil funktioniert und als signierter/notarisierter Download ausgeliefert werden kann.
+Diese Checkliste ist der letzte Nachweis, dass `Cortexa` als reale macOS-Menüleisten-App stabil funktioniert und als signierter/notarisierter Download ausgeliefert werden kann. Target, Scheme und Bundle-ID bleiben technisch `WisprLocalMac` bzw. `com.wisprlocal.mac`.
 
 ## 1. Produktionsvariablen setzen
 
@@ -22,6 +22,7 @@ Erwartung:
 - **kein** gebündeltes ggml-Modell im Release-Bundle (`modelFileNames: []`)
 - `runtime-manifest.json` ist vorhanden
 - `WisprLocalMac.xcodeproj` wurde neu generiert
+- `Cortexa.icon` ist als einzige Dock-Icon-Quelle eingebunden; ein separates `AppIcon.appiconset` wird nicht verwendet
 - `MARKETING_VERSION` entspricht `VERSION`
 
 ## 2b. First-Run-Onboarding (manuell)
@@ -39,7 +40,8 @@ Erwartung:
 ```
 
 Erwartung:
-- `WisprLocalMac.app` wurde gebaut
+- `Cortexa.app` wurde gebaut
+- Dock-Icon wird aus `Cortexa.icon` kompiliert und zeigt die Liquid-Glass-/Appearance-Varianten korrekt
 - App startet aus dem gebauten Bundle
 - kein dauerhaftes Dock-Icon
 - Menüleisten-Icon erscheint
@@ -100,9 +102,9 @@ CODE_SIGN_IDENTITY="Developer ID Application: Dein Name (TEAMID)" ./scripts/crea
 Beispiel:
 
 ```bash
-xcrun notarytool submit artifacts/mac/WisprLocalMac.dmg --keychain-profile DEIN_PROFIL --wait
-xcrun stapler staple artifacts/mac/WisprLocalMac.dmg
-./scripts/verify_macos_release_bundle.sh artifacts/mac/WisprLocalMac.dmg
+xcrun notarytool submit artifacts/mac/Cortexa.dmg --keychain-profile DEIN_PROFIL --wait
+xcrun stapler staple artifacts/mac/Cortexa.dmg
+./scripts/verify_macos_release_bundle.sh artifacts/mac/Cortexa.dmg
 ```
 
 Erwartung:

@@ -183,7 +183,7 @@ public struct AIRemoteProviderConfiguration: Codable, Equatable, Identifiable, S
 
     public static func template(
         for preset: AIRemoteProviderPreset,
-        appTitle: String = "WisprLocal",
+        appTitle: String = "Cortexa",
         appReferer: String? = nil
     ) -> AIRemoteProviderConfiguration {
         AIRemoteProviderConfiguration(

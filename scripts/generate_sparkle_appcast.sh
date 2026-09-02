@@ -35,8 +35,8 @@ GENERATE_APPCAST_BIN="$(find_generate_appcast || true)"
 mkdir -p "${RELEASE_DIR}"
 mkdir -p "${DOWNLOAD_DIR}"
 
-if [[ ! -f "${DOWNLOAD_DIR}/WisprLocalMac.dmg" && ! -f "${DOWNLOAD_DIR}/WisprLocalMac.zip" ]]; then
-  error "Kein Release-Artefakt gefunden. Erwartet wird WisprLocalMac.dmg oder WisprLocalMac.zip in ${DOWNLOAD_DIR}."
+if [[ ! -f "${DOWNLOAD_DIR}/Cortexa.dmg" && ! -f "${DOWNLOAD_DIR}/Cortexa.zip" ]]; then
+  error "Kein Release-Artefakt gefunden. Erwartet wird Cortexa.dmg oder Cortexa.zip in ${DOWNLOAD_DIR}."
 fi
 
 log "Generating Sparkle appcast in ${RELEASE_DIR}"

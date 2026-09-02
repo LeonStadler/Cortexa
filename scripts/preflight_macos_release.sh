@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="${ROOT_DIR}/apps/macos/AppShell/Resources/Runtime"
 PROJECT_FILE="${ROOT_DIR}/apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj/project.pbxproj"
 INFO_PLIST="${ROOT_DIR}/apps/macos/WisprLocalMac/WisprLocalMac-Info.plist"
+ICON_COMPOSER_FILE="${ROOT_DIR}/apps/macos/AppShell/Resources/Cortexa.icon/icon.json"
 APP_VERSION="$(cat "${ROOT_DIR}/VERSION")"
 
 log() {
@@ -73,6 +74,11 @@ if [[ -z "${EXPECTED_BUILD_NUMBER}" ]]; then
 fi
 require_pattern "CURRENT_PROJECT_VERSION = ${EXPECTED_BUILD_NUMBER};" "${PROJECT_FILE}" "CURRENT_PROJECT_VERSION im generierten Projekt entspricht nicht VERSION"
 require_pattern 'Assets\.xcassets' "${PROJECT_FILE}" "Asset-Katalog fehlt im generierten Projekt"
+[[ -f "${ICON_COMPOSER_FILE}" ]] || error "Cortexa.icon fehlt unter ${ICON_COMPOSER_FILE}"
+require_pattern '"fill"[[:space:]]*:[[:space:]]*"automatic"' "${ICON_COMPOSER_FILE}" "Cortexa.icon ist nicht auf automatische Appearance-Darstellung gesetzt"
+require_pattern '"translucency"' "${ICON_COMPOSER_FILE}" "Cortexa.icon enthält keine Translucency-Konfiguration"
+require_pattern '"hidden-specializations"' "${ICON_COMPOSER_FILE}" "Cortexa.icon enthält keine Dark-Appearance-Glyph-Variante"
+require_pattern 'Logo 5 Dark\.svg' "${ICON_COMPOSER_FILE}" "Cortexa.icon referenziert keine helle Dark-Appearance-Glyph"
 
 log "Preflight erfolgreich"
 log "Runtime-Modelle: ${MODEL_COUNT}"

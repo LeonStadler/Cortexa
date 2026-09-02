@@ -1,10 +1,10 @@
-# WisprLocal System Design
+# Cortexa System Design
 
 Ausführliche Zuordnung von Produktfunktionen zu Modulen: [features-and-implementation.md](features-and-implementation.md). Dokumentationsindex: [README.md](README.md).
 
 ## Scope
 
-WisprLocal is an offline-first dictation/transcription product for Apple platforms.
+Cortexa is an offline-first dictation/transcription product for Apple platforms.
 
 - Primary platform: macOS (Apple Silicon optimized)
 - Secondary platforms: iOS + iPadOS (keyboard-extension based insertion)
