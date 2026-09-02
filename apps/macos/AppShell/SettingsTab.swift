@@ -8,9 +8,9 @@ enum SettingsTab: Hashable, CaseIterable {
     case shortcuts
     case ai
     case history
-    case about
     case dictionary
     case snippets
+    case about
     case advanced
 
     var symbolName: String {
@@ -65,8 +65,8 @@ enum SettingsTab: Hashable, CaseIterable {
             )
         case .speech:
             return language.text(
-                "Anbieter, Modelle, Sprachen und Sprachqualität konfigurieren.",
-                "Configure providers, models, languages, and speech quality."
+                "Wähle ein lokales Whisper-Modell, lade fehlende Modelle bei Bedarf nach und passe Sprache, Qualität und Übersetzung an die Modellfähigkeiten an.",
+                "Choose a local Whisper model, download missing models when needed, and align language, quality, and translation with model capabilities."
             )
         case .dictation:
             return language.text(
@@ -110,8 +110,8 @@ enum SettingsTab: Hashable, CaseIterable {
             )
         case .advanced:
             return language.text(
-                "Diagnose, Statusinformationen und erweiterte Systemoptionen.",
-                "Inspect diagnostics, status details, and advanced system options."
+                "Hier liegen Laufzeitoptionen, Speicherort, Updates und technische Diagnose. Nur ändern, wenn du weißt, warum du es brauchst.",
+                "Model runtime, storage location, updates, and technical diagnostics live here. Change these only when you know why you need them."
             )
         }
     }

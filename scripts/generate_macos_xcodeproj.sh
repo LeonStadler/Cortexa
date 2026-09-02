@@ -73,6 +73,20 @@ resolve_tool() {
 XCODEGEN_BIN="$(resolve_tool xcodegen /opt/homebrew/bin/xcodegen /usr/local/bin/xcodegen || true)"
 
 if [[ -z "${XCODEGEN_BIN}" ]]; then
+  if [[ "${CHECK_ONLY}" -eq 1 && -d "${PROJECT_PATH}" ]]; then
+    if grep -q "MARKETING_VERSION = ${APP_MARKETING_VERSION};" "${PROJECT_PATH}/project.pbxproj" \
+      && grep -q "CURRENT_PROJECT_VERSION = ${APP_BUILD_NUMBER};" "${PROJECT_PATH}/project.pbxproj" \
+      && grep -q "ASSETCATALOG_COMPILER_APPICON_NAME = Cortexa;" "${PROJECT_PATH}/project.pbxproj" \
+      && grep -q "PRODUCT_NAME = Cortexa;" "${PROJECT_PATH}/project.pbxproj" \
+      && grep -q "PRODUCT_BUNDLE_IDENTIFIER = com.wisprlocal.mac;" "${PROJECT_PATH}/project.pbxproj" \
+      && grep -q "Cortexa.icon" "${PROJECT_PATH}/project.pbxproj"; then
+      echo "Project check passed using existing project: ${PROJECT_PATH}"
+      exit 0
+    fi
+
+    echo "Existing macOS project is out of date and XcodeGen is not available." >&2
+  fi
+
   print_xcodegen_install_help
   exit 1
 fi

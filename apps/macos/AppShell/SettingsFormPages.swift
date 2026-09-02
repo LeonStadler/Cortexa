@@ -24,15 +24,11 @@ struct GeneralSettingsPage: View {
 }
 
 struct SpeechSettingsPage: View {
-    let quickExplainerSectionTitle: String
-    let providersSectionTitle: String
     let modelSectionTitle: String
     let languageSectionTitle: String
     let qualitySectionTitle: String
     let translationSectionTitle: String
     let installedModelsSectionTitle: String
-    let overviewContent: AnyView
-    let providerContent: AnyView
     let modelSelectionContent: AnyView
     let languageContent: AnyView
     let qualityContent: AnyView
@@ -42,16 +38,6 @@ struct SpeechSettingsPage: View {
     var body: some View {
         SettingsFormPage(
             sections: [
-                SettingsPageSection(
-                    id: "quick-explainer",
-                    title: quickExplainerSectionTitle,
-                    content: overviewContent
-                ),
-                SettingsPageSection(
-                    id: "providers",
-                    title: providersSectionTitle,
-                    content: providerContent
-                ),
                 SettingsPageSection(
                     id: "model",
                     title: modelSectionTitle,
@@ -320,7 +306,6 @@ struct AdvancedSettingsPage: View {
     let storageLocationSectionTitle: String
     let updatesSectionTitle: String
     let diagnosticsSectionTitle: String
-    let overviewContent: AnyView
     let appInfoContent: AnyView
     let runtimeContent: AnyView
     let storageContent: AnyView
@@ -329,7 +314,6 @@ struct AdvancedSettingsPage: View {
 
     private var sections: [SettingsPageSection] {
         [
-            SettingsPageSection(id: "overview", title: nil, content: overviewContent),
             SettingsPageSection(id: "app", title: appSectionTitle, content: appInfoContent),
             SettingsPageSection(
                 id: "runtime",

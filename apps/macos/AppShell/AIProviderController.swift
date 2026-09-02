@@ -21,6 +21,7 @@ final class AIProviderController {
     private let appendAudit: (String) -> Void
 
     private var aiProcessingService = AIProcessingService()
+    private var modelRefreshTasks: [String: Task<Void, Never>] = [:]
 
     init(
         aiRemoteProviderSecretStore: AIRemoteProviderSecretStoring,
@@ -85,7 +86,7 @@ final class AIProviderController {
 
         var provider = AIRemoteProviderConfiguration.template(
             for: preset,
-            appTitle: "WisprLocal",
+            appTitle: "Cortexa",
             appReferer: Bundle.main.bundleURL.absoluteString
         )
         if preset == .customOpenAICompatible {
@@ -156,23 +157,35 @@ final class AIProviderController {
 
     func refreshSelectedRemoteProviderModels() {
         guard let selectedRemoteProvider = selectedRemoteProvider else { return }
-        let providerID = selectedRemoteProvider.id
-        let providerName = selectedRemoteProvider.displayName
+        refreshRemoteProviderModels(selectedRemoteProvider)
+    }
+
+    func refreshAllRemoteProviderModels() {
+        for provider in currentRemoteProviders() where provider.isEnabled {
+            refreshRemoteProviderModels(provider)
+        }
+    }
+
+    private func refreshRemoteProviderModels(_ provider: AIRemoteProviderConfiguration) {
+        guard modelRefreshTasks[provider.id] == nil else { return }
+        let providerID = provider.id
+        let providerName = provider.displayName
         let apiKey =
             aiRemoteProviderSecretStore.loadAPIKey(providerID: providerID) ?? ""
-        if selectedRemoteProvider.requiresAPIKey,
+        if provider.requiresAPIKey,
             apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
-            appendDiagnostic("Für den gewählten API-Anbieter fehlt ein API-Key.")
+            appendDiagnostic("Für (providerName) fehlt ein API-Key.")
             return
         }
 
         appendDiagnostic("Lade Modellkatalog für \(providerName)...")
-        Task { @MainActor [weak self] in
+        let task = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.modelRefreshTasks[providerID] = nil }
             do {
                 let models = try await OpenAICompatibleRemoteTextProcessor.discoverModels(
-                    configuration: selectedRemoteProvider,
+                    configuration: provider,
                     apiKey: apiKey
                 )
                 self.updateRemoteProvider(id: providerID) { provider in
@@ -187,6 +200,7 @@ final class AIProviderController {
                 )
             }
         }
+        modelRefreshTasks[providerID] = task
     }
 
     func rebuildAIProcessingStack(reason: String) {

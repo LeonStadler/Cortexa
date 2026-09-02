@@ -17,5 +17,9 @@ final class SettingsTabTests: XCTestCase {
         XCTAssertTrue(SettingsTab.dictionary.details(language: .english).contains("personal terms"))
         XCTAssertTrue(SettingsTab.advanced.details(language: .english).contains("diagnostics"))
     }
+
+    func testSidebarOrderKeepsAboutBeforeAdvanced() {
+        XCTAssertEqual(Array(SettingsTab.allCases.suffix(2)), [.about, .advanced])
+    }
 }
 #endif

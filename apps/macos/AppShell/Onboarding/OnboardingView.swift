@@ -97,7 +97,7 @@ struct OnboardingView: View {
     private var welcomeStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             Label {
-                Text(text("Willkommen bei WisprLocal", "Welcome to WisprLocal"))
+                Text(text("Willkommen bei Cortexa", "Welcome to Cortexa"))
                     .font(.title2.weight(.semibold))
             } icon: {
                 Image(systemName: "waveform.circle.fill")
@@ -107,8 +107,8 @@ struct OnboardingView: View {
 
             Text(
                 text(
-                    "WisprLocal ist ein offline-fähiger Diktier-Assistent für die Menüleiste. Deine Sprache wird lokal auf dem Mac transkribiert — ohne Cloud.",
-                    "WisprLocal is an offline-capable dictation assistant for your menu bar. Your speech is transcribed locally on your Mac — no cloud required."
+                    "Cortexa ist ein offline-fähiger Diktier-Assistent für die Menüleiste. Deine Sprache wird lokal auf dem Mac transkribiert — ohne Cloud.",
+                    "Cortexa is an offline-capable dictation assistant for your menu bar. Your speech is transcribed locally on your Mac — no cloud required."
                 )
             )
             .font(.body)
@@ -179,8 +179,8 @@ struct OnboardingView: View {
                 PermissionRecoveryBanner(
                     title: text("Mikrofon erforderlich", "Microphone required"),
                     message: text(
-                        "Ohne Mikrofonberechtigung kann WisprLocal keine Sprache aufnehmen.",
-                        "Without microphone permission WisprLocal cannot capture speech."
+                    "Ohne Mikrofonberechtigung kann Cortexa keine Sprache aufnehmen.",
+                    "Without microphone permission Cortexa cannot capture speech."
                     ),
                     actionTitle: text("Mikrofon erlauben", "Allow microphone"),
                     action: { appState.requestMicrophoneAccessFromSettings() }
@@ -296,8 +296,8 @@ struct OnboardingView: View {
 
             Text(
                 text(
-                    "WisprLocal ist eingerichtet. Du findest die Steuerung in der Menüleiste — starte dein erstes Diktat mit \(appState.selectedHotkey.displayName).",
-                    "WisprLocal is set up. Control it from the menu bar — start your first dictation with \(appState.selectedHotkey.displayName)."
+                    "Cortexa ist eingerichtet. Du findest die Steuerung in der Menüleiste — starte dein erstes Diktat mit \(appState.selectedHotkey.displayName).",
+                    "Cortexa is set up. Control it from the menu bar — start your first dictation with \(appState.selectedHotkey.displayName)."
                 )
             )
             .font(.body)

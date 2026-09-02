@@ -77,13 +77,13 @@ final class DiagnosticsController {
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "wispr-diagnostics.txt"
+        panel.nameFieldStringValue = "cortexa-diagnostics.txt"
         Self.configureSavePanel(panel, titleKey: "filepanel.export.diagnostics.title")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         let report = [
-            "WisprLocal Diagnostics",
+            "Cortexa Diagnostics",
             "Status: \(currentRecordingStatus())",
             "Permissions: \(currentPermissionSummary())",
             "Capability: \(currentCapabilitySummary())",

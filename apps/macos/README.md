@@ -53,7 +53,7 @@ Operational notes:
 - The settings window keeps a fixed width so long history entries do not stretch the preferences layout horizontally.
 - The settings window now leans more heavily on native macOS structures such as toolbar search, `Form`-based content flow, and restrained `GroupBox` grouping instead of a heavily custom header/search/card shell.
 - The history tab shows compact transcript cards with short previews first; longer dictations can be expanded inline for the full text without destabilizing the window layout.
-- The `About` tab introduces the product and author, includes a short profile of Leon Stadler based on his website, and links out to his personal site for more background; WisprLocal is proprietary software (see `docs/licensing.md`).
+- The `About` tab introduces the product and author, includes a short profile of Leon Stadler based on his website, and links out to his personal site for more background; Cortexa is proprietary software (see `docs/licensing.md`).
 - The `About` tab also renders the bundled release notes from `changelog.md` in a styled changelog section, with a development fallback to the source tree when the bundle resource is temporarily unavailable.
 - Advanced options contain updates and diagnostics; the diagnostics preview can be expanded and copied.
 - The search results view announces grouped matches and uses clearer accessibility labels for the search field, result grouping, and transcript history previews.
@@ -61,7 +61,7 @@ Operational notes:
 - Update management lives in the `Advanced` settings tab; Sparkle checks in the background, GitHub Releases act as the publication source, and the manual check can be triggered there as well.
 - The menu bar menu weights its primary dictation action more strongly than utility footer actions, so `Settings…`, updates, and quit read more like classic menu utilities than like equal-priority content blocks.
 - The general, sound, history, and advanced settings tabs now cover Dock visibility, launch on login, automatic update checks, audio preprocessing, sound effects, transcript-history retention, and the current app data folder reveal path. Relocating the data folder itself remains a later migration step because the snippets/history/logs layout must be migrated together.
-- The macOS target now includes an asset catalog under `apps/macos/AppShell/Resources/Assets.xcassets` with a first Accent Color and App Icon set, wired into XcodeGen via `ASSETCATALOG_COMPILER_APPICON_NAME` and `ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`.
+- The macOS target includes an asset catalog under `apps/macos/AppShell/Resources/Assets.xcassets` for the Accent Color and UI logos; the Dock icon is supplied exclusively by the `Cortexa.icon` Icon Composer package and selected via `ASSETCATALOG_COMPILER_APPICON_NAME`.
 - The bundled Whisper runtime is resolved robustly from either `Contents/Resources/Runtime` or a flattened `Contents/Resources` layout, so resource packaging changes do not break dictation startup.
 - Diagnostics are shown in a compressed preview first and can be expanded for the full log text, which can also be copied to the clipboard.
 - Streaming quality now uses the capability preset values for beam size, decode cadence, and thread count rather than only switching the model file; `balanced` and `accurate` also use a more conservative streaming commit strategy than `fast`.

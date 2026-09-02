@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <g
+    transform="matrix(0.24574,0,0,0.24574,0,0)"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="166.67"
+    stroke-linecap="square"
+    stroke-linejoin="round"
+    stroke-miterlimit="1.5"
+  >
+    <path d="M1771.482,463.814L1771.482,3702.852"/>
+    <path d="M2395.184,1319.669L2395.184,2846.997"/>
+    <path d="M3018.886,838.251L3018.886,3328.416"/>
+    <path d="M3642.588,1640.615L3642.588,2526.052"/>
+    <path d="M1147.78,1096.266L1147.78,3070.401"/>
+    <path d="M524.078,1785.389L524.078,2381.278"/>
+  </g>
+</svg>

@@ -208,6 +208,7 @@ struct PermissionStatusRow: View {
     let title: String
     let status: PermissionStatus
     let detail: String
+    let statusLabel: String?
     let actionTitle: String?
     let actionHint: String?
     let action: (() -> Void)?
@@ -216,6 +217,7 @@ struct PermissionStatusRow: View {
         title: String,
         status: PermissionStatus,
         detail: String,
+        statusLabel: String? = nil,
         actionTitle: String? = nil,
         actionHint: String? = nil,
         action: (() -> Void)? = nil
@@ -223,6 +225,7 @@ struct PermissionStatusRow: View {
         self.title = title
         self.status = status
         self.detail = detail
+        self.statusLabel = statusLabel
         self.actionTitle = actionTitle
         self.actionHint = actionHint
         self.action = action
@@ -238,7 +241,7 @@ struct PermissionStatusRow: View {
             }
             Spacer()
             HStack(spacing: 10) {
-                Text(status.label)
+                Text(statusLabel ?? status.label)
                     .foregroundStyle(status.color)
 
                 if let actionTitle, let action {

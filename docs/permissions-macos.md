@@ -43,10 +43,10 @@ Nach einem Rebuild kann die Bedienungshilfe in den Systemeinstellungen zwar akti
 
 Empfohlener Recovery-Flow:
 
-1. `WisprLocalMac` in `System Settings -> Privacy & Security -> Accessibility` einmal entfernen.
+1. `Cortexa` oder alte `WisprLocalMac`-Einträge in `System Settings -> Privacy & Security -> Accessibility` einmal entfernen.
 2. Die App neu starten.
 3. Einen frischen Diktatversuch starten, damit der aktuelle Build den Accessibility-Dialog erneut anstoßen kann.
-4. `WisprLocalMac` neu hinzufügen und wieder in den Bedienungshilfen aktivieren.
+4. `Cortexa` neu hinzufügen und wieder in den Bedienungshilfen aktivieren.
 
 Wenn der Eintrag bereits aktiviert ist, aber das Einfügen weiterhin nicht greift, ist das ein typisches Zeichen fuer einen alten TCC-Eintrag aus einem frueheren Build.
 
@@ -67,13 +67,13 @@ Optional vor dem UI-Test:
 ./scripts/smoke_test_macos_app.sh --keep-running
 ```
 
-Das baut die Debug-App, prüft das Bundle und startet `WisprLocalMac` direkt aus dem gebauten `.app`-Bundle.
+Das baut die Debug-App, prüft das Bundle und startet Cortexa direkt aus dem gebauten `.app`-Bundle.
 
 1. App starten (`WisprLocalMac` Target).
 2. Menüleisten-Icon öffnen -> `Open Settings`.
 3. In `Permissions`:
 - `Mikrofon öffnen` klicken und Zugriff erlauben.
-- `Bedienungshilfen öffnen` klicken und `WisprLocalMac` aktivieren.
+- `Bedienungshilfen öffnen` klicken und `Cortexa` aktivieren; falls macOS noch einen alten `WisprLocalMac`-Eintrag zeigt, diesen entfernen und die aktuelle App neu verknüpfen.
 4. Zurück in die App, dann `Start Dictation` oder `Option + Space`.
 5. `Current Status` muss auf `Recording` wechseln.
 6. Nach Sleep/Wake oder Rückkehr in den Vordergrund aktualisiert die App Berechtigungen und registriert den Hotkey erneut automatisch.

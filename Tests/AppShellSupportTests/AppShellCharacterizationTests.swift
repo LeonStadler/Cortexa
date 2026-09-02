@@ -282,6 +282,36 @@ final class AppShellCharacterizationTests: XCTestCase {
         XCTAssertTrue(state.dictionaryReviewQueue.isEmpty)
     }
 
+    func testUpdateDictionaryTermEditsTextCategoryAndLanguageWithoutChangingSource() {
+        let state = makeState()
+
+        state.addDictionaryTerm(
+            "Cortexa",
+            category: .companyJargon,
+            source: .auto,
+            languageCode: "de"
+        )
+
+        guard let term = state.dictionaryTerms.first else {
+            XCTFail("Expected dictionary term")
+            return
+        }
+
+        state.updateDictionaryTerm(
+            termID: term.id,
+            term: "Cortexa App",
+            category: .custom,
+            languageCode: "en"
+        )
+
+        XCTAssertEqual(state.dictionaryTerms.count, 1)
+        XCTAssertEqual(state.dictionaryTerms.first?.id, term.id)
+        XCTAssertEqual(state.dictionaryTerms.first?.term, "Cortexa App")
+        XCTAssertEqual(state.dictionaryTerms.first?.category, .custom)
+        XCTAssertEqual(state.dictionaryTerms.first?.source, .auto)
+        XCTAssertEqual(state.dictionaryTerms.first?.languageCode, "en")
+    }
+
     func testRejectDictionaryCandidateRemovesOnlyTheMatchingQueueEntry() {
         let state = makeState()
 

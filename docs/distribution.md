@@ -2,6 +2,13 @@
 
 ## macOS release workflow
 
+- The visible product name and generated app bundle are **Cortexa** (`Cortexa.app`); the target, project, and scheme retain their `WisprLocalMac` technical names, and the bundle identifier remains `com.wisprlocal.mac` for permission, preference, and update continuity.
+- `Cortexa.icon` is the only Dock icon source. It provides automatic fill, translucency, and adaptive appearance rendering for the system's Liquid Glass icon treatment; its explicit dark specialization swaps in a white glyph so it remains readable on the dark glass background. The horizontal and stacked Cortexa logos are packaged separately as vector imagesets in the same asset catalog.
+- Cortexa remains a menu bar app (`LSUIElement = YES`). Release builds show a visible setup/settings window on first launch so opening the app from a DMG or GitHub download has an observable result even before the user notices the status item.
+- GitHub Releases are the primary distribution channel. Local ad-hoc DMGs are intended for your own machine/testing only unless they are Developer ID signed, notarized, stapled, and verified.
+- Sparkle is prepared but only active when both `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY` are set. Builds without those values show GitHub release guidance instead of a disabled manual-update button.
+- Local archives created without `CODE_SIGN_IDENTITY` are re-signed ad-hoc without Hardened Runtime after archiving so bundled Sparkle can load on the same machine. Do not publish those local artifacts; use Developer ID export/notarization for GitHub Releases.
+
 1. **Build dependencies and runtime.**
    - Run `./scripts/build_whisper_xcframework.sh` (see `docs/build-xcframework.md`) to produce `artifacts/whisper/whisper-cli` and, when requested, `artifacts/whisper/whisper.xcframework`.
    - Download the required ggml models with `./scripts/download_models.sh`.
@@ -26,7 +33,7 @@
 ./scripts/archive_macos_release.sh
 ```
 
-   - The archive is written to `artifacts/mac/WisprLocalMac.xcarchive`.
+   - The archive is written to `artifacts/mac/Cortexa.xcarchive`.
    - Manual equivalent for the generated Xcode project:
 
 ```bash
@@ -35,7 +42,7 @@ xcodebuild -project WisprLocalMac.xcodeproj \
   -scheme WisprLocalMac \
   -configuration Release \
   -destination "generic/platform=macOS" \
-  -archivePath ../../artifacts/mac/WisprLocalMac.xcarchive \
+  -archivePath ../../artifacts/mac/Cortexa.xcarchive \
   archive
 ```
 
@@ -55,17 +62,17 @@ DEVELOPMENT_TEAM=YOURTEAMID ./scripts/export_macos_release.sh
    - After the export, run gatekeeper verification:
 
 ```bash
-./scripts/verify_macos_release_bundle.sh artifacts/mac/release/WisprLocalMac.app
+./scripts/verify_macos_release_bundle.sh artifacts/mac/release/Cortexa.app
 ```
 
    - This script calls `codesign`, `spctl`, and `xcrun stapler validate`, so a failure surfaces before notarization.
 
 6. **Notarize and staple.**
-   - Submit the signed artifact to Apple with `xcrun notarytool submit artifacts/mac/release/WisprLocalMac.app` using the `--keychain-profile` that points at the Developer ID credentials tied to your release team, and include `--wait` so the command only returns once processing is complete.
+   - Submit the signed artifact to Apple with `xcrun notarytool submit artifacts/mac/release/Cortexa.app` using the `--keychain-profile` that points at the Developer ID credentials tied to your release team, and include `--wait` so the command only returns once processing is complete.
    - After Apple reports success, staple the ticket with:
 
 ```bash
-xcrun stapler staple artifacts/mac/release/WisprLocalMac.app
+xcrun stapler staple artifacts/mac/release/Cortexa.app
 ```
 
    - Re-run `./scripts/verify_macos_release_bundle.sh` after stapling to confirm the notarization flag is present.
@@ -78,7 +85,8 @@ CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 ./scripts/create_macos_dmg.sh
 ```
 
-   - This creates `artifacts/mac/WisprLocalMac.dmg` from the exported `.app`.
+   - This creates `artifacts/mac/Cortexa.dmg` from the exported `.app`.
+   - Without a Developer ID identity and notarization, treat the DMG as a local-use artifact. Publish only notarized DMGs to GitHub Releases.
    - If an installer workflow is required, use `productbuild` with the matching Developer ID Installer certificate and re-run `./scripts/verify_macos_release_bundle.sh` on the resulting `.pkg`.
 
 ## Updater configuration

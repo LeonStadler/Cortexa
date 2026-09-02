@@ -93,6 +93,10 @@ extension MacAppState {
         aiProviderController.refreshSelectedRemoteProviderModels()
     }
 
+    func refreshAllRemoteProviderModels() {
+        aiProviderController.refreshAllRemoteProviderModels()
+    }
+
     func handleHoldShortcutPressed() {
         sessionEntryController.handleHoldShortcutPressed()
     }

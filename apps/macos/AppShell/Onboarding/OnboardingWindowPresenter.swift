@@ -53,8 +53,8 @@ final class OnboardingWindowPresenter: NSObject, NSWindowDelegate {
             )
         )
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "WisprLocal"
-        window.styleMask = [.titled, .fullSizeContentView]
+        window.title = "Cortexa"
+        window.styleMask = [.titled, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.backgroundColor = .windowBackgroundColor

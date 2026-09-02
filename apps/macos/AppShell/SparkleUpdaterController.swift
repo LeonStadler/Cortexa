@@ -42,7 +42,7 @@ final class SparkleUpdaterController: ObservableObject {
             case .notConfigured:
                 return "Sparkle ist vorhanden, aber der Release-Feed ist noch nicht konfiguriert."
             case .ready:
-                return "WisprLocal prüft Updates im Hintergrund und GitHub Releases dienen als Veröffentlichungsquelle."
+                return "Cortexa prüft Updates im Hintergrund und GitHub Releases dienen als Veröffentlichungsquelle."
             case .checking:
                 return "Der Appcast-Feed wird gerade abgefragt."
             case .updateAvailable:

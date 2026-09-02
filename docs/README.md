@@ -1,6 +1,6 @@
-# WisprLocal — Dokumentationsindex
+# Cortexa — Dokumentationsindex
 
-Überblick über alle technischen Unterlagen im Repo. **Hinweis:** WisprLocal ist [proprietäre Software](licensing.md#proprietary); die Dokumentation dient internen Builds, Mitwirkenden und Release-Prozessen — nicht als Lizenz zur Weiterverwendung des Quellcodes.
+Überblick über alle technischen Unterlagen im Repo. **Hinweis:** Cortexa ist [proprietäre Software](licensing.md#proprietary); die Dokumentation dient internen Builds, Mitwirkenden und Release-Prozessen — nicht als Lizenz zur Weiterverwendung des Quellcodes.
 
 | Dokument                                                         | Inhalt                                                                    |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |

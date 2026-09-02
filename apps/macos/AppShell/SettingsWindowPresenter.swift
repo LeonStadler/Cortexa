@@ -36,14 +36,14 @@ final class SettingsWindowPresenter {
         let hostingController = NSHostingController(
             rootView: SettingsView().environmentObject(appState))
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "WisprLocal"
+        window.title = "Cortexa"
         window.toolbarStyle = .unified
         window.titleVisibility = .visible
         // Standard-Titelzeile: mit fullSizeContentView + transparenter Bar sitzt der Titel optisch falsch
         // und überlappt leicht mit dem SwiftUI-Inhalt.
         window.titlebarAppearsTransparent = false
         window.backgroundColor = .windowBackgroundColor
-        window.styleMask = [.titled, .closable, .resizable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 1000, height: 640))
         window.contentMinSize = NSSize(
             width: MacNativeDesign.SettingsSplitView.windowMinWidth,

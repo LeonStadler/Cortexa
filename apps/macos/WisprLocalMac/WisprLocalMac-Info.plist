@@ -10,7 +10,7 @@
     <string>de</string>
   </array>
   <key>CFBundleDisplayName</key>
-  <string>WisprLocalMac</string>
+  <string>Cortexa</string>
   <key>CFBundleExecutable</key>
   <string>$(EXECUTABLE_NAME)</string>
   <key>CFBundleIdentifier</key>
@@ -18,7 +18,7 @@
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>$(PRODUCT_NAME)</string>
+  <string>Cortexa</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

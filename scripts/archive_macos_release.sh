@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="${ROOT_DIR}/apps/macos/WisprLocalMac"
 ARTIFACTS_DIR="${ROOT_DIR}/artifacts/mac"
-ARCHIVE_PATH="${ARTIFACTS_DIR}/WisprLocalMac.xcarchive"
+ARCHIVE_PATH="${ARTIFACTS_DIR}/Cortexa.xcarchive"
 SCHEME="WisprLocalMac"
 PROJECT_FILE="${PROJECT_DIR}/WisprLocalMac.xcodeproj"
 
@@ -20,15 +20,19 @@ require_command() {
 }
 
 require_command xcodebuild
-require_command xcodegen
 
 mkdir -p "${ARTIFACTS_DIR}"
 
 log "Preparing bundled runtime"
 "${ROOT_DIR}/scripts/prepare_runtime_bundle.sh"
 
-log "Regenerating macOS project"
-"${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh"
+if command -v xcodegen >/dev/null 2>&1; then
+  log "Regenerating macOS project"
+  "${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh"
+else
+  log "xcodegen missing; validating existing macOS project"
+  "${ROOT_DIR}/scripts/generate_macos_xcodeproj.sh" --check
+fi
 
 if [[ -d "${ARCHIVE_PATH}" ]]; then
   log "Removing previous archive at ${ARCHIVE_PATH}"
@@ -54,5 +58,12 @@ fi
 
 log "Archiving release build"
 xcodebuild "${XCODE_ARGS[@]}"
+
+ARCHIVED_APP_PATH="${ARCHIVE_PATH}/Products/Applications/Cortexa.app"
+if [[ -z "${CODE_SIGN_IDENTITY:-}" ]]; then
+  log "Re-signing local archive app ad-hoc for local testing"
+  log "Developer ID exports keep the Xcode Hardened Runtime signature path."
+  codesign --force --deep --sign - "${ARCHIVED_APP_PATH}"
+fi
 
 log "Archive created at ${ARCHIVE_PATH}"

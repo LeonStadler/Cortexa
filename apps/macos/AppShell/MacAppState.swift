@@ -952,7 +952,7 @@ final class MacAppState: ObservableObject {
     }
 
     var visibleSelectableVoiceModels: [VoiceModelDescriptor] {
-        visibleVoiceModels.filter { isVoiceModelInstalled($0) }
+        visibleVoiceModels
     }
 
     var selectedVoiceModel: VoiceModelDescriptor? {
@@ -967,8 +967,21 @@ final class MacAppState: ObservableObject {
         selectedVoiceModelSupportsTranslation
     }
 
+    var speechTranslationUnavailableReason: String? {
+        guard !speechTranslationAvailable else { return nil }
+        guard let selectedVoiceModel else {
+            return "Kein Speech-Modell ausgewählt."
+        }
+        return
+            "\(selectedVoiceModel.displayName) unterstützt keine lokale Übersetzung nach Englisch."
+    }
+
     var selectedVoiceModelLanguageOptions: [DictationLanguage] {
         voiceLanguageOptions(for: selectedVoiceModel)
+    }
+
+    var menuBarLanguageOptions: [DictationLanguage] {
+        selectedVoiceModelLanguageOptions
     }
 
     var selectedVoiceModelLanguageHintText: String? {

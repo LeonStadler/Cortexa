@@ -34,7 +34,25 @@ final class DocsContractTests: XCTestCase {
     func testVersionFileMatchesCurrentRepositoryVersion() throws {
         let version = try readRepositoryFile("VERSION").trimmingCharacters(
             in: .whitespacesAndNewlines)
-        XCTAssertEqual(version, "0.26.3")
+        XCTAssertEqual(version, "0.29.0")
+    }
+
+    func testMacOSCortexaBrandingAssetsAreWired() throws {
+        let project = try readRepositoryFile("apps/macos/WisprLocalMac/project.yml")
+        let iconComposer = try readRepositoryFile("apps/macos/AppShell/Resources/Cortexa.icon/icon.json")
+        let horizontalLogo = try readRepositoryFile(
+            "apps/macos/AppShell/Resources/Assets.xcassets/CortexaLogoHorizontal.imageset/Contents.json")
+        let stackedLogo = try readRepositoryFile(
+            "apps/macos/AppShell/Resources/Assets.xcassets/CortexaLogoStacked.imageset/Contents.json")
+
+        XCTAssertTrue(project.contains("path: ../AppShell/Resources/Cortexa.icon"))
+        XCTAssertTrue(project.contains("ASSETCATALOG_COMPILER_APPICON_NAME: Cortexa"))
+        XCTAssertTrue(iconComposer.contains("\"fill\" : \"automatic\""))
+        XCTAssertTrue(iconComposer.contains("\"translucency\""))
+        XCTAssertTrue(iconComposer.contains("\"hidden-specializations\""))
+        XCTAssertTrue(iconComposer.contains("Logo 5 Dark.svg"))
+        XCTAssertTrue(horizontalLogo.contains("CortexaLogoHorizontal.svg"))
+        XCTAssertTrue(stackedLogo.contains("CortexaLogoStacked.svg"))
     }
 
     private func readRepositoryFile(_ relativePath: String) throws -> String {

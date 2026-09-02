@@ -40,7 +40,7 @@ Dieses Repository und die gebündelte **Dokumentation dienen der internen Entwic
 - `Sources/TextTargetMac` — AX-Ziel, Einfügen (macOS)
 - `Sources/CapabilityCore` — Geräteprofil, adaptive Presets
 - `Sources/AIProcessingCore` — KI-Nachbearbeitung, Provider, Apple Foundation Models
-- `apps/macos` — WisprLocalMac (MenuBarExtra)
+- `apps/macos` — Cortexa (MenuBarExtra; technical target `WisprLocalMac`)
 - `apps/ios` — Host-App + Keyboard Extension
 - `docs/` — Architektur, Build, Distribution, Permissions
 - `scripts/` — whisper.cpp, XcodeGen, Release-Helfer
@@ -132,7 +132,7 @@ DEVELOPMENT_TEAM=YOURTEAMID CODE_SIGN_IDENTITY="Developer ID Application: Your N
 ./scripts/archive_macos_release.sh
 ```
 
-Ausgabe: `artifacts/mac/WisprLocalMac.xcarchive`
+Ausgabe: `artifacts/mac/Cortexa.xcarchive`
 
 **Build-Secrets** (in Xcode-Projekt injiziert): `SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`. Vor Release: `./scripts/preflight_macos_release.sh`. Checkliste: [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
 
@@ -148,7 +148,7 @@ SPARKLE_PRIVATE_KEY_FILE=/path/to/sparkle_private_key SPARKLE_BIN_DIR=/path/to/g
 Bundle prüfen:
 
 ```bash
-./scripts/verify_macos_release_bundle.sh artifacts/mac/release/WisprLocalMac.app
+./scripts/verify_macos_release_bundle.sh artifacts/mac/release/Cortexa.app
 ```
 
 ## macOS: Smoke-Test
@@ -175,4 +175,4 @@ Projekt: `apps/ios/WisprLocaliOS/WisprLocaliOS.xcodeproj` — Targets **WisprLoc
 
 ---
 
-**English summary:** WisprLocal is a local-first dictation stack for Apple platforms. The repo is **proprietary** (not open source); use [`docs/README.md`](docs/README.md) and [`docs/features-and-implementation.md`](docs/features-and-implementation.md) for full technical coverage.
+**English summary:** Cortexa is a local-first dictation stack for Apple platforms. The repo is **proprietary** (not open source); use [`docs/README.md`](docs/README.md) and [`docs/features-and-implementation.md`](docs/features-and-implementation.md) for full technical coverage.

@@ -25,8 +25,7 @@ struct MenuBarContentView: View {
     }
 
     private var showsStatusHeader: Bool {
-        appState.isSessionActive || appState.hasPermissionProblems
-            || appState.recordingStatus == "Error"
+        appState.isSessionActive || appState.recordingStatus == "Error"
     }
 
     private var primaryActionTitle: String {
@@ -48,9 +47,7 @@ struct MenuBarContentView: View {
     }
 
     private var visibleMenuBarLanguages: [DictationLanguage] {
-        let configured = appState.visibleMenuBarLanguages.compactMap(
-            DictationLanguage.init(rawValue:))
-        return [.auto] + configured
+        appState.menuBarLanguageOptions
     }
 
     private func aiProviderMenuSectionTitle(for model: AIModelDescriptor) -> String {
@@ -144,26 +141,8 @@ struct MenuBarContentView: View {
         }
     }
 
-    private var selectedVoiceModelBinding: Binding<String> {
-        Binding(
-            get: { appState.selectedVoiceModelID },
-            set: { newValue in
-                guard let descriptor = appState.voiceModels.first(where: { $0.id == newValue })
-                else { return }
-                guard appState.isVoiceModelInstalled(descriptor) else { return }
-                appState.setSelectedVoiceModel(descriptor)
-            }
-        )
-    }
-
-    private var menuBarVoiceProviders: [VoiceProviderDescriptor] {
-        appState.voiceProviders.filter { provider in
-            selectableVoiceModels.contains(where: { $0.providerID == provider.id })
-        }
-    }
-
     private var selectableVoiceModels: [VoiceModelDescriptor] {
-        appState.voiceModels.filter { appState.isVoiceModelInstalled($0) }
+        appState.visibleVoiceModels
     }
 
     private var voiceModelsByProviderID: [String: [VoiceModelDescriptor]] {
@@ -193,21 +172,6 @@ struct MenuBarContentView: View {
 
     private var menuBarHistoryHasMoreThanPreview: Bool {
         appState.transcriptHistory.count > menuBarHistoryPreviewItemLimit
-    }
-
-    private var menuBarBrandFooter: some View {
-        HStack {
-            Spacer(minLength: 0)
-            Image("CortexaLogoHorizontal")
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .frame(width: appState.compactMenuBarDesign ? 92 : 108, height: 22)
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Cortexa")
-            Spacer(minLength: 0)
-        }
-        .padding(.top, 2)
     }
 
     private var insertionModeLabel: String {
@@ -387,11 +351,6 @@ struct MenuBarContentView: View {
     @ViewBuilder
     private var menuBarPermissionSection: some View {
         if appState.hasPermissionProblems {
-            if !appState.compactMenuBarDesign {
-                Text(text("Berechtigungen", "Permissions"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             if appState.microphonePermissionStatus != .granted {
                 if appState.microphonePermissionStaleAfterRebuild {
                     Button(text("Mikrofon neu verknüpfen", "Rebind microphone")) {
@@ -416,6 +375,56 @@ struct MenuBarContentView: View {
             }
             Divider()
         }
+    }
+
+    @ViewBuilder
+    private var menuBarVoiceModelMenu: some View {
+        Menu {
+            ForEach(appState.voiceProviders.filter { voiceModelsByProviderID[$0.id]?.isEmpty == false }) { provider in
+                Section(provider.displayName) {
+                    ForEach(voiceModelsByProviderID[provider.id] ?? []) { model in
+                        Button {
+                            selectVoiceModelFromMenu(model)
+                        } label: {
+                            Text(voiceModelMenuRowTitle(for: model))
+                        }
+                        .disabled(appState.isVoiceModelBusy(model) || model.installState == .unavailable)
+                    }
+                }
+            }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(text("Sprachmodell", "Voice model"))
+                Spacer(minLength: 8)
+                Text(appState.selectedVoiceModel?.displayName ?? text("Auswählen…", "Choose…"))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func selectVoiceModelFromMenu(_ model: VoiceModelDescriptor) {
+        if appState.isVoiceModelInstalled(model) {
+            appState.setSelectedVoiceModel(model)
+        } else if model.installState != .unavailable {
+            appState.installVoiceModel(model)
+        }
+    }
+
+    private func voiceModelMenuRowTitle(for model: VoiceModelDescriptor) -> String {
+        let prefix = appState.selectedVoiceModelID == model.id ? "✓ " : "\u{3000}"
+        let suffix: String
+        if appState.isVoiceModelBusy(model) {
+            suffix = text(" · lädt", " · busy")
+        } else if appState.isVoiceModelInstalled(model) {
+            suffix = ""
+        } else if model.installState == .unavailable {
+            suffix = text(" · nicht verfügbar", " · unavailable")
+        } else {
+            suffix = text(" · Download", " · download")
+        }
+        return prefix + model.displayName + suffix
     }
 
     /// LLM-Auswahl inkl. „Modell hinzufügen“ — Label unterscheidet kompakt (nur Titel) vs. Zeile mit aktueller Auswahl.
@@ -609,35 +618,25 @@ struct MenuBarContentView: View {
                 }
             }
 
-            Picker(text("Übersetzung", "Translation"), selection: $appState.translationOutputMode) {
-                ForEach(TranslationOutputMode.allCases) { mode in
-                    Text(
-                        mode.localizedDisplayName(
-                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                    )
-                    .tag(mode)
+            if appState.speechTranslationAvailable {
+                Picker(text("Übersetzung", "Translation"), selection: $appState.translationOutputMode) {
+                    ForEach(TranslationOutputMode.allCases) { mode in
+                        Text(
+                            mode.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        )
+                        .tag(mode)
+                    }
                 }
             }
 
             if !appState.compactMenuBarDesign {
-                if menuBarVoiceProviders.isEmpty {
-                    Text(text("Keine installierten Modelle", "No installed models"))
+                if selectableVoiceModels.isEmpty {
+                    Text(text("Keine Modelle erkannt", "No models detected"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker(
-                        text("Sprachmodell", "Voice model"), selection: selectedVoiceModelBinding
-                    ) {
-                        ForEach(menuBarVoiceProviders) { provider in
-                            if let models = voiceModelsByProviderID[provider.id], !models.isEmpty {
-                                Section(provider.displayName) {
-                                    ForEach(models) { model in
-                                        Text(model.displayName).tag(model.id)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    menuBarVoiceModelMenu
                 }
 
                 Picker(text("Qualität", "Quality"), selection: $appState.performanceProfile) {
@@ -704,9 +703,6 @@ struct MenuBarContentView: View {
                 )
             }
 
-            Divider()
-
-            menuBarBrandFooter
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
@@ -723,6 +719,7 @@ struct MenuBarContentView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(string, forType: .string)
     }
+
 }
 
 private struct MenuActionLabel: View {

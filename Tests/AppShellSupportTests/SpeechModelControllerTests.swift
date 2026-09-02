@@ -123,6 +123,52 @@
             XCTAssertTrue(controller.canUseVoiceModel(englishModel, for: .auto))
         }
 
+        func testSanitizeKeepsAutoLanguageForEnglishOnlyModel() {
+            let englishModel = LocalVoiceModelCatalog.model(id: "whisper.standard.en")!
+            let state = SpeechModelControllerState(
+                selectedLanguage: .auto,
+                translationOutputMode: .original,
+                selectedVoiceProviderID: LocalVoiceModelCatalog.defaultProviderID,
+                selectedVoiceModelID: englishModel.id,
+                voiceLanguageOverrides: [],
+                voiceProviders: LocalVoiceModelCatalog.availableProviders(),
+                voiceModels: LocalVoiceModelCatalog.availableModels(includeParakeet: false),
+                installedVoiceModelFileNames: ["ggml-base.en.bin"],
+                voiceModelOperationStates: [:]
+            )
+            let controller = makeController(state: state)
+
+            controller.sanitizeSpeechModelSelections()
+
+            XCTAssertEqual(state.selectedLanguage, .auto)
+        }
+
+        func testLanguageOptionsAndTranslationCapabilityFollowSelectedModel() {
+            let englishModel = LocalVoiceModelCatalog.model(id: "whisper.standard.en")!
+            let standardModel = LocalVoiceModelCatalog.model(id: LocalVoiceModelCatalog.defaultModelID)!
+            let state = SpeechModelControllerState(
+                selectedLanguage: .auto,
+                translationOutputMode: .original,
+                selectedVoiceProviderID: LocalVoiceModelCatalog.defaultProviderID,
+                selectedVoiceModelID: englishModel.id,
+                voiceLanguageOverrides: [],
+                voiceProviders: LocalVoiceModelCatalog.availableProviders(),
+                voiceModels: LocalVoiceModelCatalog.availableModels(includeParakeet: false),
+                installedVoiceModelFileNames: ["ggml-base.en.bin", "ggml-base.bin"],
+                voiceModelOperationStates: [:]
+            )
+            let controller = makeController(state: state)
+
+            XCTAssertEqual(controller.voiceLanguageOptions(for: englishModel), [.auto, .english])
+            XCTAssertFalse(englishModel.supportsTranslationToEnglish)
+
+            XCTAssertEqual(
+                controller.voiceLanguageOptions(for: standardModel),
+                [.auto] + DictationLanguage.allCases.filter { $0 != .auto }
+            )
+            XCTAssertTrue(standardModel.supportsTranslationToEnglish)
+        }
+
         func testIsVoiceModelInstalledReturnsFalseWithoutFileOnDisk() {
             let state = SpeechModelControllerState(
                 selectedLanguage: .auto,
