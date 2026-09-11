@@ -120,7 +120,6 @@ struct SettingsViewShell: View {
             minHeight: 600,
             idealHeight: 650
         )
-        .background(.windowBackground)
         .onAppear {
             onRefreshPermissionStates()
         }
@@ -142,7 +141,6 @@ struct SettingsSidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .settingsSidebarBackgroundExtensionEffect()
         .environment(\.defaultMinListRowHeight, 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationSplitViewColumnWidth(
