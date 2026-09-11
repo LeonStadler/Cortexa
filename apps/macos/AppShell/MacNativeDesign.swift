@@ -9,10 +9,10 @@ enum MacNativeDesign {
 
     /// Einstellungen `NavigationSplitView`: Sidebar min/ideal/max und abgeleitete Fenster-Mindestbreite.
     enum SettingsSplitView {
-        /// Nicht schmaler: sonst kollabiert die Spalte leicht und wirkt „weg“.
-        static let sidebarMinWidth: CGFloat = 320
-        static let sidebarIdealWidth: CGFloat = 320
-        static let sidebarMaxWidth: CGFloat = 440
+        /// Native macOS source lists bleiben kompakt und lassen dem Detail genug Raum.
+        static let sidebarMinWidth: CGFloat = 220
+        static let sidebarIdealWidth: CGFloat = 240
+        static let sidebarMaxWidth: CGFloat = 300
         static let detailMinWidth: CGFloat = 560
         static var windowMinWidth: CGFloat { sidebarMaxWidth + detailMinWidth }
     }

@@ -8,6 +8,10 @@
 
 ## Fixes
 
+- 2026-09-11: macOS-Einstellungsfenster stabilisiert und Sidebar-/Glass-Darstellung korrigiert.
+  - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/MacNativeDesign.swift`, `VERSION`
+  - Funktionalität: Die Sidebar verwendet wieder ausschließlich die native `NavigationSplitView`-/Source-List-Darstellung. Der zusätzliche Hintergrund-Extension-Effekt und der globale Fenster-Hintergrund, die den Liquid-Glass-/Scroll-Edge-Effekt überlagerten, wurden entfernt. Die Sidebar-Breite ist kompakter und verhindert, dass die Detailspalte bei üblichen Fenstergrößen seitlich wegdrückt. Die Version wurde als Patch-Bugfix auf `0.29.1` angehoben.
+
 - 2026-09-02: Wiederholte macOS-Schlüsselbundabfragen beim Öffnen der Einstellungen behoben.
   - Dateien: `apps/macos/AppShell/AIRemoteProviderSecretStore.swift`, `VERSION`
   - Funktionalität: Geladene API-Schlüssel werden innerhalb einer App-Sitzung zwischengespeichert. Dadurch lösen erneute SwiftUI-Neuberechnungen und AI-Stack-Aktualisierungen keine wiederholten Abfragen desselben Schlüsselbund-Eintrags mehr aus. Beim Speichern und Löschen wird der Cache konsistent aktualisiert. Die Version wurde als Patch-Bugfix auf `0.28.1` angehoben.
