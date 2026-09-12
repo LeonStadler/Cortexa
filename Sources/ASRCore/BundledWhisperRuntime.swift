@@ -314,13 +314,21 @@ public enum BundledWhisperRuntimeInstaller {
             let sameSize = (sourceAttributes[.size] as? NSNumber) == (destinationAttributes[.size] as? NSNumber)
             let sameDate = (sourceAttributes[.modificationDate] as? Date) == (destinationAttributes[.modificationDate] as? Date)
             if sameSize && sameDate {
-                return
+                if try filesHaveEqualContent(source, destination) {
+                    return
+                }
             }
 
             try fileManager.removeItem(at: destination)
         }
 
         try fileManager.copyItem(at: source, to: destination)
+    }
+
+    private static func filesHaveEqualContent(_ source: URL, _ destination: URL) throws -> Bool {
+        let sourceData = try Data(contentsOf: source, options: .mappedIfSafe)
+        let destinationData = try Data(contentsOf: destination, options: .mappedIfSafe)
+        return sourceData == destinationData
     }
 
     private static func fallbackRuntimeDirectory(resourceSubdirectory: String) -> URL? {

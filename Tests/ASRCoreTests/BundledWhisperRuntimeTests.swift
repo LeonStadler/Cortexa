@@ -93,6 +93,36 @@ final class BundledWhisperRuntimeTests: XCTestCase {
         XCTAssertEqual(runtime.availableModelFileNames, ["ggml-base.bin"])
     }
 
+    func testInstallRuntimeReplacesDifferentCLIWithMatchingSizeAndTimestamp() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("runtime_cli_content_test_\(UUID().uuidString)")
+        let sourceRuntime = root.appendingPathComponent("source/Runtime", isDirectory: true)
+        let sourceModels = sourceRuntime.appendingPathComponent("models", isDirectory: true)
+        let destinationRuntime = root.appendingPathComponent("destination/Runtime", isDirectory: true)
+        let destinationModels = destinationRuntime.appendingPathComponent("models", isDirectory: true)
+        let sourceCLI = sourceRuntime.appendingPathComponent("whisper-cli")
+        let destinationCLI = destinationRuntime.appendingPathComponent("whisper-cli")
+        let sharedDate = Date(timeIntervalSinceReferenceDate: 123_456)
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: sourceModels, withIntermediateDirectories: true)
+        try fm.createDirectory(at: destinationModels, withIntermediateDirectories: true)
+        try Data("new-cli".utf8).write(to: sourceCLI)
+        try Data("old-cli".utf8).write(to: destinationCLI)
+        try fm.setAttributes([.modificationDate: sharedDate], ofItemAtPath: sourceCLI.path)
+        try fm.setAttributes([.modificationDate: sharedDate], ofItemAtPath: destinationCLI.path)
+        try Data([0x01]).write(to: sourceModels.appendingPathComponent("ggml-base.bin"))
+
+        let runtime = try BundledWhisperRuntimeInstaller.installRuntime(
+            from: sourceRuntime,
+            destinationRuntimeDirectory: destinationRuntime,
+            appName: "WisprLocalTest"
+        )
+
+        XCTAssertEqual(try Data(contentsOf: runtime.cliURL), Data("new-cli".utf8))
+    }
+
     func testInstallRuntimeFallsBackToAvailableModelWhenBaseModelMissing() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("runtime_fallback_test_\(UUID().uuidString)")

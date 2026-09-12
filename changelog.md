@@ -8,6 +8,10 @@
 
 ## Fixes
 
+- 2026-09-12: Runtime-Update erkennt gleich große Dateien mit identischem Zeitstempel nun inhaltsbasiert.
+  - Dateien: `Sources/ASRCore/BundledWhisperRuntime.swift`, `Tests/ASRCoreTests/BundledWhisperRuntimeTests.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalität: Die Synchronisierung vergleicht bei gleichen Dateimetadaten zusätzlich den Inhalt, bevor sie eine vorhandene `whisper-cli` beibehält. Dadurch kann eine veraltete, dynamisch gelinkte CLI nicht mehr als aktuell durchrutschen, wenn ihre Größe und ihr Zeitstempel zufällig mit der korrigierten CLI übereinstimmen. Die Version wurde als Patch-Bugfix auf `0.29.3` angehoben.
+
 - 2026-09-12: Nicht startbare Whisper-Runtime im installierten Cortexa-Bundle behoben und ASR-E2E-Prüfung ergänzt.
   - Dateien: `Sources/ASRCore/BundledWhisperRuntime.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `scripts/build_whisper_xcframework.sh`, `scripts/prepare_runtime_bundle.sh`, `scripts/verify_whisper_cli_runtime.sh`, `scripts/smoke_test_macos_app.sh`, `Tests/ASRCoreTests/BundledWhisperRuntimeTests.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `apps/macos/README.md`, `docs/distribution.md`, `docs/macos-release-checklist.md`, `VERSION`
   - Funktionalität: `whisper-cli` wird statisch gegen Whisper/GGML gebaut und enthält dadurch keine absoluten `@rpath`-Verweise auf den Entwicklungsrechner mehr. Build und Bundle-Vorbereitung lehnen nicht portable dynamische Abhängigkeiten ab und führen einen echten Start-Probe aus. Die App meldet „ASR CLI runtime ready“ erst nach einem erfolgreichen CLI-Start. Der macOS-Smoke-Test transkribiert zusätzlich synthetisierte Sprache mit der CLI und dem Standardmodell aus dem gebauten App-Bundle. Die Version wurde als Patch-Bugfix auf `0.29.2` angehoben.
