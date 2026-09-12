@@ -10,10 +10,12 @@
 - Local archives created without `CODE_SIGN_IDENTITY` are re-signed ad-hoc without Hardened Runtime after archiving so bundled Sparkle can load on the same machine. Do not publish those local artifacts; use Developer ID export/notarization for GitHub Releases.
 
 1. **Build dependencies and runtime.**
-   - Run `./scripts/build_whisper_xcframework.sh` (see `docs/build-xcframework.md`) to produce `artifacts/whisper/whisper-cli` and, when requested, `artifacts/whisper/whisper.xcframework`.
+   - Run `./scripts/build_whisper_xcframework.sh` (see `docs/build-xcframework.md`) to produce `artifacts/whisper/whisper-cli` and, when requested, `artifacts/whisper/whisper.xcframework`. The macOS CLI is linked statically against Whisper/GGML so it does not retain build-machine `@rpath` dependencies.
+   - The build and bundle preparation run `./scripts/verify_whisper_cli_runtime.sh`. This gate rejects non-system dynamic-library dependencies and proves that the copied CLI can launch before an app archive is created.
    - Download the required ggml models with `./scripts/download_models.sh`.
    - Bundle the CLI into `apps/macos/AppShell/Resources/Runtime` using `./scripts/prepare_runtime_bundle.sh` (Release: no bundled `.bin`; the standard model downloads during first-run onboarding).
    - For local dev/smoke tests, pass `--include-default-model` to bundle `ggml-base.bin` alongside the CLI.
+   - `./scripts/smoke_test_macos_app.sh` additionally synthesizes a spoken fixture and transcribes it with the CLI and model from the built app bundle. This is the automated ASR runtime E2E; microphone permission, focus retention, and insertion into TextEdit/Notes/VS Code remain the manual UI E2E layer in the release checklist.
 
 2. **Regenerate the Xcode project if schema or package changes were introduced.**
    - `./scripts/generate_macos_xcodeproj.sh` keeps `apps/macos/WisprLocalMac/WisprLocalMac.xcodeproj` aligned with `project.yml`.

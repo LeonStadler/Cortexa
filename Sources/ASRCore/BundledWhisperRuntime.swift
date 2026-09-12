@@ -54,6 +54,8 @@ public enum BundledWhisperRuntimeError: Error, LocalizedError {
     case manifestDefaultModelMissing(String, URL)
     case manifestModelFileNamesMismatch([String], [String], URL)
     case manifestChecksumMismatch(String, URL)
+    case cliLaunchProbeFailed(URL, Int32, String)
+    case cliLaunchProbeTimedOut(URL)
 
     public var errorDescription: String? {
         switch self {
@@ -73,6 +75,10 @@ public enum BundledWhisperRuntimeError: Error, LocalizedError {
             return "Bundled runtime manifest model list \(expected) does not match available models \(actual) in \(modelsDirectory.path)."
         case let .manifestChecksumMismatch(artifactName, manifestURL):
             return "Bundled runtime manifest checksum for \(artifactName) did not match at \(manifestURL.path)."
+        case let .cliLaunchProbeFailed(cliURL, status, reason):
+            return "Bundled whisper-cli could not start at \(cliURL.path) (exit \(status)): \(reason)"
+        case let .cliLaunchProbeTimedOut(cliURL):
+            return "Bundled whisper-cli launch check timed out at \(cliURL.path)."
         }
     }
 }
@@ -114,6 +120,43 @@ public enum BundledWhisperRuntimeInstaller {
         return appSupport
             .appendingPathComponent(appName, isDirectory: true)
             .appendingPathComponent("runtime", isDirectory: true)
+    }
+
+    public static func validateRuntimeCLI(at cliURL: URL, timeout: TimeInterval) throws {
+        #if os(macOS)
+        let process = Process()
+        let stderrPipe = Pipe()
+        let terminationSemaphore = DispatchSemaphore(value: 0)
+
+        process.executableURL = cliURL
+        process.arguments = ["--help"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = stderrPipe
+        process.terminationHandler = { _ in
+            terminationSemaphore.signal()
+        }
+
+        try process.run()
+        if terminationSemaphore.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            throw BundledWhisperRuntimeError.cliLaunchProbeTimedOut(cliURL)
+        }
+
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderr = String(data: stderrData, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard process.terminationStatus == 0 else {
+            let reason = stderr.isEmpty ? "No error output was produced." : stderr
+            throw BundledWhisperRuntimeError.cliLaunchProbeFailed(
+                cliURL,
+                process.terminationStatus,
+                reason
+            )
+        }
+        #else
+        _ = cliURL
+        _ = timeout
+        #endif
     }
 
     public static func installBundledRuntime(

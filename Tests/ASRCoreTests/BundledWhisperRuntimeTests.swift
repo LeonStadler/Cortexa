@@ -5,6 +5,42 @@ import XCTest
 @testable import ASRCore
 
 final class BundledWhisperRuntimeTests: XCTestCase {
+    #if os(macOS)
+    func testValidateRuntimeCLIRejectsLaunchFailure() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(
+            "runtime_probe_test_\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let cliURL = root.appendingPathComponent("whisper-cli")
+
+        defer { try? fm.removeItem(at: root) }
+
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho 'Library not loaded: @rpath/libwhisper.1.dylib' >&2\nexit 6\n".utf8)
+            .write(to: cliURL)
+        try fm.setAttributes(
+            [.posixPermissions: NSNumber(value: 0o755)],
+            ofItemAtPath: cliURL.path
+        )
+
+        XCTAssertThrowsError(
+            try BundledWhisperRuntimeInstaller.validateRuntimeCLI(at: cliURL, timeout: 2)
+        ) { error in
+            guard case let BundledWhisperRuntimeError.cliLaunchProbeFailed(
+                failedURL,
+                status,
+                reason
+            ) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(failedURL, cliURL)
+            XCTAssertEqual(status, 6)
+            XCTAssertTrue(reason.contains("@rpath/libwhisper.1.dylib"))
+        }
+    }
+    #endif
+
     func testBundledRuntimeDirectorySupportsFlatResourceLayout() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("runtime_flat_test_\(UUID().uuidString)")

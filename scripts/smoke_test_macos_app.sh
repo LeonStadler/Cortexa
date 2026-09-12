@@ -124,6 +124,14 @@ fi
 MODEL_COUNT=$(find "${EFFECTIVE_RUNTIME_DIR}/models" -maxdepth 1 -type f -name '*.bin' | wc -l | tr -d ' ')
 [[ "${MODEL_COUNT}" -ge 1 ]] || error "No bundled ggml model files found in ${RUNTIME_DIR}/models"
 
+DEFAULT_MODEL_PATH="${EFFECTIVE_RUNTIME_DIR}/models/ggml-base.bin"
+[[ -f "${DEFAULT_MODEL_PATH}" ]] || error "Bundled default model missing at ${DEFAULT_MODEL_PATH}"
+
+log "Running bundled whisper-cli transcription E2E"
+"${ROOT_DIR}/scripts/verify_whisper_cli_runtime.sh" \
+  "${EFFECTIVE_RUNTIME_DIR}/whisper-cli" \
+  "${DEFAULT_MODEL_PATH}"
+
 LSUIELEMENT=$(/usr/libexec/PlistBuddy -c "Print :LSUIElement" "${APP_INFO_PLIST}" 2>/dev/null || echo 0)
 [[ "${LSUIELEMENT}" == "1" || "${LSUIELEMENT}" == "true" ]] || error "LSUIElement is not enabled. App would stay visible in Dock."
 

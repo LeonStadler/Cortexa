@@ -19,6 +19,7 @@ export SPARKLE_PUBLIC_ED_KEY='DEIN_SPARKLE_PUBLIC_ED_KEY'
 
 Erwartung:
 - `whisper-cli` ist im Runtime-Bundle vorhanden
+- `whisper-cli` hat keine nicht-systemischen `@rpath`-/Dylib-Abhängigkeiten und besteht den Start-Probe
 - **kein** gebündeltes ggml-Modell im Release-Bundle (`modelFileNames: []`)
 - `runtime-manifest.json` ist vorhanden
 - `WisprLocalMac.xcodeproj` wurde neu generiert
@@ -41,6 +42,7 @@ Erwartung:
 
 Erwartung:
 - `Cortexa.app` wurde gebaut
+- die im App-Bundle enthaltene CLI transkribiert synthetisierte Sprache mit dem gebündelten Standardmodell zu einem nicht-leeren Text
 - Dock-Icon wird aus `Cortexa.icon` kompiliert und zeigt die Liquid-Glass-/Appearance-Varianten korrekt
 - App startet aus dem gebauten Bundle
 - kein dauerhaftes Dock-Icon
@@ -88,6 +90,7 @@ Prüfen:
 - Rebuild mit altem Accessibility-Eintrag -> Recovery-Hinweis führt zum Entfernen und erneuten Aktivieren
 - Sleep/Wake -> Hotkey funktioniert weiter
 - App-Neustart -> Runtime wird neu vorbereitet, Status bleibt konsistent
+- CLI absichtlich durch ein nicht startbares Artefakt ersetzen -> kein „ASR CLI runtime ready“, sondern ein konkreter Initialisierungsfehler
 
 ## 7. Release-Erstellung
 

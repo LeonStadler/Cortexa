@@ -84,6 +84,7 @@ log "Building macOS whisper-cli (Release)"
   cd "${WHISPER_DIR}"
   cmake -S . -B "${CLI_BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF \
     -DGGML_METAL=ON \
     -DWHISPER_COREML="${ENABLE_COREML_FOR_CLI_BUILD}" \
     -DWHISPER_BUILD_EXAMPLES=ON \
@@ -103,6 +104,7 @@ for candidate in "${CLI_CANDIDATES[@]}"; do
   if [[ -x "${candidate}" ]]; then
     cp "${candidate}" "${OUTPUT_DIR}/whisper-cli"
     chmod +x "${OUTPUT_DIR}/whisper-cli"
+    "${ROOT_DIR}/scripts/verify_whisper_cli_runtime.sh" "${OUTPUT_DIR}/whisper-cli"
     log "CLI copied to ${OUTPUT_DIR}/whisper-cli"
     exit 0
   fi

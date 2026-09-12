@@ -373,10 +373,7 @@ final class DictationRuntime: @unchecked Sendable {
         publishDebug("runtime.prepare.begin")
 
         do {
-            _ = try BundledWhisperRuntimeInstaller.syncRuntimeCLIOnly(
-                bundle: .main, appName: "WisprLocal")
-            publishDiagnostic("ASR CLI runtime ready.")
-            publishDebug("runtime.prepare.cli_synced")
+            _ = try prepareInstalledRuntime()
         } catch {
             publishStatus("Error")
             publishDiagnostic("ASR init failed: \(error.localizedDescription)")
@@ -385,12 +382,12 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     func prepareRuntimeIfModelAvailable() {
-        prepareRuntime()
-        guard !runtimePrepared else { return }
+        cancelRuntimeUnloadTask()
+        publishDebug("runtime.prepare.begin")
 
         do {
-            let runtime = try BundledWhisperRuntimeInstaller.syncRuntimeCLIOnly(
-                bundle: .main, appName: "WisprLocal")
+            let runtime = try prepareInstalledRuntime()
+            guard !runtimePrepared else { return }
             let bootstrapModel = runtime.modelsDirectoryURL.appendingPathComponent(
                 runtime.defaultModelFileName)
             guard FileManager.default.fileExists(atPath: bootstrapModel.path) else {
@@ -428,6 +425,20 @@ final class DictationRuntime: @unchecked Sendable {
             publishDiagnostic("ASR init failed: \(error.localizedDescription)")
             publishDebug("runtime.prepare.failed error=\(error.localizedDescription)")
         }
+    }
+
+    private func prepareInstalledRuntime() throws -> InstalledWhisperRuntime {
+        let runtime = try BundledWhisperRuntimeInstaller.syncRuntimeCLIOnly(
+            bundle: .main,
+            appName: "WisprLocal"
+        )
+        try BundledWhisperRuntimeInstaller.validateRuntimeCLI(
+            at: runtime.cliURL,
+            timeout: 5
+        )
+        publishDiagnostic("ASR CLI runtime ready.")
+        publishDebug("runtime.prepare.cli_synced")
+        return runtime
     }
 
     func setVoiceModelActiveDuration(_ duration: VoiceModelActiveDuration) {

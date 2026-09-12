@@ -8,6 +8,10 @@
 
 ## Fixes
 
+- 2026-09-12: Nicht startbare Whisper-Runtime im installierten Cortexa-Bundle behoben und ASR-E2E-Prüfung ergänzt.
+  - Dateien: `Sources/ASRCore/BundledWhisperRuntime.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `scripts/build_whisper_xcframework.sh`, `scripts/prepare_runtime_bundle.sh`, `scripts/verify_whisper_cli_runtime.sh`, `scripts/smoke_test_macos_app.sh`, `Tests/ASRCoreTests/BundledWhisperRuntimeTests.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `apps/macos/README.md`, `docs/distribution.md`, `docs/macos-release-checklist.md`, `VERSION`
+  - Funktionalität: `whisper-cli` wird statisch gegen Whisper/GGML gebaut und enthält dadurch keine absoluten `@rpath`-Verweise auf den Entwicklungsrechner mehr. Build und Bundle-Vorbereitung lehnen nicht portable dynamische Abhängigkeiten ab und führen einen echten Start-Probe aus. Die App meldet „ASR CLI runtime ready“ erst nach einem erfolgreichen CLI-Start. Der macOS-Smoke-Test transkribiert zusätzlich synthetisierte Sprache mit der CLI und dem Standardmodell aus dem gebauten App-Bundle. Die Version wurde als Patch-Bugfix auf `0.29.2` angehoben.
+
 - 2026-09-11: macOS-Einstellungsfenster stabilisiert und Sidebar-/Glass-Darstellung korrigiert.
   - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/MacNativeDesign.swift`, `VERSION`
   - Funktionalität: Die Sidebar verwendet wieder ausschließlich die native `NavigationSplitView`-/Source-List-Darstellung. Der zusätzliche Hintergrund-Extension-Effekt und der globale Fenster-Hintergrund, die den Liquid-Glass-/Scroll-Edge-Effekt überlagerten, wurden entfernt. Die Sidebar-Breite ist kompakter und verhindert, dass die Detailspalte bei üblichen Fenstergrößen seitlich wegdrückt. Die Version wurde als Patch-Bugfix auf `0.29.1` angehoben.

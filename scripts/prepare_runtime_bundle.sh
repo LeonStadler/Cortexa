@@ -44,9 +44,12 @@ if [[ ! -x "${SRC_CLI}" ]]; then
   exit 1
 fi
 
+"${ROOT_DIR}/scripts/verify_whisper_cli_runtime.sh" "${SRC_CLI}"
+
 mkdir -p "${DEST_MODELS_DIR}"
 cp "${SRC_CLI}" "${DEST_RUNTIME_DIR}/whisper-cli"
 chmod +x "${DEST_RUNTIME_DIR}/whisper-cli"
+"${ROOT_DIR}/scripts/verify_whisper_cli_runtime.sh" "${DEST_RUNTIME_DIR}/whisper-cli"
 
 rm -f "${DEST_MODELS_DIR}"/*.bin
 
