@@ -19,6 +19,31 @@ final class SessionConfigurationBuilderTests: XCTestCase {
         )
     }
 
+    func testBuildSelectsExpectedModeForEveryStreamingAndDeliveryCombination() {
+        let builder = SessionConfigurationBuilder()
+
+        for streamingEnabled in [false, true] {
+            for deliveryMode in [FinalResultDeliveryMode.insert, .clipboardOnly] {
+                let result = builder.build(
+                    from: makeInput(
+                        streamingEnabled: streamingEnabled,
+                        finalResultDeliveryMode: deliveryMode
+                    )
+                )
+
+                let expectedMode: DictationMode = streamingEnabled && deliveryMode == .insert
+                    ? .streaming
+                    : .finalize
+                XCTAssertEqual(
+                    result.mode,
+                    expectedMode,
+                    "streamingEnabled=\(streamingEnabled), deliveryMode=\(deliveryMode)"
+                )
+                XCTAssertEqual(result.finalResultDeliveryMode, deliveryMode)
+            }
+        }
+    }
+
     func testBuildPrefersLanguageOverrideWhenModelIsInstalled() {
         let overrideModel = VoiceModelDescriptor(
             id: "override-model",

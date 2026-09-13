@@ -905,6 +905,7 @@ final class DictationRuntime: @unchecked Sendable {
             finalText,
             currentOptions: currentOptions,
             activeStreamingTarget: activeStreamingTarget,
+            isAccessibilityTrusted: { AccessibilityTrust.isClientProcessTrusted() },
             resolveAvailableTextTarget: {
                 self.resolveAvailableTextTarget()
             },

@@ -23,6 +23,103 @@ public enum VoiceModelInstallerError: Error, LocalizedError {
     }
 }
 
+enum VoiceModelDownloadWorkspace {
+    static let temporaryDirectoryPrefix = "cortexa-voice-model-download-"
+    static let legacyTemporaryDirectoryPrefix = "voice-model-download-"
+    static let partialFilePrefix = ".cortexa-model-download-"
+    static let partialFileSuffix = ".partial"
+
+    static func makeTemporaryDirectory(fileManager: FileManager) throws -> URL {
+        let directory = fileManager.temporaryDirectory.appendingPathComponent(
+            temporaryDirectoryPrefix + UUID().uuidString,
+            isDirectory: true
+        )
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    static func removeInterruptedArtifacts(
+        in modelsDirectoryURL: URL,
+        temporaryDirectoryURL: URL,
+        fileManager: FileManager
+    ) throws {
+        let temporaryDirectoryEntries = try fileManager.contentsOfDirectory(
+            at: temporaryDirectoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+        for entry in temporaryDirectoryEntries where isInterruptedTemporaryDirectory(
+            entry,
+            fileManager: fileManager
+        ) {
+            try fileManager.removeItem(at: entry)
+        }
+
+        guard fileManager.fileExists(atPath: modelsDirectoryURL.path) else { return }
+        let modelEntries = try fileManager.contentsOfDirectory(
+            at: modelsDirectoryURL,
+            includingPropertiesForKeys: nil,
+            options: []
+        )
+        for entry in modelEntries where isPartialModelFile(entry) {
+            try fileManager.removeItem(at: entry)
+        }
+    }
+
+    static func installDownloadedModel(
+        from downloadedModelURL: URL,
+        named localFileName: String,
+        in modelsDirectoryURL: URL,
+        fileManager: FileManager
+    ) throws {
+        let targetURL = modelsDirectoryURL.appendingPathComponent(localFileName)
+        let stagingURL = modelsDirectoryURL.appendingPathComponent(
+            partialFilePrefix + localFileName + partialFileSuffix
+        )
+        if fileManager.fileExists(atPath: stagingURL.path) {
+            try fileManager.removeItem(at: stagingURL)
+        }
+        do {
+            try fileManager.copyItem(at: downloadedModelURL, to: stagingURL)
+            if fileManager.fileExists(atPath: targetURL.path) {
+                _ = try fileManager.replaceItemAt(
+                    targetURL,
+                    withItemAt: stagingURL,
+                    backupItemName: nil,
+                    options: []
+                )
+            } else {
+                try fileManager.moveItem(at: stagingURL, to: targetURL)
+            }
+        } catch {
+            if fileManager.fileExists(atPath: stagingURL.path) {
+                try? fileManager.removeItem(at: stagingURL)
+            }
+            throw error
+        }
+    }
+
+    private static func isInterruptedTemporaryDirectory(
+        _ url: URL,
+        fileManager: FileManager
+    ) -> Bool {
+        let name = url.lastPathComponent
+        guard name.hasPrefix(temporaryDirectoryPrefix)
+            || name.hasPrefix(legacyTemporaryDirectoryPrefix)
+        else {
+            return false
+        }
+        var isDirectory = ObjCBool(false)
+        return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    private static func isPartialModelFile(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        return name.hasPrefix(partialFilePrefix) && name.hasSuffix(partialFileSuffix)
+    }
+}
+
 public actor VoiceModelInstaller {
     private let fileManager: FileManager
     private let suppressionStore: VoiceModelSuppressionStore
@@ -40,11 +137,17 @@ public actor VoiceModelInstaller {
     }
 
     public func syncRuntimeCLI(appName: String = "WisprLocal") throws -> InstalledWhisperRuntime {
-        try BundledWhisperRuntimeInstaller.installBundledRuntime(
+        let runtime = try BundledWhisperRuntimeInstaller.installBundledRuntime(
             appName: appName,
             syncModels: false,
             suppressedBundledModelFileNames: suppressionStore.suppressedFileNames()
         )
+        try VoiceModelDownloadWorkspace.removeInterruptedArtifacts(
+            in: runtime.modelsDirectoryURL,
+            temporaryDirectoryURL: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
+        return runtime
     }
 
     public func installedWhisperModelFileNames(appName: String = "WisprLocal") throws -> Set<String>
@@ -89,9 +192,9 @@ public actor VoiceModelInstaller {
             string:
                 "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-\(downloadIdentifier).bin"
         )!
-        let tempDirectory = fileManager.temporaryDirectory.appendingPathComponent(
-            "voice-model-download-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let tempDirectory = try VoiceModelDownloadWorkspace.makeTemporaryDirectory(
+            fileManager: fileManager
+        )
         defer { try? fileManager.removeItem(at: tempDirectory) }
 
         let destinationURL = tempDirectory.appendingPathComponent(localFileName)
@@ -108,11 +211,12 @@ public actor VoiceModelInstaller {
             VoiceModelInstallProgress(phase: .finalizing, fractionCompleted: 0.99)
         )
 
-        let targetURL = runtime.modelsDirectoryURL.appendingPathComponent(localFileName)
-        if fileManager.fileExists(atPath: targetURL.path) {
-            try fileManager.removeItem(at: targetURL)
-        }
-        try fileManager.copyItem(at: destinationURL, to: targetURL)
+        try VoiceModelDownloadWorkspace.installDownloadedModel(
+            from: destinationURL,
+            named: localFileName,
+            in: runtime.modelsDirectoryURL,
+            fileManager: fileManager
+        )
 
         progressHandler?(
             VoiceModelInstallProgress(phase: .finalizing, fractionCompleted: 1)

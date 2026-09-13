@@ -14,6 +14,7 @@
    - The build and bundle preparation run `./scripts/verify_whisper_cli_runtime.sh`. This gate rejects non-system dynamic-library dependencies and proves that the copied CLI can launch before an app archive is created.
    - Download the required ggml models with `./scripts/download_models.sh`.
    - Bundle the CLI into `apps/macos/AppShell/Resources/Runtime` using `./scripts/prepare_runtime_bundle.sh` (Release: no bundled `.bin`; the standard model downloads during first-run onboarding).
+   - Cortexa downloads a model into a private temporary workspace and then promotes it from a hidden `.partial` staging file into the models directory only after the download is complete. A later runtime sync removes only Cortexa's abandoned temporary workspaces and staging files; completed `.bin` models and unrelated temporary files remain untouched.
    - For local dev/smoke tests, pass `--include-default-model` to bundle `ggml-base.bin` alongside the CLI.
    - `./scripts/smoke_test_macos_app.sh` additionally synthesizes a spoken fixture and transcribes it with the CLI and model from the built app bundle. This is the automated ASR runtime E2E; microphone permission, focus retention, and insertion into TextEdit/Notes/VS Code remain the manual UI E2E layer in the release checklist.
 

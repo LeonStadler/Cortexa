@@ -20,7 +20,89 @@
         }
     }
 
+    private actor ProcessingInvocationRecorder {
+        private var stages: [AIProcessingStage] = []
+
+        func record(_ stage: AIProcessingStage) {
+            stages.append(stage)
+        }
+
+        func recordedStages() -> [AIProcessingStage] {
+            stages
+        }
+    }
+
     final class AIProcessingServiceTests: XCTestCase {
+        func testLiveAndFinalProcessingToggleMatrixOnlyInvokesEnabledStages() async {
+            for processingEnabled in [false, true] {
+                for liveEnabled in [false, true] {
+                    for finalEnabled in [false, true] {
+                        let recorder = ProcessingInvocationRecorder()
+                        let provider = StubProvider(
+                            providerID: "apple.foundation",
+                            providerKind: .appleFoundation,
+                            descriptors: [
+                                AIModelDescriptor(
+                                    id: "apple.ondevice",
+                                    providerID: "apple.foundation",
+                                    requestModelID: "apple.ondevice",
+                                    displayName: "Apple",
+                                    providerKind: .appleFoundation,
+                                    availability: .available,
+                                    quickSettingsEligible: true
+                                )
+                            ]
+                        ) { request, _ in
+                            await recorder.record(request.stage)
+                            return request.text + " revised"
+                        }
+                        let service = AIProcessingService(providers: [provider])
+                        let configuration = AIProcessingConfiguration(
+                            enabled: processingEnabled,
+                            selectedModelID: "apple.ondevice",
+                            applyDuringLiveInsertion: liveEnabled,
+                            applyToFinalResult: finalEnabled,
+                            cleanupEnabled: true,
+                            cleanupIntensity: 0.5
+                        )
+
+                        let liveOutcome = await service.process(
+                            AIProcessingRequest(
+                                text: "live draft",
+                                stage: .live,
+                                locale: Locale(identifier: "de_DE"),
+                                configuration: configuration
+                            )
+                        )
+                        let finalOutcome = await service.process(
+                            AIProcessingRequest(
+                                text: "final draft",
+                                stage: .final,
+                                locale: Locale(identifier: "de_DE"),
+                                configuration: configuration
+                            )
+                        )
+
+                        let shouldProcessLive = processingEnabled && liveEnabled
+                        let shouldProcessFinal = processingEnabled && finalEnabled
+                        XCTAssertEqual(
+                            liveOutcome.text,
+                            shouldProcessLive ? "live draft revised" : "live draft"
+                        )
+                        XCTAssertEqual(
+                            finalOutcome.text,
+                            shouldProcessFinal ? "final draft revised" : "final draft"
+                        )
+                        let expectedStages: [AIProcessingStage] =
+                            (shouldProcessLive ? [.live] : [])
+                            + (shouldProcessFinal ? [.final] : [])
+                        let recordedStages = await recorder.recordedStages()
+                        XCTAssertEqual(recordedStages, expectedStages)
+                    }
+                }
+            }
+        }
+
         func testQuickSettingsFilterReturnsOnlyAvailableOperationalModels() {
             let catalog = AIModelCatalog(descriptors: [
                 AIModelDescriptor(

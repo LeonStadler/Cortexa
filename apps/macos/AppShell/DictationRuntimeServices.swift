@@ -567,6 +567,7 @@ internal struct FinalTranscriptDeliveryService {
         _ finalText: String,
         currentOptions: DictationStartOptions?,
         activeStreamingTarget: LockedTextTarget?,
+        isAccessibilityTrusted: () -> Bool,
         resolveAvailableTextTarget: () -> LockedTextTarget?,
         waitForAvailableTextTarget: (UInt64) async -> LockedTextTarget?,
         setWaitingForInsertionTarget: (Bool) -> Void,
@@ -590,7 +591,7 @@ internal struct FinalTranscriptDeliveryService {
             return .copiedToClipboard
         }
 
-        if !AccessibilityTrust.isClientProcessTrusted() {
+        if !isAccessibilityTrusted() {
             if currentOptions.clipboardFallbackWhenNoTarget {
                 copyTranscriptToClipboard(finalText)
                 publishDiagnostic(
