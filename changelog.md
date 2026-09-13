@@ -8,6 +8,10 @@
 
 ## Fixes
 
+- 2026-09-13: Live-Diktate werden beim Stoppen nicht mehr doppelt eingefügt, und neue Diktate verwenden kein veraltetes Textziel mehr.
+  - Dateien: `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `apps/macos/AppShell/SpeechModelController.swift`, `Tests/AppShellSupportTests/DictationRuntimeServicesTests.swift`, `Tests/AppShellSupportTests/SpeechModelControllerTests.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalität: Für eine aktive Live-Text-Sitzung ersetzt der Finalpfad den bereits eingefügten Live-Text unabhängig von der allgemeinen Option für simulierte Tastatureingaben. Damit wird das finale ASR- oder AI-Ergebnis nicht zusätzlich hinter den vorläufigen Text gesetzt. Fehlt beim Start oder während des Wartens ein aktuelles Textziel, wartet Cortexa nun auf ein neu fokussiertes Feld statt ein Textfeld einer älteren Sitzung wiederzuverwenden. Fortschritte beim Modell-Download werden nur noch in sinnvollen 5-Prozent-Schritten an den globalen UI-State weitergegeben; das reduziert unnötige Neuaufbauten des offenen Menüleistenmenüs. Die Version wurde als Patch-Bugfix auf `0.29.4` angehoben.
+
 - 2026-09-12: Runtime-Update erkennt gleich große Dateien mit identischem Zeitstempel nun inhaltsbasiert.
   - Dateien: `Sources/ASRCore/BundledWhisperRuntime.swift`, `Tests/ASRCoreTests/BundledWhisperRuntimeTests.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
   - Funktionalität: Die Synchronisierung vergleicht bei gleichen Dateimetadaten zusätzlich den Inhalt, bevor sie eine vorhandene `whisper-cli` beibehält. Dadurch kann eine veraltete, dynamisch gelinkte CLI nicht mehr als aktuell durchrutschen, wenn ihre Größe und ihr Zeitstempel zufällig mit der korrigierten CLI übereinstimmen. Die Version wurde als Patch-Bugfix auf `0.29.3` angehoben.

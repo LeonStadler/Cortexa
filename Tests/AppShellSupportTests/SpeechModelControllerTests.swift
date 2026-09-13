@@ -6,6 +6,55 @@
 
     @MainActor
     final class SpeechModelControllerTests: XCTestCase {
+        func testVoiceModelOperationProgressPublishesOnlyMeaningfulDownloadUpdates() {
+            let current = VoiceModelOperationKind.installing(
+                VoiceModelInstallProgress(
+                    phase: .downloading,
+                    fractionCompleted: 0.42,
+                    receivedBytes: 42,
+                    totalBytes: 100
+                )
+            )
+
+            XCTAssertFalse(
+                shouldPublishVoiceModelOperation(
+                    current: current,
+                    proposed: .installing(
+                        VoiceModelInstallProgress(
+                            phase: .downloading,
+                            fractionCompleted: 0.44,
+                            receivedBytes: 44,
+                            totalBytes: 100
+                        )
+                    )
+                )
+            )
+            XCTAssertTrue(
+                shouldPublishVoiceModelOperation(
+                    current: current,
+                    proposed: .installing(
+                        VoiceModelInstallProgress(
+                            phase: .downloading,
+                            fractionCompleted: 0.47,
+                            receivedBytes: 47,
+                            totalBytes: 100
+                        )
+                    )
+                )
+            )
+            XCTAssertTrue(
+                shouldPublishVoiceModelOperation(
+                    current: current,
+                    proposed: .installing(
+                        VoiceModelInstallProgress(
+                            phase: .finalizing,
+                            fractionCompleted: 0.98
+                        )
+                    )
+                )
+            )
+        }
+
         func testSanitizeSpeechModelSelectionsFallsBackToValidDefaultsAndResetsTranslation() {
             let state = SpeechModelControllerState(
                 selectedLanguage: .german,

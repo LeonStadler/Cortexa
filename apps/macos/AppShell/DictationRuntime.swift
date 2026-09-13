@@ -334,7 +334,6 @@ final class DictationRuntime: @unchecked Sendable {
     private var loadedConfig: ASRConfig?
     private var currentOptions: DictationStartOptions?
     private var voiceModelActiveDuration: VoiceModelActiveDuration = .oneMinute
-    private var lastKnownTarget: LockedTextTarget?
     private var waitingForInsertionTarget = false
     private var pendingStreamingInsertionTask: Task<Void, Never>?
     private var runtimeUnloadTask: Task<Void, Never>?
@@ -558,15 +557,13 @@ final class DictationRuntime: @unchecked Sendable {
                 try configureEngine(for: options, runtimeMode: effectiveMode)
 
                 if accessibilityGranted {
-                    var lockedTarget = try? await captureFocusedTextTargetWithRetry(
-                        emitWaitingDiagnostics: false)
+                    var lockedTarget = try? captureFocusedTextTarget()
                     if lockedTarget == nil {
                         lockedTarget = resolveAvailableTextTarget()
                     }
                     withSessionLock {
                         self.target = lockedTarget
-                        if let lockedTarget {
-                            self.lastKnownTarget = lockedTarget
+                        if lockedTarget != nil {
                             self.waitingForInsertionTarget = false
                         } else {
                             self.waitingForInsertionTarget = true
@@ -823,7 +820,6 @@ final class DictationRuntime: @unchecked Sendable {
                     activeTarget.insertedLength = patchText.count
                     self.withSessionLock {
                         self.target = activeTarget
-                        self.lastKnownTarget = activeTarget
                         self.waitingForInsertionTarget = false
                         self.latestInsertedPreview = patchText
                     }
@@ -843,7 +839,6 @@ final class DictationRuntime: @unchecked Sendable {
                         reboundTarget.insertedLength = patchText.count
                         self.withSessionLock {
                             self.target = reboundTarget
-                            self.lastKnownTarget = reboundTarget
                             self.waitingForInsertionTarget = false
                             self.latestInsertedPreview = patchText
                         }
@@ -877,34 +872,7 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func captureFocusedTextTarget() throws -> LockedTextTarget {
-        let target = try focusedTextTargetService.captureFocusedTextTarget()
-        lastKnownTarget = target
-        return target
-    }
-
-    private func captureFocusedTextTargetWithRetry(emitWaitingDiagnostics: Bool = true) async throws
-        -> LockedTextTarget
-    {
-        try await focusedTextTargetService.captureFocusedTextTargetWithRetry(
-            emitWaitingDiagnostics: emitWaitingDiagnostics,
-            captureFocusedTextTarget: { try self.captureFocusedTextTarget() },
-            recoverLastKnownTarget: {
-                let recoveredTarget = try self.recoverLastKnownTarget()
-                self.lastKnownTarget = recoveredTarget
-                return recoveredTarget
-            },
-            publishDiagnostic: { [weak self] message in
-                self?.publishDiagnostic(message)
-            }
-        )
-    }
-
-    private func recoverLastKnownTarget() throws -> LockedTextTarget {
-        guard let lastKnownTarget else {
-            throw DictationRuntimeError.focusedElementUnavailable
-        }
-
-        return try refreshLockedTextTarget(lastKnownTarget)
+        try focusedTextTargetService.captureFocusedTextTarget()
     }
 
     private func refreshLockedTextTarget(_ target: LockedTextTarget) throws -> LockedTextTarget {
@@ -915,7 +883,9 @@ final class DictationRuntime: @unchecked Sendable {
         focusedTextTargetService.resolveAvailableTextTarget(
             currentTarget: target,
             captureFocusedTextTarget: { try self.captureFocusedTextTarget() },
-            recoverLastKnownTarget: { try self.recoverLastKnownTarget() },
+            captureFocusedTargetForPasteFallback: {
+                self.focusedTextTargetService.captureFocusedTargetForPasteFallback()
+            },
             refreshLockedTextTarget: { try self.refreshLockedTextTarget($0) }
         )
     }
@@ -952,6 +922,10 @@ final class DictationRuntime: @unchecked Sendable {
             insertFinalText: { text, target, options, allowFallbackPaste in
                 try self.insertFinalText(
                     text, into: target, options: options, allowFallbackPaste: allowFallbackPaste)
+            },
+            replaceLiveText: { text, target, options, allowFallbackPaste in
+                try self.replaceLiveTextWithFinalResult(
+                    text, in: target, options: options, allowFallbackPaste: allowFallbackPaste)
             },
             publishDiagnostic: { value in
                 self.publishDiagnostic(value)
@@ -1024,7 +998,6 @@ final class DictationRuntime: @unchecked Sendable {
                         activeTarget.insertedLength = insertionSnapshot.latestInsertedPreview.count
                         self.withSessionLock {
                             self.target = activeTarget
-                            self.lastKnownTarget = activeTarget
                             self.waitingForInsertionTarget = false
                         }
                         self.publishDiagnostic(
@@ -1315,7 +1288,6 @@ final class DictationRuntime: @unchecked Sendable {
         ) { updatedTarget in
             self.withSessionLock {
                 self.target = updatedTarget
-                self.lastKnownTarget = updatedTarget
             }
         }
     }
@@ -1362,9 +1334,31 @@ final class DictationRuntime: @unchecked Sendable {
             onTargetUpdated: { updatedTarget in
                 self.withSessionLock {
                     self.target = updatedTarget
-                    self.lastKnownTarget = updatedTarget
                 }
             }
+        )
+    }
+
+    private func replaceLiveTextWithFinalResult(
+        _ text: String,
+        in lockedTarget: LockedTextTarget,
+        options: DictationStartOptions,
+        allowFallbackPaste: Bool
+    ) throws -> FinalInsertionMetrics {
+        let insertion = try replaceInsertedText(
+            text,
+            in: lockedTarget,
+            allowFallbackPaste: allowFallbackPaste
+        )
+        var autoSent = false
+        if options.autoSendAfterPaste {
+            try sendReturnKey()
+            autoSent = true
+        }
+        return FinalInsertionMetrics(
+            path: insertion.path,
+            clipboardRestored: insertion.clipboardRestored,
+            autoSent: autoSent
         )
     }
 

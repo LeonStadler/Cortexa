@@ -31,7 +31,11 @@ final class DictationRuntimeServicesTests: XCTestCase {
 
         let outcome = await service.deliverFinalText(
             "Hallo Welt",
-            currentOptions: makeOptions(deliveryMode: .clipboardOnly),
+            currentOptions: makeOptions(
+                deliveryMode: .clipboardOnly,
+                mode: .finalize,
+                simulateKeypresses: false
+            ),
             activeStreamingTarget: nil,
             resolveAvailableTextTarget: {
                 resolveCalls += 1
@@ -48,6 +52,10 @@ final class DictationRuntimeServicesTests: XCTestCase {
                 XCTFail("insertFinalText should not be called for clipboard-only delivery")
                 return FinalInsertionMetrics(path: "unused", clipboardRestored: false, autoSent: false)
             },
+            replaceLiveText: { _, _, _, _ in
+                XCTFail("replaceLiveText should not be called for clipboard-only delivery")
+                return FinalInsertionMetrics(path: "unused", clipboardRestored: false, autoSent: false)
+            },
             publishDiagnostic: { _ in },
             publishFinalDeliveryMetrics: { _ in },
             pendingInsertionTimeoutNanoseconds: 1
@@ -61,9 +69,81 @@ final class DictationRuntimeServicesTests: XCTestCase {
         XCTAssertEqual(insertCalls, 0)
     }
 
-    private func makeOptions(deliveryMode: FinalResultDeliveryMode) -> DictationStartOptions {
+    func testStreamingFinalDeliveryReplacesLiveTextInsteadOfSimulatingAnotherInsertion() async {
+        let service = FinalTranscriptDeliveryService()
+        let target = LockedTextTarget(
+            element: AXUIElementCreateSystemWide(),
+            insertionLocation: 12,
+            originalSelectedLength: 0,
+            fallbackBundleIdentifier: "com.example.editor",
+            prefersKeyboardInsertion: true,
+            insertedLength: 14
+        )
+        var insertCalls = 0
+        var replaceCalls = 0
+
+        let outcome = await service.deliverFinalText(
+            "Test 1, 2, 3",
+            currentOptions: makeOptions(
+                deliveryMode: .insert,
+                mode: .streaming,
+                simulateKeypresses: true
+            ),
+            activeStreamingTarget: target,
+            resolveAvailableTextTarget: { nil },
+            waitForAvailableTextTarget: { _ in nil },
+            setWaitingForInsertionTarget: { _ in },
+            copyTranscriptToClipboard: { _ in },
+            insertFinalText: { _, _, _, _ in
+                insertCalls += 1
+                return FinalInsertionMetrics(path: "simulatedKeypresses", clipboardRestored: false, autoSent: false)
+            },
+            replaceLiveText: { text, receivedTarget, options, allowFallbackPaste in
+                replaceCalls += 1
+                XCTAssertEqual(text, "Test 1, 2, 3")
+                XCTAssertEqual(receivedTarget.insertedLength, 14)
+                XCTAssertTrue(options.simulateKeypresses)
+                XCTAssertTrue(allowFallbackPaste)
+                return FinalInsertionMetrics(path: "axValueSet", clipboardRestored: false, autoSent: false)
+            },
+            publishDiagnostic: { _ in },
+            publishFinalDeliveryMetrics: { _ in },
+            pendingInsertionTimeoutNanoseconds: 1
+        )
+
+        XCTAssertEqual(outcome, .inserted)
+        XCTAssertEqual(replaceCalls, 1)
+        XCTAssertEqual(insertCalls, 0)
+    }
+
+    func testResolveAvailableTextTargetDoesNotReuseAnOldTargetWhenFocusIsUnavailable() {
+        let service = FocusedTextTargetService()
+        let staleTarget = LockedTextTarget(
+            element: AXUIElementCreateSystemWide(),
+            insertionLocation: 0,
+            originalSelectedLength: 0,
+            fallbackBundleIdentifier: "com.example.previous-editor",
+            prefersKeyboardInsertion: false,
+            insertedLength: 0
+        )
+
+        let target = service.resolveAvailableTextTarget(
+            currentTarget: nil,
+            captureFocusedTextTarget: { throw FocusUnavailableError() },
+            captureFocusedTargetForPasteFallback: { nil },
+            refreshLockedTextTarget: { _ in staleTarget }
+        )
+
+        XCTAssertNil(target)
+    }
+
+    private func makeOptions(
+        deliveryMode: FinalResultDeliveryMode,
+        mode: DictationMode,
+        simulateKeypresses: Bool
+    ) -> DictationStartOptions {
         DictationStartOptions(
-            mode: .finalize,
+            mode: mode,
             language: .german,
             translationOutput: .original,
             performance: .auto,
@@ -73,7 +153,7 @@ final class DictationRuntimeServicesTests: XCTestCase {
             snippetRules: [],
             finalResultDeliveryMode: deliveryMode,
             clipboardFallbackWhenNoTarget: false,
-            simulateKeypresses: false,
+            simulateKeypresses: simulateKeypresses,
             restoreClipboardAfterPaste: true,
             autoSendAfterPaste: false,
             muteMusicWhileDictating: false,
@@ -87,4 +167,6 @@ final class DictationRuntimeServicesTests: XCTestCase {
         )
     }
 }
+
+private struct FocusUnavailableError: Error {}
 #endif

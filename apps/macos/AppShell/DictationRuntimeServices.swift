@@ -57,8 +57,6 @@ internal struct RuntimePermissionService {
 }
 
 internal struct FocusedTextTargetService {
-    private let focusedTargetRetryCount = 8
-    private let focusedTargetRetryDelayNanoseconds: UInt64 = 150_000_000
     private let pendingInsertionTimeoutNanoseconds: UInt64 = 5_000_000_000
     private let pendingInsertionPollNanoseconds: UInt64 = 150_000_000
 
@@ -116,42 +114,6 @@ internal struct FocusedTextTargetService {
         }
     }
 
-    func captureFocusedTextTargetWithRetry(
-        emitWaitingDiagnostics: Bool = true,
-        captureFocusedTextTarget: () throws -> LockedTextTarget,
-        recoverLastKnownTarget: () throws -> LockedTextTarget?,
-        publishDiagnostic: (String) -> Void
-    ) async throws -> LockedTextTarget {
-        var lastError: Error = DictationRuntimeError.focusedElementUnavailable
-
-        for attempt in 0..<focusedTargetRetryCount {
-            do {
-                let target = try captureFocusedTextTarget()
-                return target
-            } catch {
-                lastError = error
-                if let recoveredTarget = try? recoverLastKnownTarget() {
-                    publishDiagnostic("Verwende zuletzt bekanntes Textziel erneut.")
-                    return recoveredTarget
-                }
-                guard case DictationRuntimeError.focusedElementUnavailable = error,
-                    attempt < focusedTargetRetryCount - 1
-                else {
-                    throw error
-                }
-
-                if emitWaitingDiagnostics {
-                    publishDiagnostic(
-                        "Warte auf fokussiertes Textfeld (\(attempt + 1)/\(focusedTargetRetryCount))..."
-                    )
-                }
-                try? await Task.sleep(nanoseconds: focusedTargetRetryDelayNanoseconds)
-            }
-        }
-
-        throw lastError
-    }
-
     func refreshLockedTextTarget(_ target: LockedTextTarget) throws -> LockedTextTarget {
         try runOnMainThread {
             if let expectedBundleIdentifier = target.fallbackBundleIdentifier,
@@ -192,7 +154,7 @@ internal struct FocusedTextTargetService {
     func resolveAvailableTextTarget(
         currentTarget: LockedTextTarget?,
         captureFocusedTextTarget: () throws -> LockedTextTarget,
-        recoverLastKnownTarget: () throws -> LockedTextTarget?,
+        captureFocusedTargetForPasteFallback: () -> LockedTextTarget?,
         refreshLockedTextTarget: (LockedTextTarget) throws -> LockedTextTarget
     ) -> LockedTextTarget? {
         if let currentTarget,
@@ -205,9 +167,6 @@ internal struct FocusedTextTargetService {
         }
         if let fallbackFocused = captureFocusedTargetForPasteFallback() {
             return fallbackFocused
-        }
-        if let recovered = try? recoverLastKnownTarget() {
-            return recovered
         }
         return nil
     }
@@ -241,7 +200,7 @@ internal struct FocusedTextTargetService {
     /// Captures the current focused AX element even when it is not value-settable.
     /// This allows downstream Cmd+V fallback insertion for editors that reject AX value writes
     /// (e.g. some IDE/Electron text controls).
-    private func captureFocusedTargetForPasteFallback() -> LockedTextTarget? {
+    func captureFocusedTargetForPasteFallback() -> LockedTextTarget? {
         runOnMainThread {
             let systemWide = AXUIElementCreateSystemWide()
             var focused: CFTypeRef?
@@ -614,6 +573,8 @@ internal struct FinalTranscriptDeliveryService {
         copyTranscriptToClipboard: (String) -> Void,
         insertFinalText: (String, LockedTextTarget, DictationStartOptions, Bool) throws
             -> FinalInsertionMetrics,
+        replaceLiveText: (String, LockedTextTarget, DictationStartOptions, Bool) throws
+            -> FinalInsertionMetrics,
         publishDiagnostic: (String) -> Void,
         publishFinalDeliveryMetrics: (FinalInsertionMetrics) -> Void,
         pendingInsertionTimeoutNanoseconds: UInt64
@@ -645,8 +606,14 @@ internal struct FinalTranscriptDeliveryService {
 
         if let activeStreamingTarget {
             do {
-                let metrics = try insertFinalText(
-                    finalText, activeStreamingTarget, currentOptions, true)
+                let metrics: FinalInsertionMetrics
+                if currentOptions.mode == .streaming {
+                    metrics = try replaceLiveText(
+                        finalText, activeStreamingTarget, currentOptions, true)
+                } else {
+                    metrics = try insertFinalText(
+                        finalText, activeStreamingTarget, currentOptions, true)
+                }
                 publishFinalDeliveryMetrics(metrics)
                 setWaitingForInsertionTarget(false)
                 return .inserted

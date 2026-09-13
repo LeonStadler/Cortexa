@@ -1,6 +1,32 @@
 import ASRCore
 import Foundation
 
+private let voiceModelProgressUpdateIntervalPercent = 5
+
+func shouldPublishVoiceModelOperation(
+    current: VoiceModelOperationKind?,
+    proposed: VoiceModelOperationKind
+) -> Bool {
+    guard let current else { return true }
+
+    guard case let (.installing(currentProgress), .installing(proposedProgress)) = (current, proposed)
+    else {
+        return current != proposed
+    }
+
+    guard currentProgress.phase == proposedProgress.phase,
+        currentProgress.isIndeterminate == proposedProgress.isIndeterminate,
+        (currentProgress.totalBytes == nil) == (proposedProgress.totalBytes == nil)
+    else {
+        return true
+    }
+
+    return proposedProgress.percentComplete >= currentProgress.percentComplete
+        + voiceModelProgressUpdateIntervalPercent
+        || proposedProgress.percentComplete < currentProgress.percentComplete
+        || proposedProgress.percentComplete == 100
+}
+
 @MainActor
 final class SpeechModelController {
     private let voiceModelInstaller: VoiceModelInstaller
@@ -384,6 +410,9 @@ final class SpeechModelController {
 
     private func setOperation(_ operation: VoiceModelOperationKind, for modelID: String) {
         var states = currentVoiceModelOperationStates()
+        guard shouldPublishVoiceModelOperation(current: states[modelID], proposed: operation) else {
+            return
+        }
         states[modelID] = operation
         setVoiceModelOperationStates(states)
     }
