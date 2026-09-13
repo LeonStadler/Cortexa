@@ -5,13 +5,10 @@ import Foundation
 final class PermissionCoordinator {
     private let permissionController: PermissionControlling
     private let dictationRuntime: DictationRuntimeControlling
-    private let buildFingerprintStore: BuildPermissionFingerprintStore
     private let currentMicrophonePermissionStatus: () -> PermissionStatus
     private let setMicrophonePermissionStatus: (PermissionStatus) -> Void
     private let currentAccessibilityPermissionStatus: () -> PermissionStatus
     private let setAccessibilityPermissionStatus: (PermissionStatus) -> Void
-    private let setAccessibilityPermissionStaleAfterRebuild: (Bool) -> Void
-    private let setMicrophonePermissionStaleAfterRebuild: (Bool) -> Void
     private let registerSelectedHotkey: (Bool) -> Void
     private let appendDiagnostic: (String) -> Void
     private let appendDebug: (String) -> Void
@@ -22,13 +19,10 @@ final class PermissionCoordinator {
     init(
         permissionController: PermissionControlling,
         dictationRuntime: DictationRuntimeControlling,
-        buildFingerprintStore: BuildPermissionFingerprintStore = .shared,
         currentMicrophonePermissionStatus: @escaping () -> PermissionStatus,
         setMicrophonePermissionStatus: @escaping (PermissionStatus) -> Void,
         currentAccessibilityPermissionStatus: @escaping () -> PermissionStatus,
         setAccessibilityPermissionStatus: @escaping (PermissionStatus) -> Void,
-        setAccessibilityPermissionStaleAfterRebuild: @escaping (Bool) -> Void,
-        setMicrophonePermissionStaleAfterRebuild: @escaping (Bool) -> Void,
         registerSelectedHotkey: @escaping (Bool) -> Void,
         appendDiagnostic: @escaping (String) -> Void,
         appendDebug: @escaping (String) -> Void,
@@ -36,14 +30,10 @@ final class PermissionCoordinator {
     ) {
         self.permissionController = permissionController
         self.dictationRuntime = dictationRuntime
-        self.buildFingerprintStore = buildFingerprintStore
         self.currentMicrophonePermissionStatus = currentMicrophonePermissionStatus
         self.setMicrophonePermissionStatus = setMicrophonePermissionStatus
         self.currentAccessibilityPermissionStatus = currentAccessibilityPermissionStatus
         self.setAccessibilityPermissionStatus = setAccessibilityPermissionStatus
-        self.setAccessibilityPermissionStaleAfterRebuild =
-            setAccessibilityPermissionStaleAfterRebuild
-        self.setMicrophonePermissionStaleAfterRebuild = setMicrophonePermissionStaleAfterRebuild
         self.registerSelectedHotkey = registerSelectedHotkey
         self.appendDiagnostic = appendDiagnostic
         self.appendDebug = appendDebug
@@ -73,17 +63,12 @@ final class PermissionCoordinator {
         let accessibilityStatus = permissionController.accessibilityStatus()
         setAccessibilityPermissionStatus(accessibilityStatus)
 
-        updateTrustedBuildRecords(
-            microphoneStatus: microphoneStatus,
-            accessibilityStatus: accessibilityStatus
-        )
-
         if isDebugModeEnabled() {
             appendDebug(
-                "permissions.microphone raw=\(String(describing: rawMic)) mapped=\(microphoneStatus) staleAfterRebuild=\(buildFingerprintStore.isMicrophoneStale(currentlyTrusted: microphoneStatus == .granted))"
+                "permissions.microphone raw=\(String(describing: rawMic)) mapped=\(microphoneStatus)"
             )
             appendDebug(
-                "permissions.accessibility mapped=\(accessibilityStatus) trusted=\(accessibilityStatus == .granted) staleAfterRebuild=\(buildFingerprintStore.isAccessibilityStale(currentlyTrusted: accessibilityStatus == .granted))"
+                "permissions.accessibility mapped=\(accessibilityStatus) trusted=\(accessibilityStatus == .granted)"
             )
         }
     }
@@ -117,9 +102,6 @@ final class PermissionCoordinator {
                     self.appendDiagnostic("Mikrofonzugriff wurde nicht erteilt.")
                 }
             case .denied, .restricted:
-                if self.buildFingerprintStore.isMicrophoneStale(currentlyTrusted: false) {
-                    self.appendMicrophoneRebuildRecoveryHint()
-                }
                 self.openMicrophoneSettings()
                 self.schedulePermissionRefresh()
             @unknown default:
@@ -135,27 +117,11 @@ final class PermissionCoordinator {
                 self.refreshPermissionStatesAfterUserFacingPermissionStep()
                 return
             }
-            if self.buildFingerprintStore.isAccessibilityStale(currentlyTrusted: false) {
-                self.appendAccessibilityRebuildRecoveryHint()
-            }
             self.dictationRuntime.promptAccessibilityTrustFromUser()
+            self.dictationRuntime.openAccessibilitySettings()
             self.refreshPermissionStatesAfterUserFacingPermissionStep()
             self.schedulePermissionRefresh()
         }
-    }
-
-    func rebindAccessibilityPermissions() {
-        appendAccessibilityRebuildRecoveryHint()
-        buildFingerprintStore.clearTrustedAccessibility()
-        dictationRuntime.openAccessibilitySettings()
-        schedulePermissionRefresh(extended: true)
-    }
-
-    func rebindMicrophonePermissions() {
-        appendMicrophoneRebuildRecoveryHint()
-        buildFingerprintStore.clearTrustedMicrophone()
-        dictationRuntime.openMicrophoneSettings()
-        schedulePermissionRefresh(extended: true)
     }
 
     func openMicrophoneSettings() {
@@ -195,29 +161,6 @@ final class PermissionCoordinator {
         }
     }
 
-    private func updateTrustedBuildRecords(
-        microphoneStatus: PermissionStatus,
-        accessibilityStatus: PermissionStatus
-    ) {
-        if microphoneStatus == .granted {
-            buildFingerprintStore.recordTrustedMicrophone()
-            setMicrophonePermissionStaleAfterRebuild(false)
-        } else {
-            setMicrophonePermissionStaleAfterRebuild(
-                buildFingerprintStore.isMicrophoneStale(currentlyTrusted: false)
-            )
-        }
-
-        if accessibilityStatus == .granted {
-            buildFingerprintStore.recordTrustedAccessibility()
-            setAccessibilityPermissionStaleAfterRebuild(false)
-        } else {
-            setAccessibilityPermissionStaleAfterRebuild(
-                buildFingerprintStore.isAccessibilityStale(currentlyTrusted: false)
-            )
-        }
-    }
-
     private func scheduleStabilizedRefreshes(reason: String, delaysNanoseconds: [UInt64]) {
         stabilizationTask?.cancel()
         stabilizationTask = Task { @MainActor [weak self] in
@@ -229,24 +172,4 @@ final class PermissionCoordinator {
         }
     }
 
-    private func appendAccessibilityRebuildRecoveryHint() {
-        appendDiagnostic(
-            """
-            Bedienungshilfen: Systemeinstellungen zeigen WisprLocalMac evtl. noch als aktiv, \
-            dieser Build ist aber nicht verknüpft (typisch nach Rebuild). \
-            1) WisprLocalMac in Bedienungshilfen entfernen (−), \
-            2) hier „Freigabe anfragen“ oder Diktat starten, \
-            3) WisprLocalMac neu aktivieren.
-            """
-        )
-    }
-
-    private func appendMicrophoneRebuildRecoveryHint() {
-        appendDiagnostic(
-            """
-            Mikrofon: Freigabe bezieht sich vermutlich auf einen älteren Build. \
-            WisprLocalMac in Datenschutz → Mikrofon entfernen, App neu starten und Freigabe erneut anfragen.
-            """
-        )
-    }
 }

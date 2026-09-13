@@ -220,7 +220,10 @@ log "  Identifier: ${CODESIGN_IDENTIFIER}"
 log "  Team Identifier: ${CODESIGN_TEAM_IDENTIFIER:-<missing>}"
 log "  Designated Requirement: ${CODESIGN_DESIGNATED_REQUIREMENT:-<missing>}"
 
-if [[ -f "${PREVIOUS_SIGNING_SUMMARY}" ]]; then
+if [[ -z "${CODESIGN_TEAM_IDENTIFIER}" || "${CODESIGN_TEAM_IDENTIFIER}" == "not set" || -z "${CODESIGN_DESIGNATED_REQUIREMENT}" ]]; then
+  log "Debug smoke uses a non-persistent local signature; it is not a permission-continuity check."
+  log "Use the signed release archive to verify Identifier, TeamIdentifier, and designated requirement across updates."
+elif [[ -f "${PREVIOUS_SIGNING_SUMMARY}" ]]; then
   if cmp -s "${PREVIOUS_SIGNING_SUMMARY}" "${CURRENT_SIGNING_SUMMARY}"; then
     log "Signing identity matches the previous smoke-test build"
   else

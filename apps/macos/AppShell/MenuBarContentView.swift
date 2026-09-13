@@ -352,25 +352,13 @@ struct MenuBarContentView: View {
     private var menuBarPermissionSection: some View {
         if appState.hasPermissionProblems {
             if appState.microphonePermissionStatus != .granted {
-                if appState.microphonePermissionStaleAfterRebuild {
-                    Button(text("Mikrofon neu verknüpfen", "Rebind microphone")) {
-                        appState.rebindMicrophonePermissions()
-                    }
-                } else {
-                    Button(text("Mikrofon freigeben", "Grant microphone access")) {
-                        appState.requestMicrophoneAccessFromSettings()
-                    }
+                Button(text("Mikrofon freigeben", "Grant microphone access")) {
+                    appState.requestMicrophoneAccessFromSettings()
                 }
             }
             if appState.accessibilityPermissionStatus != .granted {
-                if appState.accessibilityPermissionStaleAfterRebuild {
-                    Button(text("Bedienungshilfen neu verknüpfen", "Rebind accessibility")) {
-                        appState.rebindAccessibilityPermissions()
-                    }
-                } else {
-                    Button(text("Bedienungshilfen freigeben", "Grant accessibility access")) {
-                        appState.requestAccessibilityAccessFromSettings()
-                    }
+                Button(text("Bedienungshilfen freigeben", "Grant accessibility access")) {
+                    appState.requestAccessibilityAccessFromSettings()
                 }
             }
             Divider()

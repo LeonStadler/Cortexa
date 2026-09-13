@@ -546,7 +546,7 @@ final class DictationRuntime: @unchecked Sendable {
                     || options.finalResultDeliveryMode == .insert
                     || options.simulateKeypresses
                 let accessibilityGranted = requestAccessibilityPermission(
-                    promptIfNeeded: requiresDirectInsertion)
+                    promptIfNeeded: false)
                 publishPermissionInteractionFinished()
                 publishDebug(
                     "permissions.accessibility granted=\(accessibilityGranted) requiresDirectInsertion=\(requiresDirectInsertion)"

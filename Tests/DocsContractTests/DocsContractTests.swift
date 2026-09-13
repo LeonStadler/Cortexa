@@ -34,7 +34,7 @@ final class DocsContractTests: XCTestCase {
     func testVersionFileMatchesCurrentRepositoryVersion() throws {
         let version = try readRepositoryFile("VERSION").trimmingCharacters(
             in: .whitespacesAndNewlines)
-        XCTAssertEqual(version, "0.29.5")
+        XCTAssertEqual(version, "0.29.6")
     }
 
     func testMacOSCortexaBrandingAssetsAreWired() throws {

@@ -31,7 +31,7 @@ final class AppShellCharacterizationTests: XCTestCase {
         XCTAssertEqual(state.accessibilityPermissionStatus, .denied)
     }
 
-    func testRequestAccessibilityAccessFromSettingsPromptsRuntimeWhenDenied() async throws {
+    func testRequestAccessibilityAccessPromptsAndOpensSettingsWhenDenied() async throws {
         let permissions = StubPermissionController(
             microphone: .granted,
             accessibility: .denied
@@ -43,6 +43,7 @@ final class AppShellCharacterizationTests: XCTestCase {
 
         let prompted = await eventually {
             runtime.promptAccessibilityTrustCallCount == 1
+                && runtime.openAccessibilitySettingsCallCount == 1
         }
         XCTAssertTrue(prompted)
     }

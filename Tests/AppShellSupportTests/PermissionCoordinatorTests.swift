@@ -69,7 +69,7 @@
             XCTAssertTrue(debugMessages.isEmpty)
         }
 
-        func testRequestAccessibilityAccessFromSettingsPromptsRuntimeWhenDenied() async {
+        func testRequestAccessibilityAccessPromptsAndOpensSettingsWhenDenied() async {
             let permissions = AppShellTestPermissionController()
             permissions.accessibilityStatusValue = .denied
 
@@ -91,6 +91,7 @@
 
             try? await Task.sleep(nanoseconds: 100_000_000)
             XCTAssertEqual(runtime.promptAccessibilityTrustCallCount, 1)
+            XCTAssertEqual(runtime.openAccessibilitySettingsCallCount, 1)
         }
 
         func testOpenAccessibilitySettingsDelegatesToRuntime() {
@@ -134,17 +135,10 @@
         private func makeCoordinator(
             permissionController: PermissionControlling = AppShellTestPermissionController(),
             dictationRuntime: DictationRuntimeControlling = AppShellTestDictationRuntime(),
-            buildFingerprintStore: BuildPermissionFingerprintStore =
-                BuildPermissionFingerprintStore(
-                    defaults: UserDefaults(
-                        suiteName: "PermissionCoordinatorTests.\(UUID().uuidString)")!
-                ),
             currentMicrophoneStatus: @escaping () -> PermissionStatus,
             setMicrophoneStatus: @escaping (PermissionStatus) -> Void,
             currentAccessibilityStatus: @escaping () -> PermissionStatus,
             setAccessibilityStatus: @escaping (PermissionStatus) -> Void,
-            setAccessibilityStale: @escaping (Bool) -> Void = { _ in },
-            setMicrophoneStale: @escaping (Bool) -> Void = { _ in },
             registerSelectedHotkey: @escaping (Bool) -> Void,
             appendDiagnostic: @escaping (String) -> Void,
             appendDebug: @escaping (String) -> Void,
@@ -153,13 +147,10 @@
             PermissionCoordinator(
                 permissionController: permissionController,
                 dictationRuntime: dictationRuntime,
-                buildFingerprintStore: buildFingerprintStore,
                 currentMicrophonePermissionStatus: currentMicrophoneStatus,
                 setMicrophonePermissionStatus: setMicrophoneStatus,
                 currentAccessibilityPermissionStatus: currentAccessibilityStatus,
                 setAccessibilityPermissionStatus: setAccessibilityStatus,
-                setAccessibilityPermissionStaleAfterRebuild: setAccessibilityStale,
-                setMicrophonePermissionStaleAfterRebuild: setMicrophoneStale,
                 registerSelectedHotkey: registerSelectedHotkey,
                 appendDiagnostic: appendDiagnostic,
                 appendDebug: appendDebug,

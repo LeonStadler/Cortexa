@@ -20,6 +20,14 @@ require_command() {
 }
 
 require_command xcodebuild
+require_command codesign
+
+if [[ -z "${CODE_SIGN_IDENTITY:-}" || "${CODE_SIGN_IDENTITY}" == "-" ]]; then
+  echo "[archive_macos_release] ERROR: a persistent CODE_SIGN_IDENTITY is required for an update archive." >&2
+  echo "[archive_macos_release] ERROR: refusing to create an ad-hoc archive because macOS permission grants are tied to the signed app identity." >&2
+  echo "[archive_macos_release] ERROR: use Apple Development for a local-only build or Developer ID Application for a distributable release." >&2
+  exit 1
+fi
 
 mkdir -p "${ARTIFACTS_DIR}"
 
@@ -60,10 +68,24 @@ log "Archiving release build"
 xcodebuild "${XCODE_ARGS[@]}"
 
 ARCHIVED_APP_PATH="${ARCHIVE_PATH}/Products/Applications/Cortexa.app"
-if [[ -z "${CODE_SIGN_IDENTITY:-}" ]]; then
-  log "Re-signing local archive app ad-hoc for local testing"
-  log "Developer ID exports keep the Xcode Hardened Runtime signature path."
-  codesign --force --deep --sign - "${ARCHIVED_APP_PATH}"
+[[ -d "${ARCHIVED_APP_PATH}" ]] || {
+  echo "[archive_macos_release] ERROR: archived app not found at ${ARCHIVED_APP_PATH}" >&2
+  exit 1
+}
+
+SIGNING_DETAILS="$(codesign -dvvv "${ARCHIVED_APP_PATH}" 2>&1)"
+if ! grep -Eq '^Authority=(Apple Development|Developer ID Application):' <<<"${SIGNING_DETAILS}"; then
+  echo "[archive_macos_release] ERROR: archive is not signed by an Apple Development or Developer ID Application identity." >&2
+  printf '%s\n' "${SIGNING_DETAILS}" >&2
+  exit 1
 fi
+
+if grep -Eq '^TeamIdentifier=(not set)?$' <<<"${SIGNING_DETAILS}"; then
+  echo "[archive_macos_release] ERROR: archive has no Apple TeamIdentifier; it cannot retain TCC permissions across updates." >&2
+  printf '%s\n' "${SIGNING_DETAILS}" >&2
+  exit 1
+fi
+
+codesign --verify --deep --strict --verbose=2 "${ARCHIVED_APP_PATH}"
 
 log "Archive created at ${ARCHIVE_PATH}"

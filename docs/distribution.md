@@ -5,9 +5,9 @@
 - The visible product name and generated app bundle are **Cortexa** (`Cortexa.app`); the target, project, and scheme retain their `WisprLocalMac` technical names, and the bundle identifier remains `com.wisprlocal.mac` for permission, preference, and update continuity.
 - `Cortexa.icon` is the only Dock icon source. It provides automatic fill, translucency, and adaptive appearance rendering for the system's Liquid Glass icon treatment; its explicit dark specialization swaps in a white glyph so it remains readable on the dark glass background. The horizontal and stacked Cortexa logos are packaged separately as vector imagesets in the same asset catalog.
 - Cortexa remains a menu bar app (`LSUIElement = YES`). Release builds show a visible setup/settings window on first launch so opening the app from a DMG or GitHub download has an observable result even before the user notices the status item.
-- GitHub Releases are the primary distribution channel. Local ad-hoc DMGs are intended for your own machine/testing only unless they are Developer ID signed, notarized, stapled, and verified.
+- GitHub Releases are the primary distribution channel. Update archives are never ad-hoc signed: local-only continuity tests use an Apple Development identity on the developer's Mac, while published DMGs use the same Developer ID identity, notarization, stapling, and verification.
 - Sparkle is prepared but only active when both `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY` are set. Builds without those values show GitHub release guidance instead of a disabled manual-update button.
-- Local archives created without `CODE_SIGN_IDENTITY` are re-signed ad-hoc without Hardened Runtime after archiving so bundled Sparkle can load on the same machine. Do not publish those local artifacts; use Developer ID export/notarization for GitHub Releases.
+- `archive_macos_release.sh` requires `CODE_SIGN_IDENTITY` and verifies an Apple TeamIdentifier after archiving. It deliberately refuses ad-hoc archives because macOS TCC permissions are tied to the signed app identity.
 
 1. **Build dependencies and runtime.**
    - Run `./scripts/build_whisper_xcframework.sh` (see `docs/build-xcframework.md`) to produce `artifacts/whisper/whisper-cli` and, when requested, `artifacts/whisper/whisper.xcframework`. The macOS CLI is linked statically against Whisper/GGML so it does not retain build-machine `@rpath` dependencies.
@@ -33,6 +33,7 @@
    - Preferred path: use the wrapper script, which prepares the runtime bundle, regenerates the project, and archives the release build in one step:
 
 ```bash
+DEVELOPMENT_TEAM=YOURTEAMID CODE_SIGN_IDENTITY="Developer ID Application" \
 ./scripts/archive_macos_release.sh
 ```
 

@@ -122,17 +122,11 @@ Features implemented in macOS app shell:
 Archiv:
 
 ```bash
+DEVELOPMENT_TEAM=YOURTEAMID CODE_SIGN_IDENTITY="Developer ID Application" \
 ./scripts/archive_macos_release.sh
 ```
 
-Optional mit Signatur:
-
-```bash
-DEVELOPMENT_TEAM=YOURTEAMID CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-./scripts/archive_macos_release.sh
-```
-
-Ausgabe: `artifacts/mac/Cortexa.xcarchive`
+Ausgabe: `artifacts/mac/Cortexa.xcarchive`. Für eine veröffentlichte Version muss das konkrete Developer-ID-Zertifikat samt privatem Schlüssel im Schlüsselbund vorhanden sein; ohne persistente Apple-Signatur verweigert das Script das Archiv absichtlich.
 
 **Build-Secrets** (in Xcode-Projekt injiziert): `SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`. Vor Release: `./scripts/preflight_macos_release.sh`. Checkliste: [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
 

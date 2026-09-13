@@ -33,29 +33,31 @@ Accessibility onboarding text:
 ## UX flow
 
 1. First launch shows permission checklist.
-2. User can open relevant System Settings directly from app.
+2. Der Nutzer klickt explizit auf `Freigabe anfragen`; nur diese Aktion ruft `AXIsProcessTrustedWithOptions` mit Apples Prompt-Option auf und öffnet die passende Seite in den Systemeinstellungen.
 3. Capability checks re-run whenever app returns from settings.
 4. App stays functional in limited mode when AX is missing (transcribe only).
+5. Starting a dictation only checks the existing AX state. It never repeatedly displays a system permission prompt.
 
-## Rebuild / TCC recovery
+## Updates and TCC identity
 
-Nach einem Rebuild kann die Bedienungshilfe in den Systemeinstellungen zwar aktiv aussehen, aber fuer den neu gestarteten Build noch nicht wirksam sein.
+macOS binds Privacy & Security grants to the signed app identity, not just to the displayed name. Every Cortexa update must retain `com.wisprlocal.mac` and use the same Apple signing team. Distributable updates must use the same `Developer ID Application` identity and be notarized; a local development build can use `Apple Development` on the developer's own Mac.
 
-Empfohlener Recovery-Flow:
+The release archive script rejects missing or ad-hoc signing identities. This avoids producing an update that would look like a new TCC client and require permissions again.
 
-1. `Cortexa` oder alte `WisprLocalMac`-Einträge in `System Settings -> Privacy & Security -> Accessibility` einmal entfernen.
-2. Die App neu starten.
-3. Einen frischen Diktatversuch starten, damit der aktuelle Build den Accessibility-Dialog erneut anstoßen kann.
-4. `Cortexa` neu hinzufügen und wieder in den Bedienungshilfen aktivieren.
+The normal Accessibility flow is one deliberate app action:
 
-Wenn der Eintrag bereits aktiviert ist, aber das Einfügen weiterhin nicht greift, ist das ein typisches Zeichen fuer einen alten TCC-Eintrag aus einem frueheren Build.
+1. Click `Freigabe anfragen` in Cortexa.
+2. Accept the macOS hint and enable Cortexa in `System Settings -> Privacy & Security -> Accessibility`.
+3. Return to Cortexa. It refreshes the permission state and enables direct insertion without a restart.
+
+Das Entfernen und erneute Hinzufügen eines Eintrags ist **nicht der normale Ablauf**. Es ist nur der letzte Diagnoseschritt, wenn die Systemeinstellungen doppelte oder beschädigte Einträge zeigen und `AXIsProcessTrusted()` nach Aus- und Einschalten des aktuellen Cortexa-Eintrags sowie einem App-Neustart weiter `false` liefert. Vorher Cortexa-Diagnosen sichern.
 
 ### Smoke scenarios for manual checks
 
 - Fresh build without microphone or Accessibility permission.
-- Rebuild with an existing Accessibility entry that looks enabled but is not effective yet.
+- Two consecutive archives signed with the same Apple identity: compare `Identifier`, `TeamIdentifier`, and designated requirements.
 - Accessibility toggled off and on without removing the entry.
-- Accessibility removed and re-added for the current build.
+- A user declines the prompt, then uses `Freigabe anfragen` explicitly; starting a dictation does not prompt again.
 
 Diese Szenarien gehoeren in den Smoke-Test vor einem Release.
 
@@ -73,7 +75,7 @@ Das baut die Debug-App, prüft das Bundle und startet Cortexa direkt aus dem geb
 2. Menüleisten-Icon öffnen -> `Open Settings`.
 3. In `Permissions`:
 - `Mikrofon öffnen` klicken und Zugriff erlauben.
-- `Bedienungshilfen öffnen` klicken und `Cortexa` aktivieren; falls macOS noch einen alten `WisprLocalMac`-Eintrag zeigt, diesen entfernen und die aktuelle App neu verknüpfen.
+- `Freigabe anfragen` bei Bedienungshilfen klicken und `Cortexa` aktivieren.
 4. Zurück in die App, dann `Start Dictation` oder `Option + Space`.
 5. `Current Status` muss auf `Recording` wechseln.
 6. Nach Sleep/Wake oder Rückkehr in den Vordergrund aktualisiert die App Berechtigungen und registriert den Hotkey erneut automatisch.
@@ -88,4 +90,5 @@ Das baut die Debug-App, prüft das Bundle und startet Cortexa direkt aus dem geb
   - allow transcription
   - disable finalize/stream insert actions
   - allow clipboard-only manual copy flow
-  - if the app appears authorized but still cannot insert after a rebuild, instruct the user to remove and re-add the entry in Accessibility
+  - offer the explicit `Freigabe anfragen` action and refresh after System Settings closes
+  - only use remove/re-add as an investigated last-resort recovery for a duplicate/corrupt System Settings entry

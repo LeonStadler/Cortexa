@@ -692,8 +692,6 @@ final class MacAppState: ObservableObject {
     @Published var lastTranscript: String = ""
     @Published var microphonePermissionStatus: PermissionStatus = .notDetermined
     @Published var accessibilityPermissionStatus: PermissionStatus = .notDetermined
-    @Published var microphonePermissionStaleAfterRebuild = false
-    @Published var accessibilityPermissionStaleAfterRebuild = false
 
     @Published var updaterStatusText: String = "Updater wird initialisiert..."
     @Published var updaterConfigured: Bool = false
@@ -1377,12 +1375,6 @@ final class MacAppState: ObservableObject {
             setAccessibilityPermissionStatus: { [weak self] status in
                 self?.accessibilityPermissionStatus = status
             },
-            setAccessibilityPermissionStaleAfterRebuild: { [weak self] stale in
-                self?.accessibilityPermissionStaleAfterRebuild = stale
-            },
-            setMicrophonePermissionStaleAfterRebuild: { [weak self] stale in
-                self?.microphonePermissionStaleAfterRebuild = stale
-            },
             registerSelectedHotkey: { [weak self] force in
                 self?.registerSelectedHotkey(force: force)
             },
@@ -1766,14 +1758,6 @@ final class MacAppState: ObservableObject {
 
     func openAccessibilitySettings() {
         permissionCoordinator.openAccessibilitySettings()
-    }
-
-    func rebindAccessibilityPermissions() {
-        permissionCoordinator.rebindAccessibilityPermissions()
-    }
-
-    func rebindMicrophonePermissions() {
-        permissionCoordinator.rebindMicrophonePermissions()
     }
 
     func addSnippet(trigger: String, replacement: String) {

@@ -284,34 +284,6 @@ extension SettingsView {
         if matches([
             "mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen",
         ]) {
-            if appState.microphonePermissionStaleAfterRebuild {
-                PermissionRecoveryBanner(
-                    title: text(
-                        "Mikrofon: älterer Build in Systemeinstellungen",
-                        "Microphone: stale build entry"),
-                    message: text(
-                        "Die Systemeinstellungen können noch eine alte Freigabe zeigen. Cortexa oder alte WisprLocalMac-Einträge unter Datenschutz → Mikrofon entfernen, App neu starten und „Freigabe anfragen“ erneut nutzen.",
-                        "System Settings may still list an old grant. Remove Cortexa or old WisprLocalMac entries under Privacy → Microphone, restart the app, then use “Request access” again."
-                    ),
-                    actionTitle: text("Neu verknüpfen", "Rebind"),
-                    action: { appState.rebindMicrophonePermissions() }
-                )
-            }
-
-            if appState.accessibilityPermissionStaleAfterRebuild {
-                PermissionRecoveryBanner(
-                    title: text(
-                        "Bedienungshilfen: Rebuild nicht verknüpft",
-                        "Accessibility: rebuild not linked"),
-                    message: text(
-                        "Nach einem Rebuild, typisch nach `./scripts/smoke_test_macos_app.sh`: Systemeinstellungen zeigen Cortexa oder einen alten WisprLocalMac-Eintrag aktiv, macOS vertraut diesem Binary aber nicht. Eintrag in Bedienungshilfen entfernen (−), dann „Freigabe anfragen“ und Cortexa neu aktivieren.",
-                        "After a rebuild, commonly after `./scripts/smoke_test_macos_app.sh`: System Settings may show Cortexa or an old WisprLocalMac entry as enabled while macOS does not trust this binary. Remove the Accessibility entry (−), then “Request access” and enable Cortexa again."
-                    ),
-                    actionTitle: text("Neu verknüpfen", "Rebind"),
-                    action: { appState.rebindAccessibilityPermissions() }
-                )
-            }
-
             VStack(spacing: 0) {
                 PermissionStatusRow(
                     title: text("Mikrofon", "Microphone"),
@@ -352,8 +324,8 @@ extension SettingsView {
                         : text("Öffnen", "Open"),
                     actionHint: appState.accessibilityPermissionStatus != .granted
                         ? text(
-                            "Systemdialog zu Bedienungshilfen",
-                            "System prompt for Accessibility")
+                            "Zeigt den macOS-Hinweis und öffnet Bedienungshilfen.",
+                            "Shows the macOS prompt and opens Accessibility settings.")
                         : text("Bedienungshilfen öffnen", "Open accessibility settings"),
                     action: {
                         if appState.accessibilityPermissionStatus != .granted {

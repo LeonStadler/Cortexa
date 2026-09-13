@@ -61,7 +61,8 @@ In der laufenden App:
 Erwartung:
 - Permission-Hinweise verschwinden ohne Neustart
 - `Option + Space` bleibt nach Rückkehr aus den Systemeinstellungen funktionsfähig
-- wenn Bedienungshilfen sichtbar aktiv sind, aber das Einfügen nach einem Rebuild noch nicht klappt, die Accessibility-Entry einmal entfernen und neu hinzufügen
+- `Freigabe anfragen` löst den macOS-Hinweis nur nach diesem expliziten Klick aus; ein Diktatstart fragt nicht erneut
+- der normale Ablauf benötigt kein Entfernen und Neu-Hinzufügen des Accessibility-Eintrags
 
 ## 5. Funktionstests in realen Ziel-Apps
 
@@ -87,7 +88,7 @@ Erwartung:
 Prüfen:
 - Mikrofonrecht entziehen -> Aufnahme blockiert mit klarer UI
 - AX-Recht entziehen -> Insert blockiert mit klarer UI
-- Rebuild mit altem Accessibility-Eintrag -> Recovery-Hinweis führt zum Entfernen und erneuten Aktivieren
+- zwei nacheinander installierte, gleich signierte Builds -> `Identifier`, `TeamIdentifier` und designated requirement bleiben stabil
 - Sleep/Wake -> Hotkey funktioniert weiter
 - App-Neustart -> Runtime wird neu vorbereitet, Status bleibt konsistent
 - CLI absichtlich durch ein nicht startbares Artefakt ersetzen -> kein „ASR CLI runtime ready“, sondern ein konkreter Initialisierungsfehler
@@ -95,10 +96,19 @@ Prüfen:
 ## 7. Release-Erstellung
 
 ```bash
-./scripts/archive_macos_release.sh
+DEVELOPMENT_TEAM=DEINTEAM CODE_SIGN_IDENTITY="Developer ID Application" ./scripts/archive_macos_release.sh
 DEVELOPMENT_TEAM=DEINTEAM ./scripts/export_macos_release.sh
 CODE_SIGN_IDENTITY="Developer ID Application: Dein Name (TEAMID)" ./scripts/create_macos_dmg.sh
 ```
+
+Der Archive-Schritt bricht ohne persistente Apple-Signatur absichtlich ab. Prüfen:
+
+```bash
+codesign -dvvv artifacts/mac/Cortexa.xcarchive/Products/Applications/Cortexa.app 2>&1 \
+  | rg 'Identifier=|TeamIdentifier=|Authority='
+```
+
+Erwartung: `Identifier=com.wisprlocal.mac`, ein gesetztes `TeamIdentifier` und `Authority=Developer ID Application: ...`. Kein `TeamIdentifier=not set` und keine ad-hoc-Signatur.
 
 ## 8. Notarisierung und Validierung
 
