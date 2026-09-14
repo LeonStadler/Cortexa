@@ -7,18 +7,24 @@ struct GeneralSettingsPage: View {
     let appContent: AnyView
     let menuBarContent: AnyView
     let accessContent: AnyView
+    let showsAccessSection: Bool
 
     var body: some View {
         SettingsFormPage(
-            sections: [
+            sections: {
+                var sections = [
                 SettingsPageSection(id: "app", title: appSectionTitle, content: appContent),
                 SettingsPageSection(
                     id: "menu-bar",
                     title: menuBarSectionTitle,
                     content: menuBarContent
-                ),
-                SettingsPageSection(id: "access", title: accessSectionTitle, content: accessContent),
-            ]
+                )
+                ]
+                if showsAccessSection {
+                    sections.append(SettingsPageSection(id: "access", title: accessSectionTitle, content: accessContent))
+                }
+                return sections
+            }()
         )
     }
 }
@@ -306,11 +312,13 @@ struct AdvancedSettingsPage: View {
     let storageLocationSectionTitle: String
     let updatesSectionTitle: String
     let diagnosticsSectionTitle: String
+    let permissionsSectionTitle: String
     let appInfoContent: AnyView
     let runtimeContent: AnyView
     let storageContent: AnyView
     let updatesContent: AnyView
     let diagnosticsContent: AnyView
+    let permissionsContent: AnyView
 
     private var sections: [SettingsPageSection] {
         [
@@ -330,6 +338,11 @@ struct AdvancedSettingsPage: View {
                 id: "diagnostics",
                 title: diagnosticsSectionTitle,
                 content: diagnosticsContent
+            ),
+            SettingsPageSection(
+                id: "permissions",
+                title: permissionsSectionTitle,
+                content: permissionsContent
             ),
         ]
     }

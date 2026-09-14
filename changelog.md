@@ -12,6 +12,10 @@
 
 ## Fixes
 
+- 2026-09-15: Accessibility-Freigabe und DMG-Installation an den nativen macOS-Flow angepasst.
+  - Dateien: `apps/macos/AppShell/PermissionCoordinator.swift`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `apps/macos/AppShell/SettingsFormPages.swift`, `Tests/AppShellSupportTests/PermissionCoordinatorTests.swift`, `scripts/create_macos_dmg.sh`, `VERSION`
+  - Funktionalität: Die Freigabeanfrage öffnet nicht mehr gleichzeitig den nativen macOS-Dialog und Systemeinstellungen; der Systemdialog bleibt der einzige erste Einstieg und die Einstellungen werden bei bereits erteilter Freigabe unter „Erweitert“ gebündelt. Das DMG erhält ein Finder-Installationslayout mit Cortexa.app, Programme-Verknüpfung und Cortexa-Hintergrund. Die Version wurde als Patch-Bugfix auf `0.30.2` angehoben.
+
 - 2026-09-14: Settings-Layout bei kleinen Fensterbreiten stabilisiert.
   - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/MacNativeDesign.swift`, `VERSION`
   - Funktionalität: Die Sidebar erhält einen stabilen nativen Innenabstand. Die Modellverwaltung wechselt bei schmalen Detailspalten automatisch von einer einzeiligen Such-/Filterleiste auf eine kompakte zweizeilige Anordnung. Modellzeilen verwenden einen responsiven Fallback für Status und Aktionen; Settings-Buttons nutzen wieder die nativen macOS-Varianten. Die Version wurde als Patch-Bugfix auf `0.30.1` angehoben.

@@ -283,7 +283,27 @@ extension SettingsView {
     var generalPermissionsContent: some View {
         if matches([
             "mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen",
-        ]) {
+        ]) && permissionsNeedAttention {
+            permissionsRowsContent
+        }
+    }
+
+    @ViewBuilder
+    var advancedPermissionsContent: some View {
+        if matches([
+            "mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen",
+        ]) && !permissionsNeedAttention {
+            permissionsRowsContent
+        }
+    }
+
+    private var permissionsNeedAttention: Bool {
+        appState.microphonePermissionStatus != .granted
+            || appState.accessibilityPermissionStatus != .granted
+    }
+
+    private var permissionsRowsContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
             VStack(spacing: 0) {
                 PermissionStatusRow(
                     title: text("Mikrofon", "Microphone"),

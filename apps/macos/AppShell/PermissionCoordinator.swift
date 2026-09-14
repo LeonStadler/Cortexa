@@ -117,8 +117,10 @@ final class PermissionCoordinator {
                 self.refreshPermissionStatesAfterUserFacingPermissionStep()
                 return
             }
+            // The native AX prompt contains the single, correct entry point to
+            // System Settings. Opening the pane here as well creates two competing
+            // windows and makes users toggle an already-present entry off and on.
             self.dictationRuntime.promptAccessibilityTrustFromUser()
-            self.dictationRuntime.openAccessibilitySettings()
             self.refreshPermissionStatesAfterUserFacingPermissionStep()
             self.schedulePermissionRefresh()
         }

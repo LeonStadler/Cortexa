@@ -52,7 +52,9 @@
 
             XCTAssertTrue(runtime.contains("promptIfNeeded: false"))
             XCTAssertTrue(permissionCoordinator.contains("promptAccessibilityTrustFromUser()"))
-            XCTAssertTrue(permissionCoordinator.contains("openAccessibilitySettings()"))
+            XCTAssertFalse(
+                permissionCoordinator.contains("promptAccessibilityTrustFromUser()\n            self.dictationRuntime.openAccessibilitySettings()")
+            )
         }
 
         func testDebugSmokeDoesNotClaimAdHocSigningCanVerifyPermissionContinuity() throws {

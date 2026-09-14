@@ -69,7 +69,7 @@
             XCTAssertTrue(debugMessages.isEmpty)
         }
 
-        func testRequestAccessibilityAccessPromptsAndOpensSettingsWhenDenied() async {
+        func testRequestAccessibilityAccessOnlyUsesTheNativePromptWhenDenied() async {
             let permissions = AppShellTestPermissionController()
             permissions.accessibilityStatusValue = .denied
 
@@ -91,7 +91,7 @@
 
             try? await Task.sleep(nanoseconds: 100_000_000)
             XCTAssertEqual(runtime.promptAccessibilityTrustCallCount, 1)
-            XCTAssertEqual(runtime.openAccessibilitySettingsCallCount, 1)
+            XCTAssertEqual(runtime.openAccessibilitySettingsCallCount, 0)
         }
 
         func testOpenAccessibilitySettingsDelegatesToRuntime() {
