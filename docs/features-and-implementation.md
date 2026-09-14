@@ -91,6 +91,7 @@ Der Shell-Code ist inzwischen entlang von Runtime-Services, AppState-Controllern
 ### Lokalisierung
 
 - UI-Sprache **Deutsch / Englisch** in den Settings umschaltbar.
+- Die macOS-Settings verwenden eine gruppierte Source-List-Sidebar, systemnahe Formular-Controls und eine bereichsübergreifende Suche. Suchtreffer enthalten ausschließlich Einstellungsmetadaten und niemals persönliche Diktat-, Wörterbuch- oder Textbaustein-Inhalte.
 
 ## iOS / iPadOS
 

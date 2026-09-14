@@ -7,49 +7,13 @@ struct SettingsRichTooltipAnchor: View {
     let helpText: String
     /// Wenn `true`, übernimmt das umgebende `accessibilityElement(children: .combine)` die Ansage.
     var suppressIndividualAccessibility: Bool = false
-    @State private var isPresented = false
-    @State private var hoverTask: Task<Void, Never>?
-
     var body: some View {
-        Button {
-            isPresented.toggle()
-        } label: {
-            Image(systemName: "info.circle")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-        // Kein `.help(helpText)`: würde den nativen System-Tooltip zeigen — parallel zum Hover-Popover.
+        Image(systemName: "info.circle")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        .help(helpText)
         .accessibilityHidden(suppressIndividualAccessibility)
         .accessibilityLabel(Text(verbatim: helpText))
-        .onDisappear {
-            hoverTask?.cancel()
-            isPresented = false
-        }
-        .onHover { inside in
-            if inside {
-                hoverTask?.cancel()
-                hoverTask = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 420_000_000)
-                    guard !Task.isCancelled else { return }
-                    isPresented = true
-                }
-            } else {
-                hoverTask?.cancel()
-                hoverTask = nil
-                isPresented = false
-            }
-        }
-        .popover(isPresented: $isPresented) {
-            Text(helpText)
-                .font(.callout)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(minWidth: 220, idealWidth: 300, maxWidth: 380, alignment: .leading)
-                .padding(14)
-                .settingsTooltipPanelBackground()
-        }
     }
 }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-enum SettingsTab: Hashable, CaseIterable {
+enum SettingsTab: String, Hashable, CaseIterable {
     case general
     case speech
     case dictation
@@ -12,6 +12,41 @@ enum SettingsTab: Hashable, CaseIterable {
     case snippets
     case about
     case advanced
+
+    enum Group: CaseIterable, Hashable {
+        case general
+        case writing
+        case system
+        case about
+
+        func title(language: AppLanguage) -> String {
+            switch self {
+            case .general: return language.text("Allgemein", "General")
+            case .writing: return language.text("Text & Verarbeitung", "Text & Processing")
+            case .system: return language.text("Daten & System", "Data & System")
+            case .about: return language.text("Über Cortexa", "About Cortexa")
+            }
+        }
+    }
+
+    var persistenceID: String { rawValue }
+
+    var group: Group {
+        switch self {
+        case .general, .speech, .dictation, .sound, .shortcuts:
+            return .general
+        case .ai, .dictionary, .snippets:
+            return .writing
+        case .history, .advanced:
+            return .system
+        case .about:
+            return .about
+        }
+    }
+
+    static func tabs(in group: Group) -> [SettingsTab] {
+        allCases.filter { $0.group == group }
+    }
 
     var symbolName: String {
         switch self {
@@ -34,23 +69,23 @@ enum SettingsTab: Hashable, CaseIterable {
         case .general:
             return language.text("Allgemein", "General")
         case .speech:
-            return language.text("Speech", "Speech")
+            return language.text("Sprache & Erkennung", "Speech & Recognition")
         case .dictation:
             return language.text("Diktat", "Dictation")
         case .sound:
-            return language.text("Sound", "Sound")
+            return language.text("Audio", "Audio")
         case .shortcuts:
             return language.text("Kurzbefehle", "Shortcuts")
         case .ai:
-            return "AI"
+            return language.text("KI", "AI")
         case .history:
             return language.text("Verlauf", "History")
         case .about:
-            return language.text("About", "About")
+            return language.text("Über Cortexa", "About Cortexa")
         case .dictionary:
-            return language.text("Dictionary", "Dictionary")
+            return language.text("Wörterbuch", "Dictionary")
         case .snippets:
-            return language.text("Snippets", "Snippets")
+            return language.text("Textbausteine", "Snippets")
         case .advanced:
             return language.text("Erweitert", "Advanced")
         }

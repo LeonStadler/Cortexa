@@ -6,7 +6,7 @@ final class SettingsTabTests: XCTestCase {
     func testTitlesStayStableForSearchAndNavigation() {
         XCTAssertEqual(SettingsTab.general.title(language: .german), "Allgemein")
         XCTAssertEqual(SettingsTab.history.title(language: .english), "History")
-        XCTAssertEqual(SettingsTab.ai.title(language: .german), "AI")
+        XCTAssertEqual(SettingsTab.ai.title(language: .german), "KI")
         XCTAssertEqual(SettingsTab.dictionary.title(language: .english), "Dictionary")
         XCTAssertEqual(SettingsTab.snippets.title(language: .english), "Snippets")
     }
@@ -18,8 +18,10 @@ final class SettingsTabTests: XCTestCase {
         XCTAssertTrue(SettingsTab.advanced.details(language: .english).contains("diagnostics"))
     }
 
-    func testSidebarOrderKeepsAboutBeforeAdvanced() {
-        XCTAssertEqual(Array(SettingsTab.allCases.suffix(2)), [.about, .advanced])
+    func testSidebarGroupsAreStableAndLocalized() {
+        XCTAssertEqual(SettingsTab.tabs(in: .writing), [.ai, .dictionary, .snippets])
+        XCTAssertEqual(SettingsTab.Group.system.title(language: .german), "Daten & System")
+        XCTAssertEqual(SettingsTab(rawValue: SettingsTab.advanced.persistenceID), .advanced)
     }
 }
 #endif

@@ -111,48 +111,36 @@ extension SettingsView {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)],
-                alignment: .leading,
-                spacing: 10
-            ) {
+            VStack(spacing: 0) {
                 ForEach(presets) { preset in
-                    let isSelected = selectedRemoteProviderPreset == preset
                     Button {
                         selectedRemoteProviderPreset = preset
                     } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(
-                                preset.localizedDisplayName(
-                                    interfaceLanguageCode: effectiveLanguage
-                                        .embeddedInterfaceCode)
-                            )
-                            .font(.body.weight(.semibold))
-                            Text(providerPresetDescription(for: preset))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(preset.localizedDisplayName(interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode))
+                                Text(providerPresetDescription(for: preset))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if selectedRemoteProviderPreset == preset {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(
-                                    Color(nsColor: .controlBackgroundColor).opacity(
-                                        isSelected ? 0.55 : 0.2))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(
-                                    isSelected
-                                        ? Color.accentColor : Color.primary.opacity(0.08),
-                                    lineWidth: isSelected ? 2 : 1
-                                )
-                        )
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 7)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(selectedRemoteProviderPreset == preset ? .isSelected : [])
+                    if preset.id != presets.last?.id {
+                        Divider()
+                    }
                 }
             }
+            .padding(.horizontal, 10)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 

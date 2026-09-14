@@ -13,7 +13,7 @@ struct SettingsView: View {
     @State var newSnippetReplacement: String = ""
     @State private var searchText: String = ""
     @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
-    @State private var showsTabInfoPopover = false
+    @AppStorage("cortexa.settings.selected-tab") private var persistedSettingsTabID = SettingsTab.general.persistenceID
     @State var selectedRemoteProviderPreset: AIRemoteProviderPreset?
     @State var addProviderDisclosureExpanded = false
     @State var speechModelSearchText: String = ""
@@ -158,6 +158,10 @@ struct SettingsView: View {
         storedLanguage.text(german, english)
     }
 
+    func erasedView<Content: View>(@ViewBuilder _ content: () -> Content) -> AnyView {
+        AnyView(content())
+    }
+
     func formattedHistoryDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = storedLanguage.localeForFormatting
@@ -169,13 +173,7 @@ struct SettingsView: View {
     private var settingsSearchPresentation: SettingsSearchPresentation {
         SettingsSearchPresentation(
             searchText: searchText,
-            transcriptHistory: appState.transcriptHistory,
-            dictionaryTerms: appState.dictionaryTerms,
-            dictionaryReviewQueue: appState.dictionaryReviewQueue,
-            snippetRules: appState.snippetRules,
-            diagnosticsText: appState.diagnosticsText,
-            capabilitySummary: appState.capabilitySummary,
-            updaterStatusText: appState.updaterStatusText
+            language: storedLanguage
         )
     }
 
@@ -195,67 +193,67 @@ struct SettingsView: View {
     }
 
     var filteredHistory: [TranscriptHistoryEntry] {
-        settingsSearchPresentation.filteredHistory
+        appState.transcriptHistory
     }
 
     var compactHistoryEntries: [TranscriptHistoryEntry] {
-        settingsSearchPresentation.compactHistoryEntries()
+        Array(appState.transcriptHistory.prefix(12))
     }
 
     var filteredSnippets: [SnippetRule] {
-        settingsSearchPresentation.filteredSnippets
+        appState.snippetRules
     }
 
     var filteredDictionaryTerms: [DictionaryTerm] {
-        settingsSearchPresentation.filteredDictionaryTerms
+        appState.dictionaryTerms
     }
 
     var filteredDictionaryReviewQueue: [DictionaryReviewCandidate] {
-        settingsSearchPresentation.filteredDictionaryReviewQueue
+        appState.dictionaryReviewQueue
     }
 
     var generalHasMatches: Bool {
-        settingsSearchPresentation.generalHasMatches
+        settingsSearchPresentation.hasResults(in: .general)
     }
 
     var dictationHasMatches: Bool {
-        settingsSearchPresentation.dictationHasMatches
+        settingsSearchPresentation.hasResults(in: .dictation)
     }
 
     var speechHasMatches: Bool {
-        settingsSearchPresentation.speechHasMatches
+        settingsSearchPresentation.hasResults(in: .speech)
     }
 
     var shortcutsHasMatches: Bool {
-        settingsSearchPresentation.shortcutsHasMatches
+        settingsSearchPresentation.hasResults(in: .shortcuts)
     }
 
     var aiHasMatches: Bool {
-        settingsSearchPresentation.aiHasMatches
+        settingsSearchPresentation.hasResults(in: .ai)
     }
 
     var historyHasMatches: Bool {
-        settingsSearchPresentation.historyHasMatches
+        settingsSearchPresentation.hasResults(in: .history)
     }
 
     var aboutHasMatches: Bool {
-        settingsSearchPresentation.aboutHasMatches
+        settingsSearchPresentation.hasResults(in: .about)
     }
 
     var snippetsHasMatches: Bool {
-        settingsSearchPresentation.snippetsHasMatches
+        settingsSearchPresentation.hasResults(in: .snippets)
     }
 
     var dictionaryHasMatches: Bool {
-        settingsSearchPresentation.dictionaryHasMatches
+        settingsSearchPresentation.hasResults(in: .dictionary)
     }
 
     var advancedHasMatches: Bool {
-        settingsSearchPresentation.advancedHasMatches
+        settingsSearchPresentation.hasResults(in: .advanced)
     }
 
     var soundHasMatches: Bool {
-        settingsSearchPresentation.soundHasMatches
+        settingsSearchPresentation.hasResults(in: .sound)
     }
 
     var compressedDiagnosticsText: String {
@@ -269,19 +267,25 @@ struct SettingsView: View {
     var body: some View {
         SettingsViewShell(
             splitColumnVisibility: $splitColumnVisibility,
-            showsTabInfoPopover: $showsTabInfoPopover,
             searchText: $searchText,
             storedLanguage: storedLanguage,
             selectedTabSelection: selectedTabSelection,
             currentSelectedTab: currentSelectedTab,
             selectedForm: AnyView(selectedForm),
-            searchResultsForm: AnyView(searchResultsForm),
+            searchResults: settingsSearchPresentation.results,
+            onSelectSearchResult: selectSearchResult,
             accessibilityReduceMotion: accessibilityReduceMotion,
             toolbarAccessoryContent: settingsToolbarAccessoryContent,
             onRefreshPermissionStates: {
                 appState.refreshPermissionStatesWithStabilization()
             }
         )
+        .onAppear {
+            appState.selectedSettingsTab = SettingsTab(rawValue: persistedSettingsTabID) ?? .general
+        }
+        .onChange(of: currentSelectedTab) { _, tab in
+            persistedSettingsTabID = tab.persistenceID
+        }
     }
 
     @ViewBuilder
@@ -406,6 +410,11 @@ struct SettingsView: View {
                 }
             }
         )
+    }
+
+    private func selectSearchResult(_ result: SettingsSearchDestination) {
+        appState.selectedSettingsTab = result.tab
+        searchText = ""
     }
 
     private var currentSelectedTab: SettingsTab {

@@ -2,13 +2,13 @@ import SwiftUI
 
 struct SettingsViewShell: View {
     @Binding var splitColumnVisibility: NavigationSplitViewVisibility
-    @Binding var showsTabInfoPopover: Bool
     @Binding var searchText: String
     let storedLanguage: AppLanguage
     let selectedTabSelection: Binding<SettingsTab>
     let currentSelectedTab: SettingsTab
     let selectedForm: AnyView
-    let searchResultsForm: AnyView
+    let searchResults: [SettingsSearchDestination]
+    let onSelectSearchResult: (SettingsSearchDestination) -> Void
     let accessibilityReduceMotion: Bool
     let toolbarAccessoryContent: AnyView?
     let onRefreshPermissionStates: () -> Void
@@ -53,7 +53,9 @@ struct SettingsViewShell: View {
             SettingsDetailContainerView(
                 isSearching: isSearching,
                 selectedForm: selectedForm,
-                searchResultsForm: searchResultsForm,
+                searchResults: searchResults,
+                storedLanguage: storedLanguage,
+                onSelectSearchResult: onSelectSearchResult,
                 settingsNavigationTitle: settingsNavigationTitle,
                 searchResultsContentTransition: searchResultsContentTransition,
                 searchFieldSyncedAnimation: searchFieldSyncedAnimation
@@ -89,29 +91,6 @@ struct SettingsViewShell: View {
                     toolbarAccessoryContent
                 }
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showsTabInfoPopover.toggle()
-                } label: {
-                    Image(systemName: "info.circle")
-                }
-                .accessibilityLabel(
-                    text("Informationen zu diesem Bereich", "Information about this section")
-                )
-                // Kein `.help`: vermeidet den nativen Tooltip neben dem Klick-Popover.
-                .popover(isPresented: $showsTabInfoPopover, arrowEdge: .top) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(currentSelectedTab.title(language: storedLanguage))
-                            .font(.headline)
-                        Text(currentSelectedTab.details(language: storedLanguage))
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(14)
-                    .frame(minWidth: 280, maxWidth: 320, alignment: .leading)
-                }
-            }
         }
         .environment(\.locale, storedLanguage.localeForFormatting)
         .frame(
@@ -132,11 +111,13 @@ struct SettingsSidebarView: View {
 
     var body: some View {
         List(selection: selectedTabSelection) {
-            Section {
-                ForEach(SettingsTab.allCases, id: \.self) { tab in
+            ForEach(SettingsTab.Group.allCases, id: \.self) { group in
+                Section(group.title(language: storedLanguage)) {
+                    ForEach(SettingsTab.tabs(in: group), id: \.self) { tab in
                     Label(tab.title(language: storedLanguage), systemImage: tab.symbolName)
                         .tag(tab)
                         .imageScale(.medium)
+                    }
                 }
             }
         }
@@ -154,7 +135,9 @@ struct SettingsSidebarView: View {
 struct SettingsDetailContainerView: View {
     let isSearching: Bool
     let selectedForm: AnyView
-    let searchResultsForm: AnyView
+    let searchResults: [SettingsSearchDestination]
+    let storedLanguage: AppLanguage
+    let onSelectSearchResult: (SettingsSearchDestination) -> Void
     let settingsNavigationTitle: String
     let searchResultsContentTransition: AnyTransition
     let searchFieldSyncedAnimation: Animation?
@@ -165,7 +148,11 @@ struct SettingsDetailContainerView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Group {
                         if isSearching {
-                            searchResultsForm
+                            SearchResultsSettingsPage(
+                                results: searchResults,
+                                language: storedLanguage,
+                                onSelect: onSelectSearchResult
+                            )
                         } else {
                             selectedForm
                         }

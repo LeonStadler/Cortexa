@@ -1,16 +1,23 @@
 import AppKit
+import Combine
 import SwiftUI
 
+@MainActor
 final class SettingsWindowPresenter {
     private let appState: MacAppState
     private weak var window: NSWindow?
+    private var selectedTabObserver: AnyCancellable?
 
     init(appState: MacAppState) {
         self.appState = appState
+        selectedTabObserver = appState.$selectedSettingsTab.sink { [weak self] _ in
+            self?.updateWindowTitle()
+        }
     }
 
     func show() {
         let window = existingWindow ?? makeWindow()
+        window.title = settingsWindowTitle
         let app = NSApplication.shared
         if !app.isActive {
             app.activate(ignoringOtherApps: true)
@@ -36,7 +43,7 @@ final class SettingsWindowPresenter {
         let hostingController = NSHostingController(
             rootView: SettingsView().environmentObject(appState))
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Cortexa"
+        window.title = settingsWindowTitle
         window.toolbarStyle = .unified
         window.titleVisibility = .visible
         // Standard-Titelzeile: mit fullSizeContentView + transparenter Bar sitzt der Titel optisch falsch
@@ -55,5 +62,14 @@ final class SettingsWindowPresenter {
         window.setFrameAutosaveName("WisprLocalSettingsWindow")
         self.window = window
         return window
+    }
+
+    private var settingsWindowTitle: String {
+        let language = AppLanguage(rawValue: UserDefaults.standard.string(forKey: "wispr.uiLanguage") ?? "") ?? .system
+        return "Cortexa — \(appState.selectedSettingsTab.title(language: language))"
+    }
+
+    private func updateWindowTitle() {
+        window?.title = settingsWindowTitle
     }
 }
