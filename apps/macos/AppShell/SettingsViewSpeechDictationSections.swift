@@ -265,15 +265,28 @@ extension SettingsView {
                     Text(text("Keine passenden Modelle gefunden.", "No matching models found."))
                         .foregroundStyle(.secondary)
                 } else {
-                    ViewThatFits(in: .horizontal) {
-                        voiceModelTable
-                            .frame(minWidth: 720, minHeight: 220)
-                        voiceModelList
-                    }
+                    adaptiveVoiceModelManagement
                 }
             }
         }
     }
+
+    private var adaptiveVoiceModelManagement: some View {
+        GeometryReader { proxy in
+            if proxy.size.width >= voiceModelTableMinimumWidth {
+                voiceModelTable
+                    .frame(maxWidth: .infinity, minHeight: 240, alignment: .top)
+                    .accessibilityIdentifier("voice-model-table")
+            } else {
+                voiceModelList
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .accessibilityIdentifier("voice-model-list")
+            }
+        }
+        .frame(minHeight: 240, alignment: .top)
+    }
+
+    private var voiceModelTableMinimumWidth: CGFloat { 720 }
 
     private var voiceModelTable: some View {
         Table(filteredVoiceModelsForManagement) {
@@ -282,25 +295,31 @@ extension SettingsView {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            .width(min: 150, ideal: 220, max: 300)
             TableColumn(text("Sprache", "Language")) { model in
                 Text(model.languageCode?.uppercased() ?? "ALL")
                     .foregroundStyle(.secondary)
             }
+            .width(min: 70, ideal: 90, max: 110)
             TableColumn(text("Größe", "Size")) { model in
                 Text(model.sizeLabel)
                     .foregroundStyle(.secondary)
             }
+            .width(min: 70, ideal: 90, max: 110)
             TableColumn(text("Qualität", "Quality")) { model in
                 Text("\(model.speedScore)/10 · \(model.accuracyScore)/10")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
+            .width(min: 110, ideal: 135, max: 160)
             TableColumn(text("Status", "Status")) { model in
                 voiceModelStatusLabel(for: model)
             }
+            .width(min: 115, ideal: 145, max: 190)
             TableColumn(text("Aktion", "Action")) { model in
-                voiceModelActionButtons(for: model)
+                voiceModelTableAction(for: model)
             }
+            .width(min: 80, ideal: 95, max: 120)
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
         .frame(maxWidth: .infinity)
@@ -380,6 +399,50 @@ extension SettingsView {
         .padding(.vertical, 8)
         .overlay(alignment: .bottom) {
             Divider()
+        }
+    }
+
+    @ViewBuilder
+    private func voiceModelTableAction(for model: VoiceModelDescriptor) -> some View {
+        if appState.isVoiceModelBusy(model) {
+            ProgressView()
+                .controlSize(.small)
+                .help(text("Modell wird verarbeitet", "Model operation in progress"))
+        } else if appState.isVoiceModelInstalled(model) {
+            Menu {
+                Button {
+                    appState.setSelectedVoiceModel(model)
+                } label: {
+                    Label(
+                        text("Als Standard verwenden", "Use as default"),
+                        systemImage: "checkmark.circle"
+                    )
+                }
+                .disabled(appState.selectedVoiceModelID == model.id)
+
+                if model.installState != .bundled && model.installState != .requiredFirstRun {
+                    Button(role: .destructive) {
+                        appState.removeVoiceModel(model)
+                    } label: {
+                        Label(text("Entfernen", "Remove"), systemImage: "trash")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .accessibilityLabel(text("Modellaktionen", "Model actions"))
+            }
+            .menuStyle(.borderlessButton)
+            .help(text("Aktionen für dieses Modell", "Actions for this model"))
+        } else {
+            Button {
+                appState.installVoiceModel(model)
+            } label: {
+                Image(systemName: "arrow.down.circle")
+                    .accessibilityLabel(text("Installieren", "Install"))
+            }
+            .buttonStyle(.borderless)
+            .disabled(model.installState == .unavailable)
+            .help(text("Modell herunterladen und installieren", "Download and install this model"))
         }
     }
 

@@ -20,6 +20,10 @@
 
 ## Fixes
 
+- 2026-09-15: Modellverwaltung wechselt bei der tatsächlichen verfügbaren Breite zuverlässig zwischen Tabelle und Liste.
+  - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `VERSION`
+  - Funktionalität: Die Layoutentscheidung misst nun die Detailbreite direkt, statt sich auf die unzuverlässige Mindestbreitenbewertung von `ViewThatFits` mit macOS-Tabellen zu verlassen. Die Version wurde auf `0.32.1` angehoben.
+
 - 2026-09-15: Accessibility-Freigabe und DMG-Installation an den nativen macOS-Flow angepasst.
   - Dateien: `apps/macos/AppShell/PermissionCoordinator.swift`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `apps/macos/AppShell/SettingsFormPages.swift`, `Tests/AppShellSupportTests/PermissionCoordinatorTests.swift`, `scripts/create_macos_dmg.sh`, `VERSION`
   - Funktionalität: Die Freigabeanfrage öffnet nicht mehr gleichzeitig den nativen macOS-Dialog und Systemeinstellungen; der Systemdialog bleibt der einzige erste Einstieg und die Einstellungen werden bei bereits erteilter Freigabe unter „Erweitert“ gebündelt. Das DMG erhält ein Finder-Installationslayout mit Cortexa.app, Programme-Verknüpfung und Cortexa-Hintergrund. Die Version wurde als Patch-Bugfix auf `0.30.2` angehoben.
