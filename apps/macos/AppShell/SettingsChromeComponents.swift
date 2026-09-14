@@ -32,6 +32,10 @@ struct SettingsFieldLabel: View {
                 SettingsRichTooltipAnchor(helpText: helpText, suppressIndividualAccessibility: true)
             }
         }
+        // Attach the native macOS help tag to the complete label, not only the
+        // tiny info glyph. This keeps the tooltip discoverable and reliable
+        // when the glyph is difficult to hit at high display scaling.
+        .help(helpText ?? "")
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityCombined)
     }

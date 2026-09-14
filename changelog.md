@@ -2,6 +2,10 @@
 
 ## Features
 
+- 2026-09-15: Modellverwaltung und Settings-Hilfe an native macOS-Interaktionen angepasst.
+  - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `VERSION`
+  - Funktionalität: Die Modellverwaltung verwendet kompakte native Modellzeilen, klar getrennte Status-/Metadatenbereiche, systemnahe Menüfilter und responsive Aktionen für schmale Fenster. Hilfe-Texte sind am vollständigen Feldlabel verankert und Modellaktionen liefern native macOS-Tooltips. Die Version wurde auf `0.31.0` angehoben.
+
 - 2026-09-14: Native macOS-Settings-Navigation, datensparsame Suche und systemnahe Hilfen überarbeitet.
   - Dateien: `apps/macos/AppShell/SettingsTab.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsSearchPresentation.swift`, `apps/macos/AppShell/SearchResultsSettingsPage.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `apps/macos/AppShell/SettingsViewAIProviderSections.swift`, `apps/macos/AppShell/SettingsWindowPresenter.swift`, `Tests/AppShellSupportTests/SettingsTabTests.swift`, `Tests/AppShellSupportTests/SettingsSearchPresentationTests.swift`, `apps/macos/README.md`, `docs/features-and-implementation.md`, `VERSION`
   - Funktionalität: Settings sind nun in lokalisierte Sidebar-Gruppen aufgeteilt, merken sich den zuletzt verwendeten Bereich und öffnen Suchtreffer als gezielte Bereichsnavigation statt vollständige Formulare zusammenzumontieren. Die Suche liest keine persönlichen Diktat-, Wörterbuch- oder Textbaustein-Inhalte mehr. Eigene Hover-Popovers wurden durch native macOS-Hilfe ersetzt; KI-Anbieter werden als kompakte systemnahe Auswahlliste dargestellt. Die Version wurde als Minor-Feature-Release auf `0.30.0` angehoben.

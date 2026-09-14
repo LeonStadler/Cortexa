@@ -243,10 +243,13 @@ extension SettingsView {
     var installedSpeechModelsContent: some View {
         if speechHasMatches {
             VStack(alignment: .leading, spacing: 12) {
+                Text(text("Verfügbare Modelle", "Available models"))
+                    .font(.headline)
+
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
                         modelSearchField
-                        modelStatusFilter.frame(width: 260)
+                        modelStatusFilter.frame(width: 190)
                         modelLanguageFilter.frame(width: 150)
                     }
                     VStack(alignment: .leading, spacing: 8) {
@@ -262,38 +265,8 @@ extension SettingsView {
                     Text(text("Keine passenden Modelle gefunden.", "No matching models found."))
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            ForEach(filteredVoiceModelsForManagement) { model in
-                LabeledContent {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .center, spacing: 10) {
-                                voiceModelSummary(for: model)
-                                Spacer(minLength: 12)
-                                voiceModelStatusLabel(for: model)
-                                voiceModelActionButtons(for: model)
-                            }
-                            VStack(alignment: .leading, spacing: 8) {
-                                voiceModelSummary(for: model)
-                                HStack {
-                                    voiceModelStatusLabel(for: model)
-                                    Spacer()
-                                    voiceModelActionButtons(for: model)
-                                }
-                            }
-                        }
-
-                        if let operation = appState.voiceModelOperationState(for: model) {
-                            VoiceModelOperationProgressView(
-                                operation: operation,
-                                german: effectiveLanguage.embeddedInterfaceCode.hasPrefix("de")
-                            )
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } label: {
-                    EmptyView()
+                ForEach(filteredVoiceModelsForManagement) { model in
+                    voiceModelManagementRow(for: model)
                 }
             }
         }
@@ -311,7 +284,9 @@ extension SettingsView {
                 Text(filter.localizedDisplayName(language: effectiveLanguage)).tag(filter)
             }
         }
-        .pickerStyle(.segmented)
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .controlSize(.small)
     }
 
     private var modelLanguageFilter: some View {
@@ -321,6 +296,49 @@ extension SettingsView {
             }
         }
         .pickerStyle(.menu)
+        .labelsHidden()
+        .controlSize(.small)
+    }
+
+    private func voiceModelManagementRow(for model: VoiceModelDescriptor) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(model.displayName)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer(minLength: 8)
+                voiceModelStatusLabel(for: model)
+            }
+
+            Text("\(model.languageCode?.uppercased() ?? "ALL") · \(text("Geschwindigkeit", "Speed")) \(model.speedScore)/10 · \(text("Genauigkeit", "Accuracy")) \(model.accuracyScore)/10 · \(model.sizeLabel)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Spacer(minLength: 0)
+                    voiceModelActionButtons(for: model)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    voiceModelActionButtons(for: model)
+                }
+            }
+
+            if let operation = appState.voiceModelOperationState(for: model) {
+                VoiceModelOperationProgressView(
+                    operation: operation,
+                    german: effectiveLanguage.embeddedInterfaceCode.hasPrefix("de")
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
     }
 
     private var filteredVoiceModelsForManagement: [VoiceModelDescriptor] {
@@ -460,6 +478,7 @@ extension SettingsView {
             }
             .liquidGlassSecondaryButtonStyle()
             .disabled(appState.selectedVoiceModelID == model.id)
+            .help(text("Dieses installierte Modell als Standard verwenden", "Use this installed model as the default"))
 
             if model.installState != .bundled && model.installState != .requiredFirstRun {
                 Button(role: .destructive) {
@@ -468,6 +487,7 @@ extension SettingsView {
                     Text(text("Entfernen", "Remove"))
                 }
                 .liquidGlassDestructiveButtonStyle()
+                .help(text("Modell vom Mac entfernen", "Remove this model from the Mac"))
             }
         } else {
             Button(text("Installieren", "Install")) {
@@ -475,6 +495,7 @@ extension SettingsView {
             }
             .liquidGlassPrimaryButtonStyle()
             .disabled(model.installState == .unavailable)
+            .help(text("Modell herunterladen und installieren", "Download and install this model"))
         }
     }
 
