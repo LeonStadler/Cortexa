@@ -20,9 +20,9 @@
 
 ## Fixes
 
-- 2026-09-15: Modellverwaltung zeigt alle Modelle im äußeren Settings-Scrollbereich und erhält ein sichtbares DMG-Installationsmotiv.
+- 2026-09-15: Modellverwaltung zeigt alle Modelle im äußeren Settings-Scrollbereich und erhält ein minimalistisches DMG-Installationsmotiv nach dem Referenzlayout.
   - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `scripts/create_macos_dmg.sh`, `apps/macos/AppShell/Resources/CortexaInstallerBackground.svg`, `VERSION`
-  - Funktionalität: Tabellen- und Listenhöhe werden aus der Modellanzahl berechnet, sodass keine Modelle mehr durch einen zu kleinen eingebetteten Bereich abgeschnitten werden. Das DMG verwendet ein gebrandetes Cortexa-Installationsbild inklusive Zieh-Hinweis und Finder-Hintergrundmetadaten. Die Version wurde auf `0.32.2` angehoben.
+  - Funktionalität: Tabellen- und Listenhöhe werden aus der Modellanzahl berechnet, sodass keine Modelle mehr durch einen zu kleinen eingebetteten Bereich abgeschnitten werden. Das DMG verwendet einen hellen, minimalistischen Finder-Hintergrund mit gestricheltem Zieh-Hinweis; das korrekte Cortexa-Logo kommt weiterhin direkt aus dem signierten App-Bundle. Die Version wurde auf `0.32.2` angehoben.
 
 - 2026-09-15: Modellverwaltung wechselt bei der tatsächlichen verfügbaren Breite zuverlässig zwischen Tabelle und Liste.
   - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `VERSION`
