@@ -2,6 +2,10 @@
 
 ## Features
 
+- 2026-09-15: Berechtigungen, Hilfe-Interaktionen und Modellverwaltung nativ und adaptiv ausgebaut.
+  - Dateien: `apps/macos/AppShell/SettingsChromeComponents.swift`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `Tests/DocsContractTests/PermissionRecoveryContractTests.swift`, `VERSION`
+  - Funktionalität: Berechtigungen bleiben dauerhaft unter „Erweitert“ sichtbar und fehlende Freigaben erscheinen zusätzlich als direkte Warnkacheln unter „Allgemein“. Die Modellverwaltung wechselt per `ViewThatFits` zwischen nativer Tabelle und kompakter Liste. Info-Hilfen bieten nativen Hover-Text und ein anklickbares Popover. Die Version wurde auf `0.32.0` angehoben.
+
 - 2026-09-15: Modellverwaltung und Settings-Hilfe an native macOS-Interaktionen angepasst.
   - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `VERSION`
   - Funktionalität: Die Modellverwaltung verwendet kompakte native Modellzeilen, klar getrennte Status-/Metadatenbereiche, systemnahe Menüfilter und responsive Aktionen für schmale Fenster. Hilfe-Texte sind am vollständigen Feldlabel verankert und Modellaktionen liefern native macOS-Tooltips. Die Version wurde auf `0.31.0` angehoben.

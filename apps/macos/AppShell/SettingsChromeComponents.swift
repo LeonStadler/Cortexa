@@ -5,15 +5,29 @@ import SwiftUI
 
 struct SettingsRichTooltipAnchor: View {
     let helpText: String
+    @State private var isPopoverPresented = false
     /// Wenn `true`, übernimmt das umgebende `accessibilityElement(children: .combine)` die Ansage.
     var suppressIndividualAccessibility: Bool = false
     var body: some View {
-        Image(systemName: "info.circle")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        Button {
+            isPopoverPresented.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
         .help(helpText)
+        .popover(isPresented: $isPopoverPresented, arrowEdge: .bottom) {
+            Text(helpText)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 280, alignment: .leading)
+                .padding(14)
+        }
         .accessibilityHidden(suppressIndividualAccessibility)
         .accessibilityLabel(Text(verbatim: helpText))
+        .accessibilityHint(Text("Öffnet weitere Informationen"))
     }
 }
 
@@ -255,6 +269,47 @@ struct PermissionRecoveryBanner: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.orange.opacity(0.25), lineWidth: 1)
         )
+    }
+}
+
+struct PermissionWarningTile: View {
+    let title: String
+    let message: String
+    let status: PermissionStatus
+    let actionTitle: String
+    let actionHint: String
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: status == .restricted ? "lock.trianglebadge.exclamationmark" : "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(actionTitle, action: action)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(actionHint)
+                .accessibilityLabel(Text("\(actionTitle). \(actionHint)"))
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1)
+        }
     }
 }
 

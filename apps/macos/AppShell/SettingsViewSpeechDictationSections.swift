@@ -264,10 +264,52 @@ extension SettingsView {
                 if filteredVoiceModelsForManagement.isEmpty {
                     Text(text("Keine passenden Modelle gefunden.", "No matching models found."))
                         .foregroundStyle(.secondary)
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        voiceModelTable
+                            .frame(minWidth: 720, minHeight: 220)
+                        voiceModelList
+                    }
                 }
-                ForEach(filteredVoiceModelsForManagement) { model in
-                    voiceModelManagementRow(for: model)
-                }
+            }
+        }
+    }
+
+    private var voiceModelTable: some View {
+        Table(filteredVoiceModelsForManagement) {
+            TableColumn(text("Modell", "Model")) { model in
+                Text(model.displayName)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            TableColumn(text("Sprache", "Language")) { model in
+                Text(model.languageCode?.uppercased() ?? "ALL")
+                    .foregroundStyle(.secondary)
+            }
+            TableColumn(text("Größe", "Size")) { model in
+                Text(model.sizeLabel)
+                    .foregroundStyle(.secondary)
+            }
+            TableColumn(text("Qualität", "Quality")) { model in
+                Text("\(model.speedScore)/10 · \(model.accuracyScore)/10")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            TableColumn(text("Status", "Status")) { model in
+                voiceModelStatusLabel(for: model)
+            }
+            TableColumn(text("Aktion", "Action")) { model in
+                voiceModelActionButtons(for: model)
+            }
+        }
+        .tableStyle(.inset(alternatesRowBackgrounds: true))
+        .frame(maxWidth: .infinity)
+    }
+
+    private var voiceModelList: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(filteredVoiceModelsForManagement) { model in
+                voiceModelManagementRow(for: model)
             }
         }
     }

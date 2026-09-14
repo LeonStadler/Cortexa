@@ -29,9 +29,13 @@
             )
 
             XCTAssertTrue(settingsView.contains("generalPermissionsContent"))
+            XCTAssertTrue(settingsView.contains("advancedPermissionsContent"))
             XCTAssertTrue(generalSections.contains("Freigabe anfragen"))
             XCTAssertTrue(generalSections.contains("macOS-Hinweis"))
             XCTAssertTrue(generalSections.contains("Bedienungshilfen"))
+            XCTAssertTrue(generalSections.contains("PermissionWarningTile"))
+            XCTAssertTrue(generalSections.contains("var advancedPermissionsContent"))
+            XCTAssertTrue(generalSections.contains("]) {\n            permissionsRowsContent"))
             XCTAssertFalse(generalSections.contains("Neu verknüpfen"))
         }
 
