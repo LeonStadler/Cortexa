@@ -114,14 +114,16 @@ struct SettingsSidebarView: View {
             ForEach(SettingsTab.Group.allCases, id: \.self) { group in
                 Section(group.title(language: storedLanguage)) {
                     ForEach(SettingsTab.tabs(in: group), id: \.self) { tab in
-                    Label(tab.title(language: storedLanguage), systemImage: tab.symbolName)
-                        .tag(tab)
-                        .imageScale(.medium)
+                        Label(tab.title(language: storedLanguage), systemImage: tab.symbolName)
+                            .tag(tab)
+                            .imageScale(.medium)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
         }
         .listStyle(.sidebar)
+        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
         .environment(\.defaultMinListRowHeight, 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationSplitViewColumnWidth(

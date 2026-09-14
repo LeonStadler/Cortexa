@@ -55,7 +55,7 @@ extension View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
             self.fixedSize(horizontal: true, vertical: false)
-                .frame(minWidth: minWidth)
+                .frame(minWidth: min(minWidth, 180))
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -113,40 +113,16 @@ extension View {
 
     @ViewBuilder
     func liquidGlassPrimaryButtonStyle() -> some View {
-        #if compiler(>=6.3)
-        if #available(macOS 26.0, *) {
-            self.buttonStyle(.glassProminent)
-        } else {
-            self.buttonStyle(.borderedProminent)
-        }
-        #else
         self.buttonStyle(.borderedProminent)
-        #endif
     }
 
     @ViewBuilder
     func liquidGlassSecondaryButtonStyle() -> some View {
-        #if compiler(>=6.3)
-        if #available(macOS 26.0, *) {
-            self.buttonStyle(.glass)
-        } else {
-            self.buttonStyle(.bordered)
-        }
-        #else
         self.buttonStyle(.bordered)
-        #endif
     }
 
     @ViewBuilder
     func liquidGlassDestructiveButtonStyle() -> some View {
-        #if compiler(>=6.3)
-        if #available(macOS 26.0, *) {
-            self.buttonStyle(.glass)
-        } else {
-            self.buttonStyle(.bordered)
-        }
-        #else
         self.buttonStyle(.bordered)
-        #endif
     }
 }

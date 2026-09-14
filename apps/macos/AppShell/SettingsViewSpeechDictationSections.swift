@@ -243,28 +243,19 @@ extension SettingsView {
     var installedSpeechModelsContent: some View {
         if speechHasMatches {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    TextField(text("Modelle suchen", "Search models"), text: $speechModelSearchText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(minWidth: 180)
-
-                    Picker(text("Status", "Status"), selection: $speechModelAvailabilityFilter) {
-                        ForEach(SpeechModelAvailabilityFilter.allCases) { filter in
-                            Text(filter.localizedDisplayName(language: effectiveLanguage))
-                                .tag(filter)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        modelSearchField
+                        modelStatusFilter.frame(width: 260)
+                        modelLanguageFilter.frame(width: 150)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        modelSearchField
+                        HStack(spacing: 10) {
+                            modelStatusFilter
+                            modelLanguageFilter
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 260)
-
-                    Picker(text("Sprache", "Language"), selection: $speechModelLanguageFilter) {
-                        ForEach(SpeechModelLanguageFilter.allCases) { filter in
-                            Text(filter.localizedDisplayName(language: effectiveLanguage))
-                                .tag(filter)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 150)
                 }
 
                 if filteredVoiceModelsForManagement.isEmpty {
@@ -276,18 +267,21 @@ extension SettingsView {
             ForEach(filteredVoiceModelsForManagement) { model in
                 LabeledContent {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .center, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(model.displayName)
-                                Text(
-                                    "\(model.languageCode?.uppercased() ?? "ALL") • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)"
-                                )
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .center, spacing: 10) {
+                                voiceModelSummary(for: model)
+                                Spacer(minLength: 12)
+                                voiceModelStatusLabel(for: model)
+                                voiceModelActionButtons(for: model)
                             }
-                            Spacer(minLength: 12)
-                            voiceModelStatusLabel(for: model)
-                            voiceModelActionButtons(for: model)
+                            VStack(alignment: .leading, spacing: 8) {
+                                voiceModelSummary(for: model)
+                                HStack {
+                                    voiceModelStatusLabel(for: model)
+                                    Spacer()
+                                    voiceModelActionButtons(for: model)
+                                }
+                            }
                         }
 
                         if let operation = appState.voiceModelOperationState(for: model) {
@@ -303,6 +297,30 @@ extension SettingsView {
                 }
             }
         }
+    }
+
+    private var modelSearchField: some View {
+        TextField(text("Modelle suchen", "Search models"), text: $speechModelSearchText)
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: .infinity)
+    }
+
+    private var modelStatusFilter: some View {
+        Picker(text("Status", "Status"), selection: $speechModelAvailabilityFilter) {
+            ForEach(SpeechModelAvailabilityFilter.allCases) { filter in
+                Text(filter.localizedDisplayName(language: effectiveLanguage)).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var modelLanguageFilter: some View {
+        Picker(text("Sprache", "Language"), selection: $speechModelLanguageFilter) {
+            ForEach(SpeechModelLanguageFilter.allCases) { filter in
+                Text(filter.localizedDisplayName(language: effectiveLanguage)).tag(filter)
+            }
+        }
+        .pickerStyle(.menu)
     }
 
     private var filteredVoiceModelsForManagement: [VoiceModelDescriptor] {
@@ -335,6 +353,17 @@ extension SettingsView {
                 || (model.languageCode?.lowercased().contains(query) ?? false)
             return matchesAvailability && matchesLanguage && matchesSearch
         }
+    }
+
+    private func voiceModelSummary(for model: VoiceModelDescriptor) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(model.displayName)
+            Text("\(model.languageCode?.uppercased() ?? "ALL") • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var voiceModelSelectionBinding: Binding<String> {
