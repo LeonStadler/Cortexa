@@ -275,18 +275,26 @@ extension SettingsView {
         GeometryReader { proxy in
             if proxy.size.width >= voiceModelTableMinimumWidth {
                 voiceModelTable
-                    .frame(maxWidth: .infinity, minHeight: 240, alignment: .top)
+                    .frame(height: voiceModelTableHeight, alignment: .top)
+                    .frame(maxWidth: .infinity, alignment: .top)
                     .accessibilityIdentifier("voice-model-table")
             } else {
                 voiceModelList
+                    .frame(height: voiceModelListHeight, alignment: .top)
                     .frame(maxWidth: .infinity, alignment: .top)
                     .accessibilityIdentifier("voice-model-list")
             }
         }
-        .frame(minHeight: 240, alignment: .top)
+        .frame(height: max(voiceModelTableHeight, voiceModelListHeight), alignment: .top)
     }
 
     private var voiceModelTableMinimumWidth: CGFloat { 720 }
+    private var voiceModelTableHeight: CGFloat {
+        max(240, CGFloat(filteredVoiceModelsForManagement.count * 34 + 34))
+    }
+    private var voiceModelListHeight: CGFloat {
+        max(240, CGFloat(filteredVoiceModelsForManagement.count * 112))
+    }
 
     private var voiceModelTable: some View {
         Table(filteredVoiceModelsForManagement) {

@@ -34,7 +34,7 @@ rm -f "${DMG_PATH}"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wisprlocal-dmg.XXXXXX")"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
-BACKGROUND_SOURCE="${ROOT_DIR}/apps/macos/AppShell/Resources/Assets.xcassets/CortexaLogoHorizontal.imageset/CortexaLogoHorizontal.svg"
+BACKGROUND_SOURCE="${ROOT_DIR}/apps/macos/AppShell/Resources/CortexaInstallerBackground.svg"
 [[ -f "${BACKGROUND_SOURCE}" ]] || error "DMG background source is missing at ${BACKGROUND_SOURCE}"
 
 STAGING_DIR="${TEMP_DIR}/staging"
@@ -46,7 +46,7 @@ APP_SIZE_MB="$(du -sm "${APP_PATH}" | awk '{print $1}')"
 DMG_SIZE_MB=$((APP_SIZE_MB + 128))
 
 qlmanage -t -s 1600 -o "${TEMP_DIR}" "${BACKGROUND_SOURCE}" >/dev/null 2>&1
-BACKGROUND_PNG="${TEMP_DIR}/CortexaLogoHorizontal.svg.png"
+BACKGROUND_PNG="${TEMP_DIR}/CortexaInstallerBackground.svg.png"
 [[ -f "${BACKGROUND_PNG}" ]] || error "Could not render the DMG background image"
 cp "${BACKGROUND_PNG}" "${STAGING_DIR}/.background/installation.png"
 cp -R "${APP_PATH}" "${STAGING_DIR}/"
@@ -69,6 +69,7 @@ tell application "Finder"
         set statusbar visible to false
         set bounds to {120, 120, 920, 620}
         set viewOptions to icon view options
+        set background picture of icon view options of installerWindow to file ".background:installation.png"
         set position of item "Cortexa.app" to {190, 260}
         set position of item "Applications" to {610, 260}
         close
