@@ -20,6 +20,10 @@
 
 ## Fixes
 
+- 2026-09-16: Modellliste ohne künstliche Leerfläche und Live-Text-Schalter unabhängig von der Bedienungshilfenfreigabe bedienbar gemacht.
+  - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
+  - Funktionalität: Die kompakte Modellliste erhält keine aus der Modellanzahl geschätzte Mindesthöhe mehr; sie verwendet ihre tatsächliche Inhaltshöhe und hinterlässt keine große leere Fläche. „Live-Text einfügen“ bleibt als Präferenz bedienbar, auch solange Bedienungshilfen noch fehlen. Ein Hinweis erklärt, dass die direkte Einfügung erst nach der Freigabe startet. Die Version wurde auf `0.32.4` angehoben.
+
 - 2026-09-16: Sidebar, Suche und Settings-Hilfen an die aktuellen macOS-HIG angepasst.
   - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
   - Funktionalität: Die Sidebar bleibt eine systemeigene `NavigationSplitView`-Source-List mit macOS-27-Liquid-Glass-Verhalten, ohne eigene opake Hintergrundkarte. Die globale Suche erscheint im nativen Toolbar-Platz. Formulare und Modellverwaltung nutzen nur noch einen vertikalen Scrollcontainer, sodass jede Modellzeile erreichbar bleibt. Info-Hilfen bieten sowohl nativen Hover-Text als auch ein per Tastatur erreichbares, am Info-Button verankertes Popover. Die Version wurde auf `0.32.3` angehoben.

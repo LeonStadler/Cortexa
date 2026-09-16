@@ -272,30 +272,21 @@ extension SettingsView {
     }
 
     private var adaptiveVoiceModelManagement: some View {
-        GeometryReader { proxy in
-            if proxy.size.width >= voiceModelTableMinimumWidth {
-                voiceModelTable
-                    .frame(height: voiceModelTableHeight, alignment: .top)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .accessibilityIdentifier("voice-model-table")
-            } else {
-                voiceModelList
-                    .frame(height: voiceModelListHeight, alignment: .top)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .accessibilityIdentifier("voice-model-list")
-            }
+        ViewThatFits(in: .horizontal) {
+            voiceModelTable
+                .frame(height: voiceModelTableHeight, alignment: .top)
+                .frame(maxWidth: .infinity, alignment: .top)
+                .accessibilityIdentifier("voice-model-table")
+
+            voiceModelList
+                .frame(maxWidth: .infinity, alignment: .top)
+                .accessibilityIdentifier("voice-model-list")
         }
-        .frame(height: max(voiceModelTableHeight, voiceModelListHeight), alignment: .top)
     }
 
-    private var voiceModelTableMinimumWidth: CGFloat { 720 }
     private var voiceModelTableHeight: CGFloat {
         max(240, CGFloat(filteredVoiceModelsForManagement.count * 34 + 34))
     }
-    private var voiceModelListHeight: CGFloat {
-        max(240, CGFloat(filteredVoiceModelsForManagement.count * 112))
-    }
-
     private var voiceModelTable: some View {
         Table(filteredVoiceModelsForManagement) {
             TableColumn(text("Modell", "Model")) { model in
@@ -699,7 +690,7 @@ extension SettingsView {
             }
             .disabled(
                 appState.finalResultDeliveryMode == .clipboardOnly
-                    || !appState.dictationCapability.allowsDirectInsertion)
+            )
 
             Text(
                 text(
@@ -767,8 +758,8 @@ extension SettingsView {
             if !appState.dictationCapability.allowsDirectInsertion {
                 Text(
                     text(
-                        "Ohne Bedienungshilfen startet die Aufnahme weiterhin, aber direktes Einfügen bleibt deaktiviert.",
-                        "Without Accessibility, recording still starts, but direct insertion remains disabled."
+                        "Du kannst Live-Text bereits aktivieren. Direktes Einfügen startet, sobald Bedienungshilfen freigegeben sind.",
+                        "You can enable live text now. Direct insertion starts once Accessibility access is granted."
                     )
                 )
                 .font(.footnote)
