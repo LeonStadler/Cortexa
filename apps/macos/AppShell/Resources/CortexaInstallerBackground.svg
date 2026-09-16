@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600" viewBox="0 0 1600 1600">
+  <rect width="1600" height="1600" fill="#f2f2f4"/>
+  <path d="M680 770h112v-70l130 115-130 115v-70H680z"
+        fill="none" stroke="#7b7b80" stroke-width="5" stroke-dasharray="11 10"
+        stroke-linejoin="miter"/>
+</svg>
