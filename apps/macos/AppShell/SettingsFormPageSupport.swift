@@ -10,11 +10,12 @@ struct SettingsFormPage: View {
     let sections: [SettingsPageSection]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        Form {
             ForEach(sections) { section in
                 SettingsFormSection(section: section)
             }
         }
+        .formStyle(.grouped)
         .frame(maxWidth: 760, alignment: .leading)
     }
 }
@@ -23,18 +24,14 @@ private struct SettingsFormSection: View {
     let section: SettingsPageSection
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let title = section.title {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+        if let title = section.title {
+            Section(title) {
+                section.content
             }
-
-            section.content
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(.quaternary.opacity(0.28), in: RoundedRectangle(cornerRadius: 10))
+        } else {
+            Section {
+                section.content
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

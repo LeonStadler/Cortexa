@@ -61,9 +61,10 @@ struct SettingsViewShell: View {
                 searchFieldSyncedAnimation: searchFieldSyncedAnimation
             )
         }
+        .navigationSplitViewStyle(.balanced)
         .searchable(
             text: $searchText,
-            placement: .automatic,
+            placement: .toolbar,
             prompt: text("Einstellungen durchsuchen", "Search settings")
         )
         .toolbar {
@@ -122,6 +123,7 @@ struct SettingsSidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.automatic)
         .environment(\.defaultMinListRowHeight, 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationSplitViewColumnWidth(
@@ -144,31 +146,28 @@ struct SettingsDetailContainerView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Group {
-                        if isSearching {
-                            SearchResultsSettingsPage(
-                                results: searchResults,
-                                language: storedLanguage,
-                                onSelect: onSelectSearchResult
-                            )
-                        } else {
-                            selectedForm
-                        }
-                    }
+            if isSearching {
+                ScrollView {
+                    SearchResultsSettingsPage(
+                        results: searchResults,
+                        language: storedLanguage,
+                        onSelect: onSelectSearchResult
+                    )
                     .frame(maxWidth: 760, alignment: .leading)
-                    // Vertikaler Offset + Opacity: Material/Glass in `Form` wirkt bei purem Fade oft zerhackt.
+                    .padding(.horizontal, 28)
+                    .padding(.top, 20)
+                    .padding(.bottom, 28)
                     .transition(searchResultsContentTransition)
                     .contentTransition(.interpolate)
                 }
-                .padding(.horizontal, 28)
-                .padding(.top, 20)
-                .padding(.bottom, 28)
+            } else {
+                selectedForm
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(searchResultsContentTransition)
+                    .contentTransition(.interpolate)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle(settingsNavigationTitle)
         }
+        .navigationTitle(settingsNavigationTitle)
         // Gleiche Kurve für Titel (Toolbar) und Inhalt, damit die System-Suchfeld-Animation nicht „auseinanderläuft“.
         .animation(searchFieldSyncedAnimation, value: isSearching)
         // Nur Detail-Spalte: globales `.controlSize` am SplitView würde auch die Fenster-Toolbar verkleinern.

@@ -12,6 +12,10 @@
 
 ## Fixes
 
+- 2026-09-16: Settings-Navigation und Hilfen an die nativen macOS-/Liquid-Glass-Empfehlungen angepasst.
+  - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsFormPageSupport.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
+  - Funktionalität: Die Einstellungen verwenden ein ausgewogenes natives `NavigationSplitView`-Layout mit systemverwalteter Sidebar- und Hintergrunddarstellung. Die Sidebar wird nicht mit einer opaken eigenen Fläche übermalt und kann ihre macOS-27-Liquid-Glass-Darstellung adaptiv übernehmen. Die globale Suche liegt im systemeigenen Toolbar-Platz; die nativen Formularabschnitte besitzen nur noch einen Scrollcontainer, sodass alle Modelle erreichbar bleiben. Info-Hilfen behalten den systemeigenen Hover-Text und öffnen per Klick oder Tastatur ein zugängliches Popover. Die Version wurde auf `0.30.1` angehoben.
+
 - 2026-09-16: DMG-Installationshintergrund zuverlässig im Finder-Layout gespeichert.
   - Dateien: `scripts/create_macos_dmg.sh`, `apps/macos/AppShell/Resources/CortexaInstallerBackground.svg`
   - Funktionalität: Die DMG-Erstellung nutzt ein beschreibbares Zwischenimage, rendert das minimalistische Hintergrundmotiv als PNG und speichert die Finder-Hintergrundmetadaten vor der Komprimierung. Dadurch bleibt das Bild beim Öffnen des fertigen DMG sichtbar.
