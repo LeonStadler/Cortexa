@@ -6,8 +6,7 @@ import SwiftUI
 struct SettingsRichTooltipAnchor: View {
     let helpText: String
     @State private var isPopoverPresented = false
-    /// Wenn `true`, übernimmt das umgebende `accessibilityElement(children: .combine)` die Ansage.
-    var suppressIndividualAccessibility: Bool = false
+    let accessibilityLabelText: String
     var body: some View {
         Button {
             isPopoverPresented.toggle()
@@ -25,9 +24,8 @@ struct SettingsRichTooltipAnchor: View {
                 .frame(width: 280, alignment: .leading)
                 .padding(14)
         }
-        .accessibilityHidden(suppressIndividualAccessibility)
-        .accessibilityLabel(Text(verbatim: helpText))
-        .accessibilityHint(Text("Öffnet weitere Informationen"))
+        .accessibilityLabel(Text(verbatim: accessibilityLabelText))
+        .accessibilityHint(Text(verbatim: helpText))
     }
 }
 
@@ -36,22 +34,21 @@ struct SettingsFieldLabel: View {
     var helpText: String? = nil
 
     var body: some View {
-        let accessibilityCombined: String = {
-            guard let helpText, !helpText.isEmpty else { return title }
-            return "\(title). \(helpText)"
-        }()
         return HStack(spacing: 6) {
             Text(title)
             if let helpText, !helpText.isEmpty {
-                SettingsRichTooltipAnchor(helpText: helpText, suppressIndividualAccessibility: true)
+                SettingsRichTooltipAnchor(
+                    helpText: helpText,
+                    accessibilityLabelText: "\(title): Weitere Informationen"
+                )
             }
         }
         // Attach the native macOS help tag to the complete label, not only the
         // tiny info glyph. This keeps the tooltip discoverable and reliable
         // when the glyph is difficult to hit at high display scaling.
         .help(helpText ?? "")
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityCombined)
+        .accessibilityElement(children: helpText == nil ? .combine : .contain)
+        .accessibilityLabel(title)
     }
 }
 

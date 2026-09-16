@@ -20,6 +20,10 @@
 
 ## Fixes
 
+- 2026-09-16: Sidebar, Suche und Settings-Hilfen an die aktuellen macOS-HIG angepasst.
+  - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
+  - Funktionalität: Die Sidebar bleibt eine systemeigene `NavigationSplitView`-Source-List mit macOS-27-Liquid-Glass-Verhalten, ohne eigene opake Hintergrundkarte. Die globale Suche erscheint im nativen Toolbar-Platz. Formulare und Modellverwaltung nutzen nur noch einen vertikalen Scrollcontainer, sodass jede Modellzeile erreichbar bleibt. Info-Hilfen bieten sowohl nativen Hover-Text als auch ein per Tastatur erreichbares, am Info-Button verankertes Popover. Die Version wurde auf `0.32.3` angehoben.
+
 - 2026-09-15: Modellverwaltung zeigt alle Modelle im äußeren Settings-Scrollbereich und erhält ein minimalistisches DMG-Installationsmotiv nach dem Referenzlayout.
   - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `scripts/create_macos_dmg.sh`, `apps/macos/AppShell/Resources/CortexaInstallerBackground.svg`, `VERSION`
   - Funktionalität: Tabellen- und Listenhöhe werden aus der Modellanzahl berechnet, sodass keine Modelle mehr durch einen zu kleinen eingebetteten Bereich abgeschnitten werden. Das DMG verwendet einen hellen, minimalistischen Finder-Hintergrund mit gestricheltem Zieh-Hinweis; das korrekte Cortexa-Logo kommt weiterhin direkt aus dem signierten App-Bundle. Die Version wurde auf `0.32.2` angehoben.
