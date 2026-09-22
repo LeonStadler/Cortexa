@@ -60,9 +60,10 @@ if [[ -n "${DEVELOPMENT_TEAM:-}" ]]; then
   XCODE_ARGS+=("DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}")
 fi
 
-if [[ -n "${CODE_SIGN_IDENTITY:-}" ]]; then
-  XCODE_ARGS+=("CODE_SIGN_IDENTITY=${CODE_SIGN_IDENTITY}")
-fi
+# Xcode's automatic provisioning can reject a locally valid macOS certificate
+# before it gets to the archive. Sign the final archived app explicitly below;
+# this is the exact app that is subsequently validated and packaged.
+XCODE_ARGS+=("CODE_SIGNING_ALLOWED=NO")
 
 log "Archiving release build"
 xcodebuild "${XCODE_ARGS[@]}"
@@ -72,6 +73,12 @@ ARCHIVED_APP_PATH="${ARCHIVE_PATH}/Products/Applications/Cortexa.app"
   echo "[archive_macos_release] ERROR: archived app not found at ${ARCHIVED_APP_PATH}" >&2
   exit 1
 }
+
+log "Signing archived app with ${CODE_SIGN_IDENTITY}"
+codesign --force --deep --options runtime --sign "${CODE_SIGN_IDENTITY}" "${ARCHIVED_APP_PATH}"
+
+log "Validating bundled runtime payload"
+"${ROOT_DIR}/scripts/validate_macos_app_runtime.sh" "${ARCHIVED_APP_PATH}"
 
 SIGNING_DETAILS="$(codesign -dvvv "${ARCHIVED_APP_PATH}" 2>&1)"
 if ! grep -Eq '^Authority=(Apple Development|Developer ID Application):' <<<"${SIGNING_DETAILS}"; then

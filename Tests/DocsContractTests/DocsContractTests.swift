@@ -34,7 +34,21 @@ final class DocsContractTests: XCTestCase {
     func testVersionFileMatchesCurrentRepositoryVersion() throws {
         let version = try readRepositoryFile("VERSION").trimmingCharacters(
             in: .whitespacesAndNewlines)
-        XCTAssertEqual(version, "0.32.4")
+        XCTAssertEqual(version, "0.32.5")
+    }
+
+    func testMacOSPackagingValidatesRuntimePayloadBeforeCreatingArtifacts() throws {
+        let archiveScript = try readRepositoryFile("scripts/archive_macos_release.sh")
+        let dmgScript = try readRepositoryFile("scripts/create_macos_dmg.sh")
+        let runtimeValidationScript = try readRepositoryFile("scripts/validate_macos_app_runtime.sh")
+
+        XCTAssertTrue(archiveScript.contains("validate_macos_app_runtime.sh"))
+        XCTAssertTrue(archiveScript.contains("CODE_SIGNING_ALLOWED=NO"))
+        XCTAssertTrue(archiveScript.contains("codesign --force --deep --options runtime"))
+        XCTAssertTrue(dmgScript.contains("validate_macos_app_runtime.sh"))
+        XCTAssertTrue(runtimeValidationScript.contains("whisper-cli"))
+        XCTAssertTrue(runtimeValidationScript.contains("runtime-manifest.json"))
+        XCTAssertTrue(runtimeValidationScript.contains("--help"))
     }
 
     func testMacOSCortexaBrandingAssetsAreWired() throws {

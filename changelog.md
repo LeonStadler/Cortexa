@@ -20,6 +20,10 @@
 
 ## Fixes
 
+- 2026-09-23: DMG-/Archiv-Erzeugung bricht bei fehlender Whisper-Laufzeit nun hart ab.
+  - Dateien: `scripts/validate_macos_app_runtime.sh` (neu), `scripts/archive_macos_release.sh`, `scripts/create_macos_dmg.sh`, `scripts/smoke_test_macos_app.sh`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalität: Vor einem Archiv oder DMG wird geprüft, dass das finale `Cortexa.app` tatsächlich einen ausführbaren `Runtime/whisper-cli`, den `models`-Ordner und ein valides `runtime-manifest.json` enthält; außerdem muss die gebündelte CLI mit `--help` starten. Ein leerer `Runtime`-Ordner kann damit nicht mehr als installierbarer DMG ausgeliefert werden. Die Version wurde auf `0.32.5` angehoben.
+
 - 2026-09-16: Modellliste ohne künstliche Leerfläche und Live-Text-Schalter unabhängig von der Bedienungshilfenfreigabe bedienbar gemacht.
   - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
   - Funktionalität: Die kompakte Modellliste erhält keine aus der Modellanzahl geschätzte Mindesthöhe mehr; sie verwendet ihre tatsächliche Inhaltshöhe und hinterlässt keine große leere Fläche. „Live-Text einfügen“ bleibt als Präferenz bedienbar, auch solange Bedienungshilfen noch fehlen. Ein Hinweis erklärt, dass die direkte Einfügung erst nach der Freigabe startet. Die Version wurde auf `0.32.4` angehoben.

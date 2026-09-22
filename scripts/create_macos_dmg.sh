@@ -28,6 +28,9 @@ require_command qlmanage
 
 [[ -d "${APP_PATH}" ]] || error "App bundle not found at ${APP_PATH}. Run ./scripts/export_macos_release.sh first."
 
+log "Validating bundled runtime payload"
+"${ROOT_DIR}/scripts/validate_macos_app_runtime.sh" "${APP_PATH}"
+
 mkdir -p "${ARTIFACTS_DIR}"
 rm -f "${DMG_PATH}"
 
