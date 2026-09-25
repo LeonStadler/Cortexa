@@ -5,15 +5,27 @@ import SwiftUI
 
 struct SettingsRichTooltipAnchor: View {
     let helpText: String
-    /// Wenn `true`, übernimmt das umgebende `accessibilityElement(children: .combine)` die Ansage.
-    var suppressIndividualAccessibility: Bool = false
+    let accessibilityLabelText: String
+    @State private var isPopoverPresented = false
+
     var body: some View {
-        Image(systemName: "info.circle")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        Button {
+            isPopoverPresented.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
         .help(helpText)
-        .accessibilityHidden(suppressIndividualAccessibility)
-        .accessibilityLabel(Text(verbatim: helpText))
+        .accessibilityLabel(Text(verbatim: accessibilityLabelText))
+        .accessibilityHint(Text(verbatim: helpText))
+        .popover(isPresented: $isPopoverPresented, arrowEdge: .bottom) {
+            Text(helpText)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 280, alignment: .leading)
+                .padding(14)
+        }
     }
 }
 
@@ -22,18 +34,17 @@ struct SettingsFieldLabel: View {
     var helpText: String? = nil
 
     var body: some View {
-        let accessibilityCombined: String = {
-            guard let helpText, !helpText.isEmpty else { return title }
-            return "\(title). \(helpText)"
-        }()
         return HStack(spacing: 6) {
             Text(title)
             if let helpText, !helpText.isEmpty {
-                SettingsRichTooltipAnchor(helpText: helpText, suppressIndividualAccessibility: true)
+                SettingsRichTooltipAnchor(
+                    helpText: helpText,
+                    accessibilityLabelText: "\(title): Weitere Informationen"
+                )
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityCombined)
+        .accessibilityElement(children: helpText == nil ? .combine : .contain)
+        .accessibilityLabel(title)
     }
 }
 

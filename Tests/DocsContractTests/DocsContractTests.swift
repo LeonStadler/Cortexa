@@ -34,7 +34,25 @@ final class DocsContractTests: XCTestCase {
     func testVersionFileMatchesCurrentRepositoryVersion() throws {
         let version = try readRepositoryFile("VERSION").trimmingCharacters(
             in: .whitespacesAndNewlines)
-        XCTAssertEqual(version, "0.30.0")
+        XCTAssertEqual(version, "0.30.4")
+    }
+
+    func testDMGBackgroundMatchesFinderWindowCanvas() throws {
+        let background = try readRepositoryFile(
+            "apps/macos/AppShell/Resources/CortexaInstallerBackground.svg")
+        let dmgScript = try readRepositoryFile("scripts/create_macos_dmg.sh")
+
+        XCTAssertTrue(background.contains("width=\"800\" height=\"500\" viewBox=\"0 0 800 500\""))
+        XCTAssertTrue(dmgScript.contains("sips -s format png"))
+        let dmgSettings = try readRepositoryFile("scripts/macos_dmg_settings.py")
+        XCTAssertTrue(dmgScript.contains("requirements-macos-dmg.txt"))
+        XCTAssertTrue(dmgScript.contains("--settings \"${ROOT_DIR}/scripts/macos_dmg_settings.py\""))
+        XCTAssertTrue(dmgSettings.contains("background = defines[\"background\"]"))
+        XCTAssertTrue(dmgSettings.contains("window_rect = ((120, 120), (800, 500))"))
+        XCTAssertTrue(dmgSettings.contains("app_path.name: (190, 260)"))
+        XCTAssertTrue(dmgSettings.contains("\"Applications\": (610, 260)"))
+        XCTAssertTrue(dmgSettings.contains("format = \"UDZO\""))
+        XCTAssertFalse(dmgScript.contains("qlmanage"))
     }
 
     func testMacOSCortexaBrandingAssetsAreWired() throws {

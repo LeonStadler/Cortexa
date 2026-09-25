@@ -7,6 +7,7 @@ EXPORT_PATH="${EXPORT_PATH:-${ARTIFACTS_DIR}/release}"
 APP_PATH="${APP_PATH:-${EXPORT_PATH}/Cortexa.app}"
 DMG_PATH="${DMG_PATH:-${ARTIFACTS_DIR}/Cortexa.dmg}"
 VOLUME_NAME="${DMG_VOLUME_NAME:-Cortexa}"
+BACKGROUND_SOURCE="${ROOT_DIR}/apps/macos/AppShell/Resources/CortexaInstallerBackground.svg"
 
 log() {
   echo "[create_macos_dmg] $*"
@@ -23,25 +24,36 @@ require_command() {
   fi
 }
 
-require_command hdiutil
+require_command sips
+require_command python3
 
 [[ -d "${APP_PATH}" ]] || error "App bundle not found at ${APP_PATH}. Run ./scripts/export_macos_release.sh first."
+[[ -f "${BACKGROUND_SOURCE}" ]] || error "Installer background not found at ${BACKGROUND_SOURCE}."
 
 mkdir -p "${ARTIFACTS_DIR}"
-rm -f "${DMG_PATH}"
+DMGBUILD_ENV="${ROOT_DIR}/.build/dmgbuild-venv"
+DMGBUILD="${DMGBUILD_ENV}/bin/dmgbuild"
+
+if [[ ! -x "${DMGBUILD}" ]]; then
+  log "Preparing pinned dmgbuild environment"
+  python3 -m venv "${DMGBUILD_ENV}"
+  "${DMGBUILD_ENV}/bin/python" -m pip install --disable-pip-version-check -r "${ROOT_DIR}/scripts/requirements-macos-dmg.txt"
+fi
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wisprlocal-dmg.XXXXXX")"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
-cp -R "${APP_PATH}" "${TEMP_DIR}/"
-ln -s /Applications "${TEMP_DIR}/Applications"
+mkdir -p "${TEMP_DIR}/.background"
+BACKGROUND_PNG="${TEMP_DIR}/.background/installation.png"
+sips -s format png "${BACKGROUND_SOURCE}" --out "${BACKGROUND_PNG}" >/dev/null
+[[ -f "${BACKGROUND_PNG}" ]] || error "Could not render installer background."
 
-log "Creating DMG at ${DMG_PATH}"
-hdiutil create \
-  -volname "${VOLUME_NAME}" \
-  -srcfolder "${TEMP_DIR}" \
-  -ov \
-  -format UDZO \
+log "Creating Finder-layout DMG at ${DMG_PATH}"
+"${DMGBUILD}" \
+  --settings "${ROOT_DIR}/scripts/macos_dmg_settings.py" \
+  -D "app=${APP_PATH}" \
+  -D "background=${BACKGROUND_PNG}" \
+  "${VOLUME_NAME}" \
   "${DMG_PATH}"
 
 if [[ -n "${CODE_SIGN_IDENTITY:-}" ]]; then

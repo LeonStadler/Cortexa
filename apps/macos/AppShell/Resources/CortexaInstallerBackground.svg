@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <g transform="scale(0.239952 0.239923)">
+    <rect x="0" y="0" width="3333.333" height="2083.333" fill="url(#background)" />
+    <text x="1220.856" y="329.167" font-family="Helvetica, Arial, sans-serif" font-size="104.167" fill="#202833">Cortexa installieren</text>
+    <text x="1113.867" y="450" font-family="Helvetica, Arial, sans-serif" font-size="58.333" fill="#66717d">Cortexa in den Programme-Ordner ziehen.</text>
+    <text x="1146.061" y="1891.667" font-family="Helvetica, Arial, sans-serif" font-size="50" fill="#66717d">Danach Cortexa im Programme-Ordner öffnen.</text>
+    <path d="M1250,1083.333h791.667m-50,-50l50,50l-50,50" fill="none" stroke="#77828d" stroke-width="10.42" stroke-dasharray="29.167,33.333" />
+  </g>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(3333.333 2083.333 -2083.333 3333.333 0 0)">
+      <stop offset="0" stop-color="#f5f8f8" />
+      <stop offset="1" stop-color="#edf2f4" />
+    </linearGradient>
+  </defs>
+</svg>
