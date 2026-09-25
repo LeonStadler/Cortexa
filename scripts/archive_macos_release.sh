@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="${ROOT_DIR}/apps/macos/WisprLocalMac"
 ARTIFACTS_DIR="${ROOT_DIR}/artifacts/mac"
-ARCHIVE_PATH="${ARTIFACTS_DIR}/Cortexa.xcarchive"
+ARCHIVE_PATH="${ARCHIVE_PATH:-${ARTIFACTS_DIR}/Cortexa.xcarchive}"
 SCHEME="WisprLocalMac"
 PROJECT_FILE="${PROJECT_DIR}/WisprLocalMac.xcodeproj"
 

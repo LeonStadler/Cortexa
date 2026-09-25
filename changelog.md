@@ -12,6 +12,18 @@
 
 ## Fixes
 
+- 2026-09-25: DMG-Hintergrund auf Finder-Leinwand skaliert, Textdarstellung erhalten.
+  - Dateien: `apps/macos/AppShell/Resources/CortexaInstallerBackground.svg`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`
+  - Funktionalität: Das Hintergrundmotiv verwendet nun eine echte 800 × 500 SVG-Leinwand. Die bisherigen Textzeilen, Farben und der Pfeil werden proportional auf die Finder-Fläche transformiert und von `sips` in korrekter Größe gerendert. Die Version wurde als Patch-Bugfix auf `0.30.4` angehoben.
+
+- 2026-09-24: DMG-Installationshintergrund wird auch unter macOS 27 zuverlässig angezeigt.
+  - Dateien: `scripts/create_macos_dmg.sh`, `scripts/macos_dmg_settings.py`, `scripts/requirements-macos-dmg.txt`, `apps/macos/AppShell/Resources/CortexaInstallerBackground.svg`, `Tests/DocsContractTests/DocsContractTests.swift`, `docs/distribution.md`, `VERSION`
+  - Funktionalität: Die DMG-Erstellung verwendet jetzt das gepinnte `dmgbuild` statt Finder-gesteuerter `create-dmg`-Hintergrundkonfiguration. Fenstergröße, Motiv, Icon-Positionen und Programme-Verknüpfung werden direkt in die Finder-Metadaten geschrieben. Das Ergebnis wurde auf macOS 27 im Finder visuell geprüft. Die Version wurde als Patch-Bugfix auf `0.30.3` angehoben.
+
+- 2026-09-23: DMG-Installationshintergrund passend zum Finder-Fenster skaliert und ausgerichtet.
+  - Dateien: `apps/macos/AppShell/Resources/CortexaInstallerBackground.svg`, `scripts/create_macos_dmg.sh`, `Tests/DocsContractTests/DocsContractTests.swift`, `docs/distribution.md`, `VERSION`
+  - Funktionalität: Das Motiv nutzt eine 800 × 500-Leinwand passend zum Finder-Fenster. `sips` rendert die SVG direkt; `create-dmg` speichert Hintergrund, Fenstergröße, App- und Programme-Position gemeinsam in der Finder-Metadatei. Dadurch hängt die Darstellung nicht mehr von einem relativen AppleScript-Dateipfad oder einem bereits geöffneten gleichnamigen Volume ab. Die Version wurde als Patch-Bugfix auf `0.30.2` angehoben.
+
 - 2026-09-16: Settings-Navigation und Hilfen an die nativen macOS-/Liquid-Glass-Empfehlungen angepasst.
   - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsFormPageSupport.swift`, `apps/macos/AppShell/SettingsChromeComponents.swift`, `VERSION`, `Tests/DocsContractTests/DocsContractTests.swift`
   - Funktionalität: Die Einstellungen verwenden ein ausgewogenes natives `NavigationSplitView`-Layout mit systemverwalteter Sidebar- und Hintergrunddarstellung. Die Sidebar wird nicht mit einer opaken eigenen Fläche übermalt und kann ihre macOS-27-Liquid-Glass-Darstellung adaptiv übernehmen. Die globale Suche liegt im systemeigenen Toolbar-Platz; die nativen Formularabschnitte besitzen nur noch einen Scrollcontainer, sodass alle Modelle erreichbar bleiben. Info-Hilfen behalten den systemeigenen Hover-Text und öffnen per Klick oder Tastatur ein zugängliches Popover. Die Version wurde auf `0.30.1` angehoben.

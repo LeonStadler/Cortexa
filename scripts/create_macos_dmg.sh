@@ -24,75 +24,37 @@ require_command() {
   fi
 }
 
-require_command hdiutil
-require_command osascript
-require_command qlmanage
+require_command sips
+require_command python3
 
 [[ -d "${APP_PATH}" ]] || error "App bundle not found at ${APP_PATH}. Run ./scripts/export_macos_release.sh first."
 [[ -f "${BACKGROUND_SOURCE}" ]] || error "Installer background not found at ${BACKGROUND_SOURCE}."
 
 mkdir -p "${ARTIFACTS_DIR}"
-rm -f "${DMG_PATH}"
+DMGBUILD_ENV="${ROOT_DIR}/.build/dmgbuild-venv"
+DMGBUILD="${DMGBUILD_ENV}/bin/dmgbuild"
+
+if [[ ! -x "${DMGBUILD}" ]]; then
+  log "Preparing pinned dmgbuild environment"
+  python3 -m venv "${DMGBUILD_ENV}"
+  "${DMGBUILD_ENV}/bin/python" -m pip install --disable-pip-version-check -r "${ROOT_DIR}/scripts/requirements-macos-dmg.txt"
+fi
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wisprlocal-dmg.XXXXXX")"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
-cp -R "${APP_PATH}" "${TEMP_DIR}/"
-ln -s /Applications "${TEMP_DIR}/Applications"
-
 mkdir -p "${TEMP_DIR}/.background"
-qlmanage -t -s 1600 -o "${TEMP_DIR}" "${BACKGROUND_SOURCE}" >/dev/null 2>&1
-BACKGROUND_PNG="${TEMP_DIR}/CortexaInstallerBackground.svg.png"
+BACKGROUND_PNG="${TEMP_DIR}/.background/installation.png"
+sips -s format png "${BACKGROUND_SOURCE}" --out "${BACKGROUND_PNG}" >/dev/null
 [[ -f "${BACKGROUND_PNG}" ]] || error "Could not render installer background."
-mv "${BACKGROUND_PNG}" "${TEMP_DIR}/.background/installation.png"
 
-RW_DMG_PATH="${ARTIFACTS_DIR}/.Cortexa-rw-$$.dmg"
-MOUNT_POINT=""
-
-log "Creating writable DMG staging image"
-hdiutil create \
-  -volname "${VOLUME_NAME}" \
-  -srcfolder "${TEMP_DIR}" \
-  -ov \
-  -format UDRW \
-  "${RW_DMG_PATH}"
-
-ATTACH_OUTPUT="$(hdiutil attach "${RW_DMG_PATH}" -nobrowse -noautoopen)"
-MOUNT_POINT="$(printf '%s\n' "${ATTACH_OUTPUT}" | awk '/\/Volumes\// {print $3; exit}')"
-[[ -n "${MOUNT_POINT}" ]] || error "Could not determine the mounted DMG path."
-detach_mount() {
-  hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null 2>&1 || true
-}
-trap 'detach_mount; rm -f "${RW_DMG_PATH}"; rm -rf "${TEMP_DIR}"' EXIT
-
-osascript <<EOF
-tell application "Finder"
-    tell disk "${VOLUME_NAME}"
-        open
-        delay 1
-        set installerWindow to container window
-    end tell
-    tell installerWindow
-        set current view to icon view
-        set toolbar visible to false
-        set statusbar visible to false
-        set bounds to {120, 120, 920, 620}
-        set viewOptions to icon view options
-        set background picture of icon view options of installerWindow to file ".background:installation.png"
-        set position of item "Cortexa.app" to {190, 260}
-        set position of item "Applications" to {610, 260}
-        close
-    end tell
-end tell
-EOF
-
-detach_mount
-
-log "Creating compressed DMG at ${DMG_PATH}"
-hdiutil convert "${RW_DMG_PATH}" \
-  -format UDZO \
-  -ov \
-  -o "${DMG_PATH}" >/dev/null
+log "Creating Finder-layout DMG at ${DMG_PATH}"
+"${DMGBUILD}" \
+  --settings "${ROOT_DIR}/scripts/macos_dmg_settings.py" \
+  -D "app=${APP_PATH}" \
+  -D "background=${BACKGROUND_PNG}" \
+  "${VOLUME_NAME}" \
+  "${DMG_PATH}"
 
 if [[ -n "${CODE_SIGN_IDENTITY:-}" ]]; then
   log "Signing DMG"
