@@ -20,6 +20,10 @@
 
 ## Fixes
 
+- 2026-09-25: DMG-Finder-Hintergrund zuverlässig gespeichert und Installationsbuild aktualisiert.
+  - Dateien: `scripts/create_macos_dmg.sh`, `scripts/macos_dmg_settings.py`, `scripts/requirements-macos-dmg.txt`, `scripts/archive_macos_release.sh`, `apps/macos/AppShell/Resources/CortexaInstallerBackground.svg`, `Tests/DocsContractTests/DocsContractTests.swift`, `docs/distribution.md`, `VERSION`
+  - Funktionalität: AppleScript-/Finder-Automation wurde durch direkt geschriebene Finder-Metadaten mit `dmgbuild` ersetzt. Das Motiv passt zur 800 × 500-Fensterfläche; App, Programme-Link und Pfeil sind im erzeugten DMG visuell geprüft. Das Archiv-Skript akzeptiert nun einen separaten Ausgabeort, um bestehende Archive beim lokalen Versionsbuild zu erhalten. Version `0.32.3`.
+
 - 2026-09-15: Modellverwaltung zeigt alle Modelle im äußeren Settings-Scrollbereich und erhält ein minimalistisches DMG-Installationsmotiv nach dem Referenzlayout.
   - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `scripts/create_macos_dmg.sh`, `apps/macos/AppShell/Resources/CortexaInstallerBackground.svg`, `VERSION`
   - Funktionalität: Tabellen- und Listenhöhe werden aus der Modellanzahl berechnet, sodass keine Modelle mehr durch einen zu kleinen eingebetteten Bereich abgeschnitten werden. Das DMG verwendet einen hellen, minimalistischen Finder-Hintergrund mit gestricheltem Zieh-Hinweis; das korrekte Cortexa-Logo kommt weiterhin direkt aus dem signierten App-Bundle. Die Version wurde auf `0.32.2` angehoben.
