@@ -77,6 +77,15 @@ enum PermissionStatus: String {
     }
 }
 
+@MainActor
+final class VoiceModelOperationStore: ObservableObject {
+    @Published private(set) var states: [String: VoiceModelOperationKind] = [:]
+
+    func replaceStates(_ states: [String: VoiceModelOperationKind]) {
+        self.states = states
+    }
+}
+
 protocol DictationRuntimeControlling: AnyObject {
     var onStatus: ((String) -> Void)? { get set }
     var onDiagnostic: ((String) -> Void)? { get set }
@@ -683,7 +692,7 @@ final class MacAppState: ObservableObject {
     @Published private(set) var voiceProviders: [VoiceProviderDescriptor] = []
     @Published private(set) var voiceModels: [VoiceModelDescriptor] = []
     @Published private(set) var installedVoiceModelFileNames: Set<String> = []
-    @Published private(set) var voiceModelOperationStates: [String: VoiceModelOperationKind] = [:]
+    let voiceModelOperationStore = VoiceModelOperationStore()
 
     @Published var recordingStatus: String = "Idle"
     @Published var diagnosticsText: String = "Initializing ASR runtime..."
@@ -949,8 +958,12 @@ final class MacAppState: ObservableObject {
         voiceModels.filter { $0.providerID == selectedVoiceProviderID }
     }
 
+    var allVoiceModels: [VoiceModelDescriptor] {
+        voiceModels
+    }
+
     var visibleSelectableVoiceModels: [VoiceModelDescriptor] {
-        visibleVoiceModels
+        voiceModels
     }
 
     var selectedVoiceModel: VoiceModelDescriptor? {
@@ -959,6 +972,10 @@ final class MacAppState: ObservableObject {
 
     var selectedVoiceModelSupportsTranslation: Bool {
         selectedVoiceModel?.supportsTranslationToEnglish ?? false
+    }
+
+    var selectedVoiceModelSupportsLiveTranscription: Bool {
+        selectedVoiceModel?.supportsLiveTranscription ?? true
     }
 
     var speechTranslationAvailable: Bool {
@@ -1611,10 +1628,10 @@ final class MacAppState: ObservableObject {
                 self?.installedVoiceModelFileNames = fileNames
             },
             currentVoiceModelOperationStates: { [weak self] in
-                self?.voiceModelOperationStates ?? [:]
+                self?.voiceModelOperationStore.states ?? [:]
             },
             setVoiceModelOperationStates: { [weak self] states in
-                self?.voiceModelOperationStates = states
+                self?.voiceModelOperationStore.replaceStates(states)
             },
             appendDiagnostic: { [weak self] line in
                 self?.appendDiagnostic(line)

@@ -553,7 +553,11 @@ final class DictationRuntime: @unchecked Sendable {
                 )
                 accessibilityPermissionGranted = accessibilityGranted
 
-                let effectiveMode: DictationMode = accessibilityGranted ? options.mode : .finalize
+                let modelRequiresOfflineTranscription =
+                    options.selectedVoiceProviderID == VoiceProviderID.nvidiaParakeet.rawValue
+                let requestedMode: DictationMode = modelRequiresOfflineTranscription
+                    ? .finalize : options.mode
+                let effectiveMode: DictationMode = accessibilityGranted ? requestedMode : .finalize
                 try configureEngine(for: options, runtimeMode: effectiveMode)
 
                 if accessibilityGranted {
@@ -639,6 +643,7 @@ final class DictationRuntime: @unchecked Sendable {
             publishDebug("dictation.stop.begin")
             stopAudioCapture()
             let final = try await whisperEngine.stopStreaming()
+            insertionQueue.sync {}
             let detectedLanguageCode = resolvedLanguageCode(from: final)
             let effectiveLocale = locale(for: detectedLanguageCode) ?? runningLocale
             let normalized = sanitizeTranscriptArtifacts(
@@ -1383,7 +1388,12 @@ final class DictationRuntime: @unchecked Sendable {
         let preset = selectEnginePreset(options: options, runtimeMode: runtimeMode)
         let modelDescriptor = selectedVoiceModelDescriptor(for: options, runtime: runtime)
         let modelFile = modelDescriptor.localFileName ?? runtime.defaultModelFileName
-        let modelURL = runtime.modelsDirectoryURL.appendingPathComponent(modelFile)
+        let modelURL: URL
+        if modelDescriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue {
+            modelURL = try VoiceModelInstaller.parakeetModelURL(fileName: modelFile)
+        } else {
+            modelURL = runtime.modelsDirectoryURL.appendingPathComponent(modelFile)
+        }
 
         let latencyProfile = selectLatencyProfile(
             options: options, preset: preset, runtimeMode: runtimeMode)
@@ -1396,7 +1406,8 @@ final class DictationRuntime: @unchecked Sendable {
             initialPrompt: options.asrInitialPrompt,
             translationMode: translationMode,
             modelID: modelFile,
-            backend: .whisperCpp,
+            backend: modelDescriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue ? .nemoSpeech : .whisperCpp,
+            maximumRecordingDurationSeconds: modelDescriptor.maximumRecordingDurationSeconds,
             latencyProfile: latencyProfile,
             threadCount: preset.threadCount,
             beamSize: preset.beamSize,
@@ -1510,8 +1521,13 @@ final class DictationRuntime: @unchecked Sendable {
         for options: DictationStartOptions,
         runtime: InstalledWhisperRuntime
     ) -> VoiceModelDescriptor {
-        let includeParakeet = false
-        let availableModelFiles = Set(runtime.availableModelFileNames)
+        let includeParakeet = true
+        var availableModelFiles = Set(runtime.availableModelFileNames)
+        if let parakeetModel = try? VoiceModelInstaller.parakeetModelURL(
+            fileName: "parakeet-tdt-0.6b-v3.q8_0.gguf"),
+            FileManager.default.fileExists(atPath: parakeetModel.path) {
+            availableModelFiles.insert(parakeetModel.lastPathComponent)
+        }
         let catalogModels = LocalVoiceModelCatalog.availableModels(includeParakeet: includeParakeet)
         let fallbackDescriptor =
             LocalVoiceModelCatalog.model(
@@ -1539,18 +1555,11 @@ final class DictationRuntime: @unchecked Sendable {
             return fallbackDescriptor
         }
 
-        if resolvedDescriptor.providerID != VoiceProviderID.whisperCpp.rawValue {
-            return fallbackDescriptor
-        }
-
-        if let requiredLanguageCode = resolvedDescriptor.languageCode,
-            options.language != .auto,
-            requiredLanguageCode != options.language.rawValue
-        {
+        if !model(resolvedDescriptor, supports: options.language) {
             let compatibleOverride = catalogModels.first {
                 $0.providerID == resolvedDescriptor.providerID
                     && $0.id != resolvedDescriptor.id
-                    && $0.languageCode == nil
+                    && model($0, supports: options.language)
                     && modelFileExists($0, availableModelFiles: availableModelFiles)
             }
             resolvedDescriptor = compatibleOverride ?? fallbackDescriptor
@@ -1571,6 +1580,13 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         return fallbackDescriptor
+    }
+
+    private func model(_ descriptor: VoiceModelDescriptor, supports language: DictationLanguage) -> Bool {
+        if language == .auto { return descriptor.supportsAutomaticLanguageDetection }
+        guard descriptor.supportsLanguageSelection else { return false }
+        if let fixedCode = descriptor.languageCode, fixedCode != language.rawValue { return false }
+        return descriptor.supportedLanguageCodes?.contains(language.rawValue) ?? true
     }
 
     private func modelFileExists(

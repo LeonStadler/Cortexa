@@ -19,6 +19,42 @@ final class SessionConfigurationBuilderTests: XCTestCase {
         )
     }
 
+    func testParakeetSelectionUsesFinalizeModeEvenWhenLiveInsertionIsEnabled() {
+        let parakeet = VoiceModelDescriptor(
+            id: "parakeet.multilingual",
+            providerID: VoiceProviderID.nvidiaParakeet.rawValue,
+            displayName: "Parakeet TDT v3",
+            languageCode: nil,
+            languageScope: .multilingual,
+            supportsTranslationToEnglish: false,
+            supportsLiveTranscription: false,
+            supportsAutomaticLanguageDetection: true,
+            supportsLanguageSelection: false,
+            supportedLanguageCodes: ["de", "en", "fr"],
+            speedScore: 10,
+            accuracyScore: 8,
+            sizeLabel: "runtime managed",
+            installState: .downloadable,
+            localFileName: "parakeet-tdt-0.6b-v3.q8_0.gguf",
+            downloadIdentifier: "parakeet-tdt"
+        )
+        let result = SessionConfigurationBuilder().build(
+            from: makeInput(
+                selectedLanguage: .auto,
+                translationOutputMode: .english,
+                selectedVoiceProviderID: VoiceProviderID.nvidiaParakeet.rawValue,
+                selectedVoiceModelID: parakeet.id,
+                voiceModels: [parakeet],
+                installedVoiceModelFileNames: ["parakeet-tdt-0.6b-v3.q8_0.gguf"]
+            )
+        )
+
+        XCTAssertEqual(result.mode, DictationMode.finalize)
+        XCTAssertEqual(result.selectedVoiceProviderID, VoiceProviderID.nvidiaParakeet.rawValue)
+        XCTAssertEqual(result.selectedVoiceModelID, parakeet.id)
+        XCTAssertEqual(result.translationOutput, TranslationOutputMode.original)
+    }
+
     func testBuildSelectsExpectedModeForEveryStreamingAndDeliveryCombination() {
         let builder = SessionConfigurationBuilder()
 
@@ -143,6 +179,7 @@ final class SessionConfigurationBuilderTests: XCTestCase {
     private func makeInput(
         streamingEnabled: Bool = true,
         selectedLanguage: DictationLanguage = .german,
+        translationOutputMode: TranslationOutputMode = .original,
         finalResultDeliveryMode: FinalResultDeliveryMode = .insert,
         muteMusicWhileDictating: Bool = false,
         asrInitialPrompt: String? = nil,
@@ -158,7 +195,7 @@ final class SessionConfigurationBuilderTests: XCTestCase {
         SessionConfigurationInput(
             streamingEnabled: streamingEnabled,
             selectedLanguage: selectedLanguage,
-            translationOutputMode: .original,
+            translationOutputMode: translationOutputMode,
             performanceProfile: .auto,
             selectedVoiceProviderID: selectedVoiceProviderID,
             selectedVoiceModelID: selectedVoiceModelID,

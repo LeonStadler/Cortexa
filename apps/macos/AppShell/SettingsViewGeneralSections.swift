@@ -1,3 +1,4 @@
+import ASRCore
 import SwiftUI
 
 extension SettingsView {
@@ -39,6 +40,34 @@ extension SettingsView {
                             "Checks in the background via Sparkle to see whether a newer version is available."
                         )
                     )
+                }
+            }
+            let runtime = VoiceModelInstaller.nemoRuntimeStatusSnapshot()
+            LabeledContent("NeMo-Speech Runtime") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(runtime.isAvailable
+                        ? text(
+                            "\(runtime.isManaged ? "Cortexa-verwaltet" : "Extern erkannt") · Version \(runtime.version ?? "unbekannt")",
+                            "\(runtime.isManaged ? "Managed by Cortexa" : "External runtime detected") · version \(runtime.version ?? "unknown")"
+                        )
+                        : text(
+                            "Keine kompatible Runtime · wird bei der Parakeet-Installation eingerichtet",
+                            "No compatible runtime · Cortexa installs it with Parakeet"
+                        ))
+                        .font(.footnote)
+                        .foregroundStyle(runtime.isAvailable ? Color.secondary : Color.orange)
+                    if let diagnostic = runtime.diagnostic {
+                        Text(diagnostic).font(.caption).foregroundStyle(.secondary)
+                    }
+                    let hasRuntimeDependentModel = appState.allVoiceModels.contains {
+                        $0.runtimeID == "nemo-speech" && appState.isVoiceModelInstalled($0)
+                    }
+                    if runtime.isManaged && !hasRuntimeDependentModel {
+                        Button(text("Nicht mehr benötigte Runtime bereinigen", "Remove unused runtime")) {
+                            appState.retryUnusedNemoRuntimeCleanup()
+                        }
+                        .font(.footnote)
+                    }
                 }
             }
         }
@@ -461,7 +490,13 @@ extension SettingsView {
                     selection: $appState.selectedVoiceProviderID
                 ) {
                     ForEach(appState.voiceProviders) { provider in
-                        Text(provider.displayName).tag(provider.id)
+                        Text(
+                            provider.isAvailable
+                                ? provider.displayName
+                                : "\(provider.displayName) · \(text("Runtime fehlt", "runtime missing"))"
+                        )
+                        .tag(provider.id)
+                        .disabled(!provider.isAvailable)
                     }
                 }
                 .labelsHidden()

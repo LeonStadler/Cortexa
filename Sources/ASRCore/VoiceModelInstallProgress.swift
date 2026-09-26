@@ -3,6 +3,8 @@ import Foundation
 public struct VoiceModelInstallProgress: Sendable, Equatable {
     public enum Phase: String, Sendable, Equatable {
         case preparing
+        case installingRuntime
+        case verifyingRuntime
         case downloading
         case finalizing
     }

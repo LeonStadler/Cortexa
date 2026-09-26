@@ -169,10 +169,10 @@
 
             XCTAssertTrue(controller.isVoiceModelInstalled(englishModel))
             XCTAssertTrue(controller.canUseVoiceModel(englishModel, for: .english))
-            XCTAssertTrue(controller.canUseVoiceModel(englishModel, for: .auto))
+            XCTAssertFalse(controller.canUseVoiceModel(englishModel, for: .auto))
         }
 
-        func testSanitizeKeepsAutoLanguageForEnglishOnlyModel() {
+        func testSanitizeSelectsEnglishForEnglishOnlyModelWithoutAutoDetection() {
             let englishModel = LocalVoiceModelCatalog.model(id: "whisper.standard.en")!
             let state = SpeechModelControllerState(
                 selectedLanguage: .auto,
@@ -189,7 +189,7 @@
 
             controller.sanitizeSpeechModelSelections()
 
-            XCTAssertEqual(state.selectedLanguage, .auto)
+            XCTAssertEqual(state.selectedLanguage, .english)
         }
 
         func testLanguageOptionsAndTranslationCapabilityFollowSelectedModel() {
@@ -208,7 +208,7 @@
             )
             let controller = makeController(state: state)
 
-            XCTAssertEqual(controller.voiceLanguageOptions(for: englishModel), [.auto, .english])
+            XCTAssertEqual(controller.voiceLanguageOptions(for: englishModel), [.english])
             XCTAssertFalse(englishModel.supportsTranslationToEnglish)
 
             XCTAssertEqual(

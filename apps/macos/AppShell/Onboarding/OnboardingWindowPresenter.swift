@@ -51,6 +51,7 @@ final class OnboardingWindowPresenter: NSObject, NSWindowDelegate {
                 onboardingStore: onboardingStore,
                 coordinator: coordinator
             )
+            .environmentObject(appState.voiceModelOperationStore)
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Cortexa"

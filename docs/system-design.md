@@ -19,6 +19,7 @@ Cortexa is an offline-first dictation/transcription product for Apple platforms.
 - model registry/checksum verification
 - bundled runtime installer (app resources -> local app-support runtime)
 - local speech-model catalog with explicit provider/model descriptors, install state, and per-language selection
+- optional NVIDIA NeMo-Speech.cpp Parakeet TDT v3 backend; model descriptors declare runtime dependencies, and the pinned 0.1.0 Apple Silicon Metal runtime is SHA-256 verified and installed atomically in Cortexa Application Support when no compatible external runtime is found. External runtimes are read-only and never removed. GGUF model files stay in the separate NeMo model cache. A runtime dependency scan removes the Cortexa-owned runtime after the final dependent model is removed, synchronized with active NeMo subprocesses. Model capabilities drive language, live-mode, translation, and maximum-recording-duration compatibility; the engine fails explicitly at model duration limits instead of truncating the oldest captured audio. Parakeet uses automatic language detection and full-utterance offline transcription.
 
 2. `AudioCore`
 

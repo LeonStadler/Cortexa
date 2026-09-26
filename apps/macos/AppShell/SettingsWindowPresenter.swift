@@ -41,7 +41,9 @@ final class SettingsWindowPresenter {
 
     private func makeWindow() -> NSWindow {
         let hostingController = NSHostingController(
-            rootView: SettingsView().environmentObject(appState))
+            rootView: SettingsView()
+                .environmentObject(appState)
+                .environmentObject(appState.voiceModelOperationStore))
         let window = NSWindow(contentViewController: hostingController)
         window.title = settingsWindowTitle
         window.toolbarStyle = .unified

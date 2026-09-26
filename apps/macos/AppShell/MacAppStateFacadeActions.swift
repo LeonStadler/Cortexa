@@ -121,8 +121,16 @@ extension MacAppState {
         speechModelController.installVoiceModel(descriptor)
     }
 
+    func cancelVoiceModelInstallation(_ descriptor: VoiceModelDescriptor) {
+        speechModelController.cancelVoiceModelInstallation(descriptor)
+    }
+
     func removeVoiceModel(_ descriptor: VoiceModelDescriptor) {
         speechModelController.removeVoiceModel(descriptor)
+    }
+
+    func retryUnusedNemoRuntimeCleanup() {
+        speechModelController.retryUnusedNemoRuntimeCleanup()
     }
 
     func setSelectedVoiceModel(_ descriptor: VoiceModelDescriptor) {

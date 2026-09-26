@@ -3,6 +3,7 @@ import Foundation
 public enum ASRBackend: String, Sendable, Codable {
     case whisperCpp
     case coreMLHybrid
+    case nemoSpeech
 }
 
 public enum LatencyProfile: String, Sendable, Codable {
@@ -21,6 +22,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
     public let translationMode: ASRTranslationMode
     public let modelID: String
     public let backend: ASRBackend
+    public let maximumRecordingDurationSeconds: Int?
     public let latencyProfile: LatencyProfile
     public let threadCount: Int
     public let beamSize: Int
@@ -32,6 +34,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
         translationMode: ASRTranslationMode = .original,
         modelID: String,
         backend: ASRBackend,
+        maximumRecordingDurationSeconds: Int? = nil,
         latencyProfile: LatencyProfile,
         threadCount: Int? = nil,
         beamSize: Int? = nil,
@@ -42,6 +45,7 @@ public struct ASRConfig: Sendable, Codable, Equatable {
         self.translationMode = translationMode
         self.modelID = modelID
         self.backend = backend
+        self.maximumRecordingDurationSeconds = maximumRecordingDurationSeconds
         self.latencyProfile = latencyProfile
         self.threadCount = threadCount ?? 0
         self.beamSize = beamSize ?? (latencyProfile == .streaming ? 1 : 5)
@@ -118,6 +122,7 @@ public enum WhisperEngineError: Error, LocalizedError {
     case engineAlreadyRunning
     case engineNotRunning
     case invalidAudioBuffer
+    case recordingDurationExceeded(seconds: Int)
     case backendUnavailable(String)
 
     public var errorDescription: String? {
@@ -130,6 +135,8 @@ public enum WhisperEngineError: Error, LocalizedError {
             return "Streaming has not been started."
         case .invalidAudioBuffer:
             return "Audio input buffer is invalid."
+        case let .recordingDurationExceeded(seconds):
+            return "Recording exceeded the model's maximum supported duration of \(seconds) seconds. Stop and start a new dictation."
         case let .backendUnavailable(reason):
             return "ASR backend unavailable: \(reason)"
         }

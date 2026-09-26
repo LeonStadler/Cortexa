@@ -1,6 +1,10 @@
 import ASRCore
 import SwiftUI
 
+enum SpeechModelProviderFilter {
+    static let allProvidersID = "__all_providers__"
+}
+
 enum SpeechModelAvailabilityFilter: String, CaseIterable, Identifiable {
     case all
     case installed
@@ -157,6 +161,7 @@ extension SettingsView {
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 180)
+                .disabled(appState.selectedVoiceModel?.runtimeID == "nemo-speech")
             } label: {
                 SettingsFieldLabel(
                     title: text("Qualitätsprofil", "Quality profile"),
@@ -167,14 +172,9 @@ extension SettingsView {
                 )
             }
 
-            Text(
-                text(
-                    "Auto passt das Preset an Gerät und Laufzeit an. Schnell priorisiert Reaktionszeit, Ausgeglichen balanciert Stabilität und Tempo, Präzise investiert mehr in die finale Erkennung.",
-                    "Auto adapts the preset to the device and runtime. Fast prioritizes responsiveness, Balanced trades speed for stability, and Accurate spends more on the final recognition pass."
-                )
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            Text(qualityProfileExplanation)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
             if let selectedModel = appState.selectedVoiceModel {
                 LabeledContent(text("Modell-Details", "Model details")) {
@@ -195,6 +195,19 @@ extension SettingsView {
                 }
             }
         }
+    }
+
+    private var qualityProfileExplanation: String {
+        if appState.selectedVoiceModel?.runtimeID == "nemo-speech" {
+            return text(
+                "Parakeet verwendet feste Einstellungen der NeMo-Runtime. Das Qualitätsprofil gilt derzeit nur für Whisper und ist deshalb deaktiviert.",
+                "Parakeet uses fixed NeMo runtime settings. The quality profile currently applies only to Whisper, so it is disabled."
+            )
+        }
+        return text(
+            "Auto passt das Preset an Gerät und Laufzeit an. Schnell priorisiert Reaktionszeit, Ausgeglichen balanciert Stabilität und Tempo, Präzise investiert mehr in die finale Erkennung.",
+            "Auto adapts the preset to the device and runtime. Fast prioritizes responsiveness, Balanced trades speed for stability, and Accurate spends more on the final recognition pass."
+        )
     }
 
     @ViewBuilder
@@ -242,12 +255,16 @@ extension SettingsView {
     @ViewBuilder
     var installedSpeechModelsContent: some View {
         if speechHasMatches {
-            LabeledContent(text("Modellfilter", "Model filter")) {
+            LabeledContent(text("Suche", "Search")) {
                 modelSearchField
             }
 
             LabeledContent(text("Status", "Status")) {
                 modelStatusFilter
+            }
+
+            LabeledContent(text("Anbieter", "Provider")) {
+                modelProviderFilter
             }
 
             LabeledContent(text("Sprache", "Language")) {
@@ -275,17 +292,51 @@ extension SettingsView {
     }
 
     private var modelSearchField: some View {
-        TextField(
-            text("Name, Sprache oder ID", "Name, language, or ID"),
-            text: $speechModelSearchText
-        )
-        .accessibilityLabel(text("Modelle filtern", "Filter models"))
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+
+            TextField("", text: $speechModelSearchText)
+                .textFieldStyle(.plain)
+                .accessibilityLabel(text("Modelle suchen", "Search models"))
+
+            if !speechModelSearchText.isEmpty {
+                Button {
+                    speechModelSearchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(text("Suche löschen", "Clear search"))
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 30)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        }
     }
 
     private var modelStatusFilter: some View {
         Picker(text("Modellstatus", "Model status"), selection: $speechModelAvailabilityFilter) {
             ForEach(SpeechModelAvailabilityFilter.allCases) { filter in
                 Text(filter.localizedDisplayName(language: effectiveLanguage)).tag(filter)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+    }
+
+    private var modelProviderFilter: some View {
+        Picker(text("Modellanbieter", "Model provider"), selection: $speechModelProviderFilter) {
+            Text(text("Alle Anbieter", "All providers"))
+                .tag(SpeechModelProviderFilter.allProvidersID)
+            ForEach(modelManagementProviders) { provider in
+                Text(provider.displayName).tag(provider.id)
             }
         }
         .pickerStyle(.menu)
@@ -315,10 +366,11 @@ extension SettingsView {
                 }
             }
 
-            if let operation = appState.voiceModelOperationState(for: model) {
+            if let operation = voiceModelOperationStore.states[model.id] {
                 VoiceModelOperationProgressView(
                     operation: operation,
-                    german: effectiveLanguage.embeddedInterfaceCode.hasPrefix("de")
+                    german: effectiveLanguage.embeddedInterfaceCode.hasPrefix("de"),
+                    onCancel: { appState.cancelVoiceModelInstallation(model) }
                 )
             }
         } label: {
@@ -329,7 +381,9 @@ extension SettingsView {
     private var filteredVoiceModelsForManagement: [VoiceModelDescriptor] {
         let query = speechModelSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        return appState.visibleVoiceModels.filter { model in
+        return appState.allVoiceModels.filter { model in
+            let matchesProvider = speechModelProviderFilter == SpeechModelProviderFilter.allProvidersID
+                || model.providerID == speechModelProviderFilter
             let matchesAvailability: Bool = {
                 switch speechModelAvailabilityFilter {
                 case .all:
@@ -353,9 +407,27 @@ extension SettingsView {
             let matchesSearch = query.isEmpty
                 || model.displayName.lowercased().contains(query)
                 || model.id.lowercased().contains(query)
+                || model.providerID.lowercased().contains(query)
+                || (modelManagementProviders.first(where: { $0.id == model.providerID })?.displayName
+                    .lowercased().contains(query) ?? false)
                 || (model.languageCode?.lowercased().contains(query) ?? false)
-            return matchesAvailability && matchesLanguage && matchesSearch
+            return matchesProvider && matchesAvailability && matchesLanguage && matchesSearch
         }
+    }
+
+    private var modelManagementProviders: [VoiceProviderDescriptor] {
+        let registeredProviders = appState.voiceProviders
+        let registeredIDs = Set(registeredProviders.map(\.id))
+        let modelProviderIDs = Set(appState.allVoiceModels.map(\.providerID))
+        let unregisteredProviders = modelProviderIDs.subtracting(registeredIDs).sorted().map {
+            VoiceProviderDescriptor(
+                id: $0,
+                displayName: $0,
+                summary: "",
+                isAvailable: false
+            )
+        }
+        return registeredProviders + unregisteredProviders
     }
 
     private func voiceModelSummary(for model: VoiceModelDescriptor) -> some View {
@@ -363,8 +435,12 @@ extension SettingsView {
             Text(model.displayName)
             Text("\(model.languageCode?.uppercased() ?? "ALL") • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            if model.providerID == VoiceProviderID.nvidiaParakeet.rawValue {
+                Link("NVIDIA Parakeet TDT v3 · CC BY 4.0", destination: URL(string: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3")!)
+                    .font(.footnote)
+            }
         }
     }
 
@@ -372,7 +448,7 @@ extension SettingsView {
         Binding(
             get: { appState.selectedVoiceModelID },
             set: { newValue in
-                guard let model = appState.visibleVoiceModels.first(where: { $0.id == newValue })
+                guard let model = appState.allVoiceModels.first(where: { $0.id == newValue })
                 else { return }
                 if appState.isVoiceModelInstalled(model) {
                     appState.setSelectedVoiceModel(model)
@@ -411,6 +487,13 @@ extension SettingsView {
     private func voiceModelInstallationMessage(for model: VoiceModelDescriptor) -> String {
         let language = model.languageCode?.uppercased() ?? text("mehrsprachig", "multilingual")
         let translation = model.supportsTranslationToEnglish ? text("ja", "yes") : text("nein", "no")
+        if model.providerID == VoiceProviderID.nvidiaParakeet.rawValue,
+            VoiceModelInstaller.resolveNemoSpeechCLI() == nil {
+            return text(
+                "\(model.displayName)\nSprache: \(language)\nGröße: \(model.sizeLabel)\nÜbersetzung: \(translation)\n\nCortexa richtet zuerst die passende NeMo-Speech-Runtime ein und lädt danach das Modell herunter.",
+                "\(model.displayName)\nLanguage: \(language)\nSize: \(model.sizeLabel)\nTranslation: \(translation)\n\nCortexa will first install the compatible NeMo-Speech runtime, then download the model."
+            )
+        }
         return text(
             "\(model.displayName)\nSprache: \(language)\nGröße: \(model.sizeLabel)\nÜbersetzung: \(translation)\n\nDas Modell wird heruntergeladen und danach automatisch ausgewählt.",
             "\(model.displayName)\nLanguage: \(language)\nSize: \(model.sizeLabel)\nTranslation: \(translation)\n\nThe model will download and then be selected automatically."
@@ -419,17 +502,10 @@ extension SettingsView {
 
     @ViewBuilder
     private func voiceModelStatusLabel(for model: VoiceModelDescriptor) -> some View {
-        if let operation = appState.voiceModelOperationState(for: model) {
+        if let operation = voiceModelOperationStore.states[model.id] {
             switch operation {
-            case .installing(let progress):
-                Text(
-                    text(
-                        "Installiere \(progress.percentComplete) %",
-                        "Installing \(progress.percentComplete)%"
-                    )
-                )
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
+            case .installing:
+                EmptyView()
             case .removing:
                 Text(text("Wird entfernt …", "Removing …"))
                     .font(.footnote.weight(.medium))
@@ -457,12 +533,23 @@ extension SettingsView {
         if appState.isVoiceModelBusy(model) {
             EmptyView()
         } else if appState.isVoiceModelInstalled(model) {
+            if model.runtimeID == "nemo-speech",
+                appState.voiceProviders.first(where: { $0.id == model.providerID })?.isAvailable != true {
+                Button(text("Runtime installieren", "Install runtime")) {
+                    appState.installVoiceModel(model)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
             Button(text("Als Standard verwenden", "Use as default")) {
                 appState.setSelectedVoiceModel(model)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .disabled(appState.selectedVoiceModelID == model.id)
+            .disabled(
+                appState.selectedVoiceModelID == model.id
+                    || appState.voiceProviders.first(where: { $0.id == model.providerID })?.isAvailable
+                        != true)
 
             if model.installState != .bundled && model.installState != .requiredFirstRun {
                 Button(role: .destructive) {
@@ -570,7 +657,17 @@ extension SettingsView {
             }
             .disabled(
                 appState.finalResultDeliveryMode == .clipboardOnly
+                    || !appState.selectedVoiceModelSupportsLiveTranscription
                     || !appState.dictationCapability.allowsDirectInsertion)
+
+            if !appState.selectedVoiceModelSupportsLiveTranscription {
+                Text(text(
+                    "Parakeet verarbeitet die Aufnahme erst nach dem Stoppen; Live-Text und Live-AI bleiben daher ausgeschaltet.",
+                    "Parakeet processes the recording after you stop; live text and live AI therefore stay off."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
 
             Text(
                 text(

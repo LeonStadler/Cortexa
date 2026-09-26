@@ -268,6 +268,7 @@ struct PermissionRecoveryBanner: View {
 struct VoiceModelOperationProgressView: View {
     let operation: VoiceModelOperationKind
     let german: Bool
+    let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -306,6 +307,14 @@ struct VoiceModelOperationProgressView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
+            if case .installing = operation {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button(german ? "Download abbrechen" : "Cancel download", action: onCancel)
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -315,6 +324,10 @@ struct VoiceModelOperationProgressView: View {
         switch progress.phase {
         case .preparing:
             return german ? "Download wird vorbereitet …" : "Preparing download …"
+        case .installingRuntime:
+            return german ? "NeMo-Runtime wird installiert …" : "Installing NeMo runtime …"
+        case .verifyingRuntime:
+            return german ? "NeMo-Runtime wird geprüft …" : "Verifying NeMo runtime …"
         case .downloading:
             if let receivedBytes = progress.receivedBytes,
                 let totalBytes = progress.totalBytes,

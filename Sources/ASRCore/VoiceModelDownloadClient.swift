@@ -3,12 +3,14 @@ import Foundation
 enum VoiceModelDownloadError: Error {
     case missingDestination
     case missingTemporaryDownloadLocation
+    case invalidHTTPResponse(Int)
 }
 
 final class VoiceModelDownloadClient: NSObject, @unchecked Sendable {
     private let fileManager: FileManager
     private var progressHandler: (@Sendable (VoiceModelInstallProgress) -> Void)?
     private var downloadContinuation: CheckedContinuation<Void, Error>?
+    private var activeDownloadTask: URLSessionDownloadTask?
     private var destinationURL: URL?
     private var hasFinished = false
     private var lastReportedFraction: Double = 0
@@ -37,16 +39,31 @@ final class VoiceModelDownloadClient: NSObject, @unchecked Sendable {
             VoiceModelInstallProgress(phase: .preparing, fractionCompleted: 0)
         )
 
-        try await withCheckedThrowingContinuation {
-            (continuation: CheckedContinuation<Void, Error>) in
-            downloadContinuation = continuation
-            session.downloadTask(with: sourceURL).resume()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, Error>) in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                downloadContinuation = continuation
+                let task = session.downloadTask(with: sourceURL)
+                activeDownloadTask = task
+                if Task.isCancelled {
+                    task.cancel()
+                } else {
+                    task.resume()
+                }
+            }
+        } onCancel: {
+            self.activeDownloadTask?.cancel()
         }
     }
 
     private func finish(with result: Result<Void, Error>) {
         guard !hasFinished else { return }
         hasFinished = true
+        activeDownloadTask = nil
 
         switch result {
         case .success:
@@ -94,6 +111,11 @@ extension VoiceModelDownloadClient: URLSessionDownloadDelegate {
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
+        if let response = downloadTask.response as? HTTPURLResponse,
+            !(200...299).contains(response.statusCode) {
+            finish(with: .failure(VoiceModelDownloadError.invalidHTTPResponse(response.statusCode)))
+            return
+        }
         guard let destinationURL else {
             finish(with: .failure(VoiceModelDownloadError.missingDestination))
             return

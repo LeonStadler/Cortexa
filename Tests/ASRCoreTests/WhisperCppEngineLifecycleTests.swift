@@ -4,6 +4,41 @@ import XCTest
 @testable import ASRCore
 
 final class WhisperCppEngineLifecycleTests: XCTestCase {
+    func testPushAudioFailsInsteadOfTruncatingPastModelRecordingLimit() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("parakeet_recording_limit_\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let cliURL = root.appendingPathComponent("nemo-speech")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: cliURL)
+        try fm.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: cliURL.path)
+        let modelURL = root.appendingPathComponent("parakeet.gguf")
+        try Data([0x00, 0x01, 0x02]).write(to: modelURL)
+
+        let engine = WhisperCppEngine(nemoSpeechCLIPath: cliURL)
+        try engine.loadModel(
+            at: modelURL,
+            config: ASRConfig(
+                languageHint: "auto",
+                modelID: "parakeet.gguf",
+                backend: .nemoSpeech,
+                maximumRecordingDurationSeconds: 1,
+                latencyProfile: .quality
+            )
+        )
+        try engine.startStreaming()
+
+        let samples = [Float](repeating: 0, count: 16_001)
+        XCTAssertThrowsError(try samples.withUnsafeBufferPointer { buffer in
+            try engine.pushAudioPCM16kMono(buffer.baseAddress!, frameCount: buffer.count)
+        }) { error in
+            guard case WhisperEngineError.recordingDurationExceeded(seconds: 1) = error else {
+                return XCTFail("Expected explicit recording-duration error, got \(error)")
+            }
+        }
+    }
+
     func testResetStreamingClearsActiveSessionAndAllowsRestart() async throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("whisper_engine_lifecycle_\(UUID().uuidString)")

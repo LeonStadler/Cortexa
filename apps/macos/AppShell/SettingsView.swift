@@ -6,6 +6,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var appState: MacAppState
+    @EnvironmentObject var voiceModelOperationStore: VoiceModelOperationStore
     @AppStorage("wispr.uiLanguage") var uiLanguageRaw: String = AppLanguage.system.rawValue
 
     @State var diagnosticsExpanded = false
@@ -18,6 +19,7 @@ struct SettingsView: View {
     @State var addProviderDisclosureExpanded = false
     @State var speechModelSearchText: String = ""
     @State var speechModelAvailabilityFilter: SpeechModelAvailabilityFilter = .all
+    @State var speechModelProviderFilter: String = SpeechModelProviderFilter.allProvidersID
     @State var speechModelLanguageFilter: SpeechModelLanguageFilter = .all
     @State var newDictionaryTerm: String = ""
     @State var newDictionaryLanguageCode: String = ""

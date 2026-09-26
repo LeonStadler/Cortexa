@@ -33,21 +33,22 @@ struct SessionConfigurationInput {
 
 struct SessionConfigurationBuilder {
     func build(from input: SessionConfigurationInput) -> DictationStartOptions {
-        DictationStartOptions(
-            mode: dictationMode(
+        let selectedModel = effectiveVoiceModelDescriptor(for: input.selectedLanguage, input: input)
+        let supportsLiveTranscription = selectedModel?.supportsLiveTranscription ?? true
+        return DictationStartOptions(
+            mode: !supportsLiveTranscription ? .finalize : dictationMode(
                 streamingEnabled: input.streamingEnabled,
                 deliveryMode: input.finalResultDeliveryMode
             ),
             language: input.selectedLanguage,
-            translationOutput: input.translationOutputMode,
+            translationOutput: selectedModel?.supportsTranslationToEnglish == false
+                ? .original
+                : input.translationOutputMode,
             performance: input.performanceProfile,
             selectedVoiceProviderID: effectiveVoiceProviderID(
-                for: input.selectedLanguage,
-                input: input
+                for: input.selectedLanguage, input: input
             ),
-            selectedVoiceModelID:
-                effectiveVoiceModelDescriptor(for: input.selectedLanguage, input: input)?.id
-                ?? input.selectedVoiceModelID,
+            selectedVoiceModelID: selectedModel?.id ?? input.selectedVoiceModelID,
             liveRewriteScope: input.liveRewriteScope,
             snippetRules: input.snippetRules,
             finalResultDeliveryMode: input.finalResultDeliveryMode,
@@ -135,17 +136,16 @@ struct SessionConfigurationBuilder {
         if !isVoiceModelInstalled(descriptor, input: input) {
             return false
         }
-        guard let languageCode = descriptor.languageCode else { return true }
-        return language == .auto || language.rawValue == languageCode
+        if language == .auto { return descriptor.supportsAutomaticLanguageDetection }
+        guard descriptor.supportsLanguageSelection else { return false }
+        if let languageCode = descriptor.languageCode, languageCode != language.rawValue { return false }
+        return descriptor.supportedLanguageCodes?.contains(language.rawValue) ?? true
     }
 
     private func isVoiceModelInstalled(
         _ descriptor: VoiceModelDescriptor,
         input: SessionConfigurationInput
     ) -> Bool {
-        guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else {
-            return descriptor.installState == .bundled
-        }
         guard let localFileName = descriptor.localFileName else { return false }
         return input.installedVoiceModelFileNames.contains(localFileName)
     }

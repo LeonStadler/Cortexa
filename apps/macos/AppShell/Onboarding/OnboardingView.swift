@@ -3,6 +3,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @ObservedObject var appState: MacAppState
+    @EnvironmentObject private var voiceModelOperationStore: VoiceModelOperationStore
     let onboardingStore: OnboardingStore
     @ObservedObject var coordinator: OnboardingCoordinator
 
@@ -215,10 +216,11 @@ struct OnboardingView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-                if let operation = appState.voiceModelOperationState(for: standardModel) {
+                if let operation = voiceModelOperationStore.states[standardModel.id] {
                     VoiceModelOperationProgressView(
                         operation: operation,
-                        german: effectiveLanguage.embeddedInterfaceCode.hasPrefix("de")
+                        german: effectiveLanguage.embeddedInterfaceCode.hasPrefix("de"),
+                        onCancel: { appState.cancelVoiceModelInstallation(standardModel) }
                     )
                 } else if appState.isStandardModelInstalled {
                     Label {
@@ -260,6 +262,7 @@ struct OnboardingView: View {
                 text("Live-Text einfügen", "Insert live text"),
                 isOn: $appState.streamingEnabled
             )
+            .disabled(!appState.selectedVoiceModelSupportsLiveTranscription)
 
             Picker(
                 text("Finales Ergebnis", "Final result"),

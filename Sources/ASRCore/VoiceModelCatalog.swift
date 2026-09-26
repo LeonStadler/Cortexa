@@ -39,6 +39,12 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
     public let languageCode: String?
     public let languageScope: VoiceModelLanguageScope
     public let supportsTranslationToEnglish: Bool
+    public let supportsLiveTranscription: Bool
+    public let supportsAutomaticLanguageDetection: Bool
+    public let supportsLanguageSelection: Bool
+    /// Nil means that the model accepts every language supported by the app.
+    public let supportedLanguageCodes: Set<String>?
+    public let maximumRecordingDurationSeconds: Int?
     public let speedScore: Int
     public let accuracyScore: Int
     public let sizeLabel: String
@@ -46,6 +52,7 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
     public let installState: VoiceModelInstallState
     public let localFileName: String?
     public let downloadIdentifier: String?
+    public let runtimeID: String?
 
     public init(
         id: String,
@@ -54,13 +61,19 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
         languageCode: String?,
         languageScope: VoiceModelLanguageScope,
         supportsTranslationToEnglish: Bool,
+        supportsLiveTranscription: Bool = true,
+        supportsAutomaticLanguageDetection: Bool = true,
+        supportsLanguageSelection: Bool = true,
+        supportedLanguageCodes: Set<String>? = nil,
+        maximumRecordingDurationSeconds: Int? = nil,
         speedScore: Int,
         accuracyScore: Int,
         sizeLabel: String,
         expectedDownloadBytes: Int64? = nil,
         installState: VoiceModelInstallState,
         localFileName: String? = nil,
-        downloadIdentifier: String? = nil
+        downloadIdentifier: String? = nil,
+        runtimeID: String? = nil
     ) {
         self.id = id
         self.providerID = providerID
@@ -68,6 +81,11 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
         self.languageCode = languageCode
         self.languageScope = languageScope
         self.supportsTranslationToEnglish = supportsTranslationToEnglish
+        self.supportsLiveTranscription = supportsLiveTranscription
+        self.supportsAutomaticLanguageDetection = supportsAutomaticLanguageDetection
+        self.supportsLanguageSelection = supportsLanguageSelection
+        self.supportedLanguageCodes = supportedLanguageCodes
+        self.maximumRecordingDurationSeconds = maximumRecordingDurationSeconds
         self.speedScore = speedScore
         self.accuracyScore = accuracyScore
         self.sizeLabel = sizeLabel
@@ -75,6 +93,7 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
         self.installState = installState
         self.localFileName = localFileName
         self.downloadIdentifier = downloadIdentifier
+        self.runtimeID = runtimeID
     }
 }
 
@@ -107,6 +126,8 @@ public enum LocalVoiceModelCatalog {
     public static let defaultModelExpectedBytes: Int64 = 147_964_096
     /// Hugging Face `ggml-small.bin`.
     public static let proModelExpectedBytes: Int64 = 487_601_958
+    /// NVIDIA Parakeet TDT v3 Q8 GGUF (Hugging Face file metadata).
+    public static let parakeetExpectedBytes: Int64 = 713_975_456
 
     public static func formattedDownloadSize(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
@@ -125,23 +146,24 @@ public enum LocalVoiceModelCatalog {
             )
         ]
 
-        if let parakeetBinaryURL,
-            FileManager.default.isExecutableFile(atPath: parakeetBinaryURL.path)
-        {
-            providers.append(
-                VoiceProviderDescriptor(
-                    id: VoiceProviderID.nvidiaParakeet.rawValue,
-                    displayName: "Nvidia Parakeet",
-                    summary: "Lokale NVIDIA-Parakeet-Modelle für Sprachtranskription.",
-                    isAvailable: true
-                )
+        let parakeetAvailable = parakeetBinaryURL.map {
+            FileManager.default.isExecutableFile(atPath: $0.path)
+        } ?? false
+        providers.append(
+            VoiceProviderDescriptor(
+                id: VoiceProviderID.nvidiaParakeet.rawValue,
+                displayName: "Nvidia Parakeet",
+                summary: parakeetAvailable
+                    ? "Lokale NVIDIA-Parakeet-Modelle für Sprachtranskription."
+                    : "Parakeet-Modelle können heruntergeladen werden; für die Transkription wird zusätzlich NeMo-Speech.cpp benötigt.",
+                isAvailable: parakeetAvailable
             )
-        }
+        )
 
         return providers
     }
 
-    public static func availableModels(includeParakeet: Bool = false) -> [VoiceModelDescriptor] {
+    public static func availableModels(includeParakeet: Bool = true) -> [VoiceModelDescriptor] {
         var models = whisperModels
         if includeParakeet {
             models.append(contentsOf: parakeetModels)
@@ -149,7 +171,7 @@ public enum LocalVoiceModelCatalog {
         return models
     }
 
-    public static func model(id: String, includeParakeet: Bool = false) -> VoiceModelDescriptor? {
+    public static func model(id: String, includeParakeet: Bool = true) -> VoiceModelDescriptor? {
         availableModels(includeParakeet: includeParakeet).first(where: { $0.id == id })
     }
 
@@ -177,7 +199,8 @@ public enum LocalVoiceModelCatalog {
         VoiceModelDescriptor(
             id: "whisper.pro.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Pro (English)", languageCode: "en", languageScope: .english,
-            supportsTranslationToEnglish: false, speedScore: 7, accuracyScore: 8,
+            supportsTranslationToEnglish: false, supportsAutomaticLanguageDetection: false,
+            speedScore: 7, accuracyScore: 8,
             sizeLabel: formattedDownloadSize(proModelExpectedBytes),
             expectedDownloadBytes: proModelExpectedBytes,
             installState: .downloadable, localFileName: "ggml-small.en.bin",
@@ -193,7 +216,8 @@ public enum LocalVoiceModelCatalog {
         VoiceModelDescriptor(
             id: "whisper.standard.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Standard (English)", languageCode: "en", languageScope: .english,
-            supportsTranslationToEnglish: false, speedScore: 8, accuracyScore: 5,
+            supportsTranslationToEnglish: false, supportsAutomaticLanguageDetection: false,
+            speedScore: 8, accuracyScore: 5,
             sizeLabel: formattedDownloadSize(defaultModelExpectedBytes),
             expectedDownloadBytes: defaultModelExpectedBytes,
             installState: .downloadable, localFileName: "ggml-base.en.bin",
@@ -207,7 +231,8 @@ public enum LocalVoiceModelCatalog {
         VoiceModelDescriptor(
             id: "whisper.nano.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Nano (English)", languageCode: "en", languageScope: .english,
-            supportsTranslationToEnglish: false, speedScore: 9, accuracyScore: 3,
+            supportsTranslationToEnglish: false, supportsAutomaticLanguageDetection: false,
+            speedScore: 9, accuracyScore: 3,
             sizeLabel: "150 MB", installState: .downloadable,
             localFileName: "ggml-base.en-q5_1.bin", downloadIdentifier: "base.en-q5_1"),
         VoiceModelDescriptor(
@@ -219,21 +244,26 @@ public enum LocalVoiceModelCatalog {
         VoiceModelDescriptor(
             id: "whisper.fast.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Fast (English)", languageCode: "en", languageScope: .english,
-            supportsTranslationToEnglish: false, speedScore: 10, accuracyScore: 1,
+            supportsTranslationToEnglish: false, supportsAutomaticLanguageDetection: false,
+            speedScore: 10, accuracyScore: 1,
             sizeLabel: "75 MB", installState: .downloadable, localFileName: "ggml-tiny.en.bin",
             downloadIdentifier: "tiny.en"),
     ]
 
     private static let parakeetModels: [VoiceModelDescriptor] = [
         VoiceModelDescriptor(
-            id: "parakeet.english", providerID: VoiceProviderID.nvidiaParakeet.rawValue,
-            displayName: "Parakeet", languageCode: "en", languageScope: .english,
-            supportsTranslationToEnglish: false, speedScore: 10, accuracyScore: 8,
-            sizeLabel: "476 MB", installState: .unavailable),
-        VoiceModelDescriptor(
             id: "parakeet.multilingual", providerID: VoiceProviderID.nvidiaParakeet.rawValue,
-            displayName: "Parakeet Multilanguage", languageCode: nil, languageScope: .multilingual,
-            supportsTranslationToEnglish: false, speedScore: 10, accuracyScore: 8,
-            sizeLabel: "494 MB", installState: .unavailable),
+            displayName: "Parakeet TDT v3", languageCode: nil, languageScope: .multilingual,
+            supportsTranslationToEnglish: false, supportsLiveTranscription: false,
+            supportsAutomaticLanguageDetection: true, supportsLanguageSelection: false,
+            supportedLanguageCodes: ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"],
+            maximumRecordingDurationSeconds: 24 * 60,
+            speedScore: 10, accuracyScore: 8,
+            sizeLabel: formattedDownloadSize(parakeetExpectedBytes),
+            expectedDownloadBytes: parakeetExpectedBytes,
+            installState: .downloadable,
+            localFileName: "parakeet-tdt-0.6b-v3.q8_0.gguf",
+            downloadIdentifier: "parakeet-tdt",
+            runtimeID: "nemo-speech"),
     ]
 }

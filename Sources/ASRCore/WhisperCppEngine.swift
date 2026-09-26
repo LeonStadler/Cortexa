@@ -6,6 +6,7 @@ public final class WhisperCppEngine: WhisperEngine {
     public var onDebugEvent: ((String) -> Void)?
 
     private let explicitCLIPath: URL?
+    private let nemoSpeechCLIPath: URL?
     private let stateQueue = DispatchQueue(label: "wispr.asr.whispercpp.state", qos: .userInitiated)
     private let decodeQueue = DispatchQueue(label: "wispr.asr.whispercpp.decode", qos: .userInitiated)
 
@@ -21,10 +22,9 @@ public final class WhisperCppEngine: WhisperEngine {
     // Keep enough context for responsive live partials without letting decode cost grow
     // unbounded, while preserving a much longer final buffer for stop/finalize accuracy.
     private let maxPartialDecodeWindowSamples = 16_000 * 45
-    private let maxFinalRecordingSamples = 16_000 * 60 * 10
-
-    public init(cliPath: URL? = nil) {
+    public init(cliPath: URL? = nil, nemoSpeechCLIPath: URL? = nil) {
         self.explicitCLIPath = cliPath
+        self.nemoSpeechCLIPath = nemoSpeechCLIPath
     }
 
     public func loadBundledModel(
@@ -41,6 +41,17 @@ public final class WhisperCppEngine: WhisperEngine {
     public func loadModel(at path: URL, config: ASRConfig) throws {
         guard FileManager.default.fileExists(atPath: path.path) else {
             throw WhisperEngineError.backendUnavailable("Model file missing at \(path.path)")
+        }
+
+        if config.backend == .nemoSpeech {
+            guard let cliPath = nemoSpeechCLIPath ?? VoiceModelInstaller.resolveNemoSpeechCLI(),
+                FileManager.default.isExecutableFile(atPath: cliPath.path)
+            else { throw WhisperEngineError.backendUnavailable("NVIDIA NeMo-Speech CLI is missing.") }
+            emitDebug("engine.loadModel nemo-speech model=\(path.lastPathComponent)")
+            self.modelPath = path
+            self.config = config
+            self.resolvedCLIPath = cliPath
+            return
         }
 
         var cliPath = WhisperCLIExecutor.resolveCLIPath(explicitPath: explicitCLIPath, modelPath: path)
@@ -90,35 +101,42 @@ public final class WhisperCppEngine: WhisperEngine {
             throw WhisperEngineError.invalidAudioBuffer
         }
 
-        let schedule = stateQueue.sync { () -> (samples: [Float], version: Int)? in
+        let schedule = stateQueue.sync { () -> (samples: [Float], version: Int, maximumDuration: Int)? in
             guard isStreaming else { return nil }
+
+            let maximumDurationSeconds = config?.maximumRecordingDurationSeconds ?? 600
+            let maximumSamples = 16_000 * maximumDurationSeconds
+            guard streamingSamples.count + frameCount <= maximumSamples else {
+                isStreaming = false
+                return ([], -2, maximumDurationSeconds)
+            }
 
             let incoming = Array(UnsafeBufferPointer(start: buffer, count: frameCount))
             streamingSamples.append(contentsOf: incoming)
 
-            if streamingSamples.count > maxFinalRecordingSamples {
-                streamingSamples.removeFirst(streamingSamples.count - maxFinalRecordingSamples)
-            }
-
             let partialThreshold = minimumSamplesForPartial(for: config)
-            guard streamingSamples.count >= partialThreshold,
+            guard config?.backend != .nemoSpeech,
+                  streamingSamples.count >= partialThreshold,
                   !isDecodingPartial else {
-                return ([], -1)
+                return ([], -1, maximumDurationSeconds)
             }
 
             isDecodingPartial = true
             decodeVersion += 1
             if streamingSamples.count > maxPartialDecodeWindowSamples {
                 let partialSlice = streamingSamples.suffix(maxPartialDecodeWindowSamples)
-                return (Array(partialSlice), decodeVersion)
+                return (Array(partialSlice), decodeVersion, maximumDurationSeconds)
             }
-            return (streamingSamples, decodeVersion)
+            return (streamingSamples, decodeVersion, maximumDurationSeconds)
         }
 
         guard let schedule else {
             throw WhisperEngineError.engineNotRunning
         }
 
+        if schedule.version == -2 {
+            throw WhisperEngineError.recordingDurationExceeded(seconds: schedule.maximumDuration)
+        }
         guard schedule.version >= 0 else { return }
 
         decodeQueue.async { [weak self] in
@@ -178,6 +196,9 @@ public final class WhisperCppEngine: WhisperEngine {
             throw NSError(domain: "WhisperCppEngine", code: 2001, userInfo: [NSLocalizedDescriptionKey: "Audio file does not exist"]) 
         }
 
+        if config.backend == .nemoSpeech {
+            return try transcribeNemoSpeech(wavURL: url, cliPath: cliPath)
+        }
         let transcript = try transcribeWavFile(
             wavURL: url,
             config: config,
@@ -191,6 +212,64 @@ public final class WhisperCppEngine: WhisperEngine {
             onFinalSegment?(segment)
         }
 
+        return transcript
+    }
+
+    private func transcribeNemoSpeech(wavURL: URL, cliPath: URL) throws -> FinalTranscript {
+        NemoRuntimeAccess.lock.lock()
+        defer { NemoRuntimeAccess.lock.unlock() }
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("nemo-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+        let process = Process()
+        process.executableURL = cliPath
+        process.arguments = ["transcribe", wavURL.path, "--model", modelPath?.path ?? "", "--language", config?.languageHint ?? "auto", "--json"]
+        let errorPipe = Pipe()
+        let outputPipe = Pipe()
+        process.standardError = errorPipe
+        process.standardOutput = outputPipe
+        try process.run()
+        let outputSemaphore = DispatchSemaphore(value: 0)
+        let errorSemaphore = DispatchSemaphore(value: 0)
+        let readQueue = DispatchQueue.global(qos: .userInitiated)
+        let outputDataLock = NSLock()
+        let errorDataLock = NSLock()
+        var outputData = Data()
+        var errorData = Data()
+        readQueue.async {
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            outputDataLock.lock()
+            outputData = data
+            outputDataLock.unlock()
+            outputSemaphore.signal()
+        }
+        readQueue.async {
+            let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            errorDataLock.lock()
+            errorData = data
+            errorDataLock.unlock()
+            errorSemaphore.signal()
+        }
+        process.waitUntilExit()
+        outputSemaphore.wait()
+        errorSemaphore.wait()
+        errorDataLock.lock()
+        let errorText = String(data: errorData, encoding: .utf8) ?? ""
+        errorDataLock.unlock()
+        guard process.terminationStatus == 0 else {
+            throw NSError(domain: "NemoSpeech", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "nemo-speech transcribe failed: \(errorText)"])
+        }
+        outputDataLock.lock()
+        let data = outputData
+        outputDataLock.unlock()
+        let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+        let text = root["text"] as? String ?? ""
+        let language = root["language"] as? String
+        let segments = (root["segments"] as? [[String: Any]] ?? []).compactMap { item -> FinalSegment? in
+            guard let segmentText = item["text"] as? String else { return nil }
+            return FinalSegment(text: segmentText, startTime: item["start"] as? Double ?? 0, endTime: item["end"] as? Double ?? 0)
+        }
+        let transcript = FinalTranscript(text: text, segments: segments, language: language)
+        for segment in segments { onFinalSegment?(segment) }
         return transcript
     }
 
@@ -232,6 +311,9 @@ public final class WhisperCppEngine: WhisperEngine {
             try? FileManager.default.removeItem(at: tempDir)
         }
 
+        if config.backend == .nemoSpeech {
+            return try transcribeNemoSpeech(wavURL: wavURL, cliPath: cliPath)
+        }
         return try transcribeWavFile(wavURL: wavURL, config: config, modelPath: modelPath, cliPath: cliPath)
     }
 

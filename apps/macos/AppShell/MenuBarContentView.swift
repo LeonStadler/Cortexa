@@ -142,7 +142,7 @@ struct MenuBarContentView: View {
     }
 
     private var selectableVoiceModels: [VoiceModelDescriptor] {
-        appState.visibleVoiceModels
+        appState.allVoiceModels
     }
 
     private var voiceModelsByProviderID: [String: [VoiceModelDescriptor]] {
@@ -450,7 +450,7 @@ struct MenuBarContentView: View {
                 text("Inhaltsstreaming", "Content streaming"),
                 isOn: $appState.aiProcessingApplyDuringLiveInsertion
             )
-            .disabled(!appState.streamingEnabled || appState.visibleAIModels.isEmpty)
+            .disabled(!appState.streamingEnabled || !appState.selectedVoiceModelSupportsLiveTranscription || appState.visibleAIModels.isEmpty)
 
             Toggle(
                 text("Endergebnis einfügen", "Insert final result"),
@@ -594,7 +594,7 @@ struct MenuBarContentView: View {
             }
 
             Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
-                .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
+                .disabled(appState.finalResultDeliveryMode == .clipboardOnly || !appState.selectedVoiceModelSupportsLiveTranscription)
 
             Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
                 ForEach(visibleMenuBarLanguages) { language in
