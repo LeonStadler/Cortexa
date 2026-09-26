@@ -324,8 +324,8 @@ extension SettingsView {
                         : text("Öffnen", "Open"),
                     actionHint: appState.accessibilityPermissionStatus != .granted
                         ? text(
-                            "Zeigt den macOS-Hinweis und öffnet Bedienungshilfen.",
-                            "Shows the macOS prompt and opens Accessibility settings.")
+                            "Zeigt den macOS-Hinweis. Von dort kannst du die Systemeinstellungen öffnen.",
+                            "Shows the macOS prompt. From there, you can open System Settings.")
                         : text("Bedienungshilfen öffnen", "Open accessibility settings"),
                     action: {
                         if appState.accessibilityPermissionStatus != .granted {

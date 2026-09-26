@@ -118,7 +118,6 @@ final class PermissionCoordinator {
                 return
             }
             self.dictationRuntime.promptAccessibilityTrustFromUser()
-            self.dictationRuntime.openAccessibilitySettings()
             self.refreshPermissionStatesAfterUserFacingPermissionStep()
             self.schedulePermissionRefresh()
         }

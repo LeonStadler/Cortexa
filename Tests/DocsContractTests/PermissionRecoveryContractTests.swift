@@ -44,6 +44,14 @@
             XCTAssertFalse(archiveScript.contains("--sign -"))
         }
 
+        func testDMGScriptRejectsAdHocAppBundles() throws {
+            let dmgScript = try readRepositoryFile("scripts/create_macos_dmg.sh")
+
+            XCTAssertTrue(dmgScript.contains("Refusing to package an ad-hoc or unsigned app"))
+            XCTAssertTrue(dmgScript.contains("TeamIdentifier"))
+            XCTAssertTrue(dmgScript.contains("codesign --verify --deep --strict"))
+        }
+
         func testDictationStartDoesNotPromptForAccessibility() throws {
             let runtime = try readRepositoryFile("apps/macos/AppShell/DictationRuntime.swift")
             let permissionCoordinator = try readRepositoryFile(
@@ -52,7 +60,7 @@
 
             XCTAssertTrue(runtime.contains("promptIfNeeded: false"))
             XCTAssertTrue(permissionCoordinator.contains("promptAccessibilityTrustFromUser()"))
-            XCTAssertTrue(permissionCoordinator.contains("openAccessibilitySettings()"))
+            XCTAssertFalse(permissionCoordinator.contains("self.dictationRuntime.openAccessibilitySettings()"))
         }
 
         func testDebugSmokeDoesNotClaimAdHocSigningCanVerifyPermissionContinuity() throws {

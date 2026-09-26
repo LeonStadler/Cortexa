@@ -33,7 +33,7 @@ Accessibility onboarding text:
 ## UX flow
 
 1. First launch shows permission checklist.
-2. Der Nutzer klickt explizit auf `Freigabe anfragen`; nur diese Aktion ruft `AXIsProcessTrustedWithOptions` mit Apples Prompt-Option auf und öffnet die passende Seite in den Systemeinstellungen.
+2. Der Nutzer klickt explizit auf `Freigabe anfragen`; nur diese Aktion ruft `AXIsProcessTrustedWithOptions` mit Apples Prompt-Option auf. Der macOS-Hinweis bietet den Weg zu den Systemeinstellungen an. Cortexa öffnet kein zweites Fenster automatisch.
 3. Capability checks re-run whenever app returns from settings.
 4. App stays functional in limited mode when AX is missing (transcribe only).
 5. Starting a dictation only checks the existing AX state. It never repeatedly displays a system permission prompt.
@@ -42,12 +42,12 @@ Accessibility onboarding text:
 
 macOS binds Privacy & Security grants to the signed app identity, not just to the displayed name. Every Cortexa update must retain `com.wisprlocal.mac` and use the same Apple signing team. Distributable updates must use the same `Developer ID Application` identity and be notarized; a local development build can use `Apple Development` on the developer's own Mac.
 
-The release archive script rejects missing or ad-hoc signing identities. This avoids producing an update that would look like a new TCC client and require permissions again.
+The release archive and DMG scripts reject missing or ad-hoc signing identities. Never create an installable DMG from a Debug app signed with `Sign to Run Locally`; its ad-hoc signature has no stable team identity, so replacement can cause macOS to ask for protected-resource permissions again.
 
 The normal Accessibility flow is one deliberate app action:
 
 1. Click `Freigabe anfragen` in Cortexa.
-2. Accept the macOS hint and enable Cortexa in `System Settings -> Privacy & Security -> Accessibility`.
+2. Use the macOS hint to open `System Settings -> Privacy & Security -> Accessibility`, then enable Cortexa.
 3. Return to Cortexa. It refreshes the permission state and enables direct insertion without a restart.
 
 Das Entfernen und erneute Hinzufügen eines Eintrags ist **nicht der normale Ablauf**. Es ist nur der letzte Diagnoseschritt, wenn die Systemeinstellungen doppelte oder beschädigte Einträge zeigen und `AXIsProcessTrusted()` nach Aus- und Einschalten des aktuellen Cortexa-Eintrags sowie einem App-Neustart weiter `false` liefert. Vorher Cortexa-Diagnosen sichern.

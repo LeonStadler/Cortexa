@@ -31,10 +31,12 @@ final class DocsContractTests: XCTestCase {
         XCTAssertTrue(readme.contains("permanent sichtbarem manuellen Check"))
     }
 
-    func testVersionFileMatchesCurrentRepositoryVersion() throws {
-        let version = try readRepositoryFile("VERSION").trimmingCharacters(
-            in: .whitespacesAndNewlines)
-        XCTAssertEqual(version, "0.30.4")
+    func testVersionFileIsSourceForGeneratedProjectVersion() throws {
+        let projectConfiguration = try readRepositoryFile("apps/macos/WisprLocalMac/project.yml")
+        let projectGenerator = try readRepositoryFile("scripts/generate_macos_xcodeproj.sh")
+
+        XCTAssertTrue(projectConfiguration.contains("MARKETING_VERSION: ${APP_MARKETING_VERSION}"))
+        XCTAssertTrue(projectGenerator.contains(#"cat "${ROOT_DIR}/VERSION""#))
     }
 
     func testDMGBackgroundMatchesFinderWindowCanvas() throws {

@@ -12,6 +12,26 @@
 
 ## Fixes
 
+- 2026-09-26: Lokalen Modellfilter klar von der globalen Einstellungssuche abgegrenzt.
+  - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `VERSION`
+  - Funktionalität: Die Formularzeile heißt nun „Modellfilter“; der Platzhalter benennt die durchsuchbaren Modellfelder Name, Sprache und ID. Damit entfallen die doppelte Beschriftung innerhalb der Zeile und die Verwechslung mit der globalen Einstellungssuche. Die Version wurde als Patch-Bugfix auf `0.30.9` angehoben.
+
+- 2026-09-26: Modellverwaltung in native macOS-Einstellungszeilen überführt.
+  - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `VERSION`
+  - Funktionalität: Suche, Status- und Sprachfilter werden als native `LabeledContent`-Formularzeilen mit systemeigenen Textfeldern und Menüs dargestellt. Jedes Modell erhält eine beschriftete Formularzeile mit Status, nativen Aktionen und Fortschritt; eigene Trennlinien und die separate Werkzeugleistenoptik entfallen. Für leere Suchergebnisse wird `ContentUnavailableView` verwendet. Die Version wurde als Patch-Bugfix auf `0.30.8` angehoben.
+
+- 2026-09-26: Modellverwaltung auf native Such-, Filter- und Zeilenlayouts umgestellt.
+  - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `VERSION`
+  - Funktionalität: Modellsuche, Status-Scope und Sprachfilter sind als zusammengehörige Werkzeugleiste ohne formularartige Einzelzeilen angeordnet. Modellinfos, Status und Aktionen erscheinen in kompakten, durch native Separatoren getrennten Zeilen. Filterlogik und Modellaktionen bleiben unverändert. Die Version wurde als Patch-Bugfix auf `0.30.7` angehoben.
+
+- 2026-09-26: Settings-Sidebar, Modellsuche und Berechtigungsablauf systemnäher gestaltet; DMG-Signatur abgesichert.
+  - Dateien: `apps/macos/AppShell/PermissionCoordinator.swift`, `apps/macos/AppShell/SettingsTab.swift`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `scripts/create_macos_dmg.sh`, `Tests/AppShellSupportTests/AppShellCharacterizationTests.swift`, `Tests/AppShellSupportTests/PermissionCoordinatorTests.swift`, `Tests/AppShellSupportTests/SettingsTabTests.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `Tests/DocsContractTests/PermissionRecoveryContractTests.swift`, `docs/macos-release-checklist.md`, `docs/permissions-macos.md`, `VERSION`
+  - Funktionalität: Doppelte Sidebar-Bezeichnungen und die leere Info-Gruppenüberschrift entfallen. Suche, Status- und Sprachfilter nutzen die systemnahen SwiftUI-Steuerelemente ohne redundante Labels. Die Bedienungshilfen-Anfrage löst nicht länger gleichzeitig den Systemdialog und ein automatisches Öffnen der Systemeinstellungen aus. DMGs werden nur noch aus Apps mit überprüfbarer persistenter Apple-Signatur und TeamIdentifier erstellt. Die Version wurde als Patch-Bugfix auf `0.30.6` angehoben.
+
+- 2026-09-25: Settings-Sidebar und Speech-Modellfilter an die native macOS-Darstellung angepasst.
+  - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `VERSION`
+  - Funktionalität: Die Sidebar nutzt wieder die kompakte System-Zeilendarstellung. Suche, Status und Sprache in der Modellverwaltung stehen als klar beschriftete Formularzeilen; die Statuswahl verwendet ein natives Menü, und das Suchfeld hat ein systemnahes Lupen- und Löschen-Steuerelement. Filter- und Suchlogik bleiben erhalten. Die Version wurde als Patch-Bugfix auf `0.30.5` angehoben.
+
 - 2026-09-14: Settings-Layout bei kleinen Fensterbreiten stabilisiert.
   - Dateien: `apps/macos/AppShell/SettingsViewShell.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/MacNativeDesign.swift`, `VERSION`
   - Funktionalität: Die Sidebar erhält einen stabilen nativen Innenabstand. Die Modellverwaltung wechselt bei schmalen Detailspalten automatisch von einer einzeiligen Such-/Filterleiste auf eine kompakte zweizeilige Anordnung. Modellzeilen verwenden einen responsiven Fallback für Status und Aktionen; Settings-Buttons nutzen wieder die nativen macOS-Varianten. Die Version wurde als Patch-Bugfix auf `0.30.1` angehoben.

@@ -26,9 +26,19 @@ require_command() {
 
 require_command sips
 require_command python3
+require_command codesign
 
 [[ -d "${APP_PATH}" ]] || error "App bundle not found at ${APP_PATH}. Run ./scripts/export_macos_release.sh first."
 [[ -f "${BACKGROUND_SOURCE}" ]] || error "Installer background not found at ${BACKGROUND_SOURCE}."
+
+SIGNING_DETAILS="$(codesign -dvvv "${APP_PATH}" 2>&1)" || error "Could not inspect app signature at ${APP_PATH}."
+if ! grep -Eq '^Authority=(Apple Development|Developer ID Application):' <<<"${SIGNING_DETAILS}"; then
+  error "Refusing to package an ad-hoc or unsigned app. Build the app with a persistent Apple Development or Developer ID Application identity first."
+fi
+if grep -Eq '^TeamIdentifier=(not set)?$' <<<"${SIGNING_DETAILS}"; then
+  error "Refusing to package an app without a TeamIdentifier; Privacy & Security grants may not survive replacement."
+fi
+codesign --verify --deep --strict "${APP_PATH}" || error "App signature verification failed at ${APP_PATH}."
 
 mkdir -p "${ARTIFACTS_DIR}"
 DMGBUILD_ENV="${ROOT_DIR}/.build/dmgbuild-venv"

@@ -42,6 +42,7 @@ Erwartung:
 
 Erwartung:
 - `Cortexa.app` wurde gebaut
+- Release-Archive und DMG nutzen eine persistente Apple-Signatur mit gesetzter Team-ID; Debug-Bundles mit `Sign to Run Locally` dürfen nicht installiert oder als DMG gepackt werden
 - die im App-Bundle enthaltene CLI transkribiert synthetisierte Sprache mit dem gebündelten Standardmodell zu einem nicht-leeren Text
 - Dock-Icon wird aus `Cortexa.icon` kompiliert und zeigt die Liquid-Glass-/Appearance-Varianten korrekt
 - App startet aus dem gebauten Bundle
@@ -89,6 +90,7 @@ Prüfen:
 - Mikrofonrecht entziehen -> Aufnahme blockiert mit klarer UI
 - AX-Recht entziehen -> Insert blockiert mit klarer UI
 - zwei nacheinander installierte, gleich signierte Builds -> `Identifier`, `TeamIdentifier` und designated requirement bleiben stabil
+- Accessibility-Freigabe anfragen -> der macOS-Hinweis erscheint; Cortexa öffnet Systemeinstellungen nicht zusätzlich automatisch
 - Sleep/Wake -> Hotkey funktioniert weiter
 - App-Neustart -> Runtime wird neu vorbereitet, Status bleibt konsistent
 - CLI absichtlich durch ein nicht startbares Artefakt ersetzen -> kein „ASR CLI runtime ready“, sondern ein konkreter Initialisierungsfehler

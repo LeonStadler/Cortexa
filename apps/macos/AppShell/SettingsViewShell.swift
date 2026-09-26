@@ -113,26 +113,33 @@ struct SettingsSidebarView: View {
     var body: some View {
         List(selection: selectedTabSelection) {
             ForEach(SettingsTab.Group.allCases, id: \.self) { group in
-                Section(group.title(language: storedLanguage)) {
-                    ForEach(SettingsTab.tabs(in: group), id: \.self) { tab in
-                        Label(tab.title(language: storedLanguage), systemImage: tab.symbolName)
-                            .tag(tab)
-                            .imageScale(.medium)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                if group == .about {
+                    sidebarRows(in: group)
+                } else {
+                    Section(group.title(language: storedLanguage)) {
+                        sidebarRows(in: group)
                     }
                 }
             }
         }
         .listStyle(.sidebar)
-        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
         .scrollContentBackground(.automatic)
-        .environment(\.defaultMinListRowHeight, 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationSplitViewColumnWidth(
             min: MacNativeDesign.SettingsSplitView.sidebarMinWidth,
             ideal: MacNativeDesign.SettingsSplitView.sidebarIdealWidth,
             max: MacNativeDesign.SettingsSplitView.sidebarMaxWidth
         )
+    }
+
+    @ViewBuilder
+    private func sidebarRows(in group: SettingsTab.Group) -> some View {
+        ForEach(SettingsTab.tabs(in: group), id: \.self) { tab in
+            Label(tab.title(language: storedLanguage), systemImage: tab.symbolName)
+                .tag(tab)
+                .imageScale(.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

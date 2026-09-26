@@ -20,8 +20,8 @@ enum SettingsTab: String, Hashable, CaseIterable {
         case about
 
         func title(language: AppLanguage) -> String {
-            switch self {
-            case .general: return language.text("Allgemein", "General")
+        switch self {
+            case .general: return language.text("App", "App")
             case .writing: return language.text("Text & Verarbeitung", "Text & Processing")
             case .system: return language.text("Daten & System", "Data & System")
             case .about: return language.text("Über Cortexa", "About Cortexa")

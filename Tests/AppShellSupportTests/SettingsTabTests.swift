@@ -20,6 +20,7 @@ final class SettingsTabTests: XCTestCase {
 
     func testSidebarGroupsAreStableAndLocalized() {
         XCTAssertEqual(SettingsTab.tabs(in: .writing), [.ai, .dictionary, .snippets])
+        XCTAssertEqual(SettingsTab.Group.general.title(language: .german), "App")
         XCTAssertEqual(SettingsTab.Group.system.title(language: .german), "Daten & System")
         XCTAssertEqual(SettingsTab(rawValue: SettingsTab.advanced.persistenceID), .advanced)
     }
