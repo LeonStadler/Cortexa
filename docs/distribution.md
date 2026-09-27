@@ -12,7 +12,8 @@
 
 1. **Build dependencies and runtime.**
    - Run `./scripts/build_whisper_xcframework.sh` (see `docs/build-xcframework.md`) to produce `artifacts/whisper/whisper-cli` and, when requested, `artifacts/whisper/whisper.xcframework`. The macOS CLI is linked statically against Whisper/GGML so it does not retain build-machine `@rpath` dependencies.
-   - The build and bundle preparation run `./scripts/verify_whisper_cli_runtime.sh`. This gate rejects non-system dynamic-library dependencies and proves that the copied CLI can launch before an app archive is created.
+- The build and bundle preparation run `./scripts/verify_whisper_cli_runtime.sh`. This gate rejects non-system dynamic-library dependencies and proves that the copied CLI can launch before an app archive is created.
+- `archive_macos_release.sh` and `smoke_test_macos_app.sh` validate the finished app bundle with `scripts/validate_macos_app_runtime.sh`: the bundled CLI must be executable and launch with `--help`, the models directory must exist, and `runtime-manifest.json` must parse as JSON. The packaging/smoke environment therefore needs Python 3 for the JSON check.
    - Download the required ggml models with `./scripts/download_models.sh`.
    - Bundle the CLI into `apps/macos/AppShell/Resources/Runtime` using `./scripts/prepare_runtime_bundle.sh` (Release: no bundled `.bin`; the standard model downloads during first-run onboarding).
    - Cortexa downloads a model into a private temporary workspace and then promotes it from a hidden `.partial` staging file into the models directory only after the download is complete. A later runtime sync removes only Cortexa's abandoned temporary workspaces and staging files; completed `.bin` models and unrelated temporary files remain untouched.

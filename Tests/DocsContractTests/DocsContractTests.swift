@@ -39,6 +39,21 @@ final class DocsContractTests: XCTestCase {
         XCTAssertTrue(projectGenerator.contains(#"cat "${ROOT_DIR}/VERSION""#))
     }
 
+    func testMacOSPackagingValidatesBundledRuntimeBeforeArchiveAndSmoke() throws {
+        let archiveScript = try readRepositoryFile("scripts/archive_macos_release.sh")
+        let dmgScript = try readRepositoryFile("scripts/create_macos_dmg.sh")
+        let smokeScript = try readRepositoryFile("scripts/smoke_test_macos_app.sh")
+        let runtimeValidationScript = try readRepositoryFile("scripts/validate_macos_app_runtime.sh")
+
+        XCTAssertTrue(archiveScript.contains("validate_macos_app_runtime.sh"))
+        XCTAssertTrue(dmgScript.contains("validate_macos_app_runtime.sh"))
+        XCTAssertTrue(smokeScript.contains("validate_macos_app_runtime.sh"))
+        XCTAssertTrue(runtimeValidationScript.contains("whisper-cli"))
+        XCTAssertTrue(runtimeValidationScript.contains("runtime-manifest.json"))
+        XCTAssertTrue(runtimeValidationScript.contains("python3 -m json.tool"))
+        XCTAssertTrue(runtimeValidationScript.contains("--help"))
+    }
+
     func testDMGBackgroundMatchesFinderWindowCanvas() throws {
         let background = try readRepositoryFile(
             "apps/macos/AppShell/Resources/CortexaInstallerBackground.svg")

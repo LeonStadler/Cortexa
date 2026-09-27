@@ -265,6 +265,50 @@ struct PermissionRecoveryBanner: View {
     }
 }
 
+struct PermissionWarningTile: View {
+    let title: String
+    let message: String
+    let status: PermissionStatus
+    let actionTitle: String
+    let actionHint: String
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(
+                systemName: status == .restricted
+                    ? "lock.trianglebadge.exclamationmark" : "exclamationmark.triangle.fill"
+            )
+            .foregroundStyle(.orange)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(actionTitle, action: action)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(actionHint)
+                .accessibilityLabel(Text("\(actionTitle). \(actionHint)"))
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1)
+        }
+    }
+}
+
 struct VoiceModelOperationProgressView: View {
     let operation: VoiceModelOperationKind
     let german: Bool

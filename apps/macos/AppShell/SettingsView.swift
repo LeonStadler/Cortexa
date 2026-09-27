@@ -300,7 +300,9 @@ struct SettingsView: View {
                 accessSectionTitle: text("Zugriff", "Access"),
                 appContent: erasedView { generalAppearanceContent },
                 menuBarContent: erasedView { generalMenuBarContent },
-                accessContent: erasedView { generalPermissionsContent }
+                accessContent: erasedView { generalPermissionsContent },
+                showsAccessSection: appState.microphonePermissionStatus != .granted
+                    || appState.accessibilityPermissionStatus != .granted
             )
         case .speech:
             SpeechSettingsPage(
@@ -385,18 +387,20 @@ struct SettingsView: View {
                 importExportContent: erasedView { snippetImportExportRows },
                 savedContent: erasedView { snippetSavedRows }
             )
-        case .advanced:
+                case .advanced:
             AdvancedSettingsPage(
                 appSectionTitle: text("App", "App"),
                 modelRuntimeSectionTitle: text("Modelllaufzeit", "Model runtime"),
                 storageLocationSectionTitle: text("Speicherort", "Storage location"),
                 updatesSectionTitle: text("Updates", "Updates"),
                 diagnosticsSectionTitle: text("Diagnose", "Diagnostics"),
+                permissionsSectionTitle: text("Berechtigungen", "Permissions"),
                 appInfoContent: erasedView { aboutAppInfoRows },
                 runtimeContent: erasedView { voiceModelRuntimeContent },
                 storageContent: erasedView { advancedStorageContent },
                 updatesContent: erasedView { updatesContent },
-                diagnosticsContent: erasedView { diagnosticsContent }
+                diagnosticsContent: erasedView { diagnosticsContent },
+                permissionsContent: erasedView { advancedPermissionsContent }
             )
         }
     }

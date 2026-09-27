@@ -40,6 +40,10 @@
 
 ## Fixes
 
+- 2026-09-28: Release-Archive, DMG- und App-Smoke prüfen die enthaltene Whisper-Runtime; Berechtigungshinweise sind in den Settings gezielter erreichbar.
+  - Dateien: `apps/macos/AppShell/PermissionCoordinator.swift`, `apps/macos/AppShell/SettingsFormPages.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `Tests/AppShellSupportTests/PermissionCoordinatorTests.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `Tests/DocsContractTests/PermissionRecoveryContractTests.swift`, `scripts/archive_macos_release.sh`, `scripts/create_macos_dmg.sh`, `scripts/smoke_test_macos_app.sh`, `scripts/validate_macos_app_runtime.sh`, `docs/distribution.md`.
+  - Funktionalität: Release-Artefakte und Smoke-Läufe prüfen vorab, ob das App-Bundle eine ausführbare `whisper-cli`, Modellverzeichnis und gültige Runtime-Manifestdatei enthält. Das Manifest wird mit Python geprüft und die CLI mit `--help` gestartet. Die Accessibility-Anfrage öffnet nur noch den nativen macOS-Einstiegspunkt; offene Berechtigungen werden in den passenden Settings-Bereich geleitet.
+
 - 2026-09-26: Menüleisten-Dropdown bleibt bei Speech-Modell-Downloads stabil.
   - Dateien: `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/Onboarding/OnboardingView.swift`, `apps/macos/AppShell/Onboarding/OnboardingWindowPresenter.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/SettingsWindowPresenter.swift`, `apps/macos/AppShell/SpeechModelController.swift`, `VERSION`
   - Funktionalität: Häufige Download-Fortschritte laufen über einen eigenen beobachtbaren Store statt über den globalen App-Zustand. Settings und Onboarding beobachten diesen Store direkt; das Menüleistenfenster wird während des Downloads nicht bei jedem Fortschritt neu aufgebaut. Doppelklicks auf ein bereits ladendes Modell starten keinen zweiten Installationsvorgang. Bugfix-Version `0.43.2`.

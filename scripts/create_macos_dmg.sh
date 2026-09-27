@@ -31,6 +31,9 @@ require_command codesign
 [[ -d "${APP_PATH}" ]] || error "App bundle not found at ${APP_PATH}. Run ./scripts/export_macos_release.sh first."
 [[ -f "${BACKGROUND_SOURCE}" ]] || error "Installer background not found at ${BACKGROUND_SOURCE}."
 
+log "Validating bundled runtime payload"
+"${ROOT_DIR}/scripts/validate_macos_app_runtime.sh" "${APP_PATH}"
+
 SIGNING_DETAILS="$(codesign -dvvv "${APP_PATH}" 2>&1)" || error "Could not inspect app signature at ${APP_PATH}."
 if ! grep -Eq '^Authority=(Apple Development|Developer ID Application):' <<<"${SIGNING_DETAILS}"; then
   error "Refusing to package an ad-hoc or unsigned app. Build the app with a persistent Apple Development or Developer ID Application identity first."

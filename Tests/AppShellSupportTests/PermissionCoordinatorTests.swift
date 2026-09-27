@@ -69,7 +69,7 @@
             XCTAssertTrue(debugMessages.isEmpty)
         }
 
-        func testRequestAccessibilityAccessPromptsWithoutOpeningSettingsWhenDenied() async {
+        func testRequestAccessibilityAccessOnlyUsesTheNativePromptWhenDenied() async {
             let permissions = AppShellTestPermissionController()
             permissions.accessibilityStatusValue = .denied
 

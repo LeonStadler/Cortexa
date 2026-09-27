@@ -312,7 +312,69 @@ extension SettingsView {
     var generalPermissionsContent: some View {
         if matches([
             "mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen",
+        ]) && permissionsNeedAttention {
+            VStack(alignment: .leading, spacing: 10) {
+                if appState.microphonePermissionStatus != .granted {
+                    PermissionWarningTile(
+                        title: text("Mikrofon", "Microphone"),
+                        message: text(
+                            "Für die Aufnahme fehlt noch die Mikrofonfreigabe.",
+                            "Microphone access is required to record dictation."
+                        ),
+                        status: appState.microphonePermissionStatus,
+                        actionTitle: appState.microphonePermissionStatus == .notDetermined
+                            ? text("Freigabe anfragen", "Request access")
+                            : text("Systemeinstellungen öffnen", "Open System Settings"),
+                        actionHint: text(
+                            "Mikrofonfreigabe in den Systemeinstellungen verwalten.",
+                            "Manage microphone access in System Settings."
+                        ),
+                        action: {
+                            if appState.microphonePermissionStatus == .notDetermined {
+                                appState.requestMicrophoneAccessFromSettings()
+                            } else {
+                                appState.openMicrophoneSettings()
+                            }
+                        }
+                    )
+                }
+
+                if appState.accessibilityPermissionStatus != .granted {
+                    PermissionWarningTile(
+                        title: text("Bedienungshilfen", "Accessibility"),
+                        message: text(
+                            "Für das Einfügen in das aktive Textfeld fehlt noch die Freigabe.",
+                            "Accessibility access is required to insert text into the active field."
+                        ),
+                        status: appState.accessibilityPermissionStatus,
+                        actionTitle: text("Freigabe anfragen", "Request access"),
+                        actionHint: text(
+                            "Bedienungshilfen-Freigabe in den Systemeinstellungen verwalten.",
+                            "Manage Accessibility access in System Settings."
+                        ),
+                        action: { appState.requestAccessibilityAccessFromSettings() }
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    var advancedPermissionsContent: some View {
+        if matches([
+            "mikrofon", "accessibility", "bedienungshilfen", "permissions", "berechtigungen",
         ]) {
+            permissionsRowsContent
+        }
+    }
+
+    private var permissionsNeedAttention: Bool {
+        appState.microphonePermissionStatus != .granted
+            || appState.accessibilityPermissionStatus != .granted
+    }
+
+    private var permissionsRowsContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
             VStack(spacing: 0) {
                 PermissionStatusRow(
                     title: text("Mikrofon", "Microphone"),

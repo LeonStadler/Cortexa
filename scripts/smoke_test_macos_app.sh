@@ -113,6 +113,7 @@ fi
 [[ -d "${APP_PATH}" ]] || error "Built app not found at ${APP_PATH}"
 [[ -x "${APP_BINARY}" ]] || error "App binary missing at ${APP_BINARY}"
 [[ -f "${APP_INFO_PLIST}" ]] || error "App Info.plist missing at ${APP_INFO_PLIST}"
+"${ROOT_DIR}/scripts/validate_macos_app_runtime.sh" "${APP_PATH}"
 if [[ -x "${RUNTIME_DIR}/whisper-cli" ]] && [[ -d "${RUNTIME_DIR}/models" ]]; then
   EFFECTIVE_RUNTIME_DIR="${RUNTIME_DIR}"
 elif [[ -x "${FALLBACK_RUNTIME_DIR}/whisper-cli" ]] && [[ -d "${FALLBACK_RUNTIME_DIR}/models" ]]; then
