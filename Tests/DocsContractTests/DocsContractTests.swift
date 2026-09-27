@@ -64,6 +64,7 @@ final class DocsContractTests: XCTestCase {
         let dmgSettings = try readRepositoryFile("scripts/macos_dmg_settings.py")
         XCTAssertTrue(dmgScript.contains("requirements-macos-dmg.txt"))
         XCTAssertTrue(dmgScript.contains("--settings \"${ROOT_DIR}/scripts/macos_dmg_settings.py\""))
+        XCTAssertTrue(dmgSettings.contains("hide_extensions = [app_path.name]"))
         XCTAssertTrue(dmgSettings.contains("background = defines[\"background\"]"))
         XCTAssertTrue(dmgSettings.contains("window_rect = ((120, 120), (800, 500))"))
         XCTAssertTrue(dmgSettings.contains("app_path.name: (190, 260)"))
