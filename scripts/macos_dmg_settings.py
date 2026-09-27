@@ -5,7 +5,6 @@ app_path = Path(defines["app"])
 format = "UDZO"
 files = [str(app_path)]
 symlinks = {"Applications": "/Applications"}
-hide_extensions = [app_path.name]
 
 background = defines["background"]
 window_rect = ((120, 120), (800, 500))

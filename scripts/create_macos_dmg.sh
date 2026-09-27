@@ -27,6 +27,7 @@ require_command() {
 require_command sips
 require_command python3
 require_command codesign
+require_command hdiutil
 
 [[ -d "${APP_PATH}" ]] || error "App bundle not found at ${APP_PATH}. Run ./scripts/export_macos_release.sh first."
 [[ -f "${BACKGROUND_SOURCE}" ]] || error "Installer background not found at ${BACKGROUND_SOURCE}."
@@ -68,6 +69,17 @@ log "Creating Finder-layout DMG at ${DMG_PATH}"
   -D "background=${BACKGROUND_PNG}" \
   "${VOLUME_NAME}" \
   "${DMG_PATH}"
+
+VERIFY_MOUNT_POINT="${TEMP_DIR}/verify"
+mkdir -p "${VERIFY_MOUNT_POINT}"
+hdiutil attach "${DMG_PATH}" -readonly -nobrowse -noautoopen \
+  -mountpoint "${VERIFY_MOUNT_POINT}" >/dev/null
+if ! codesign --verify --deep --strict "${VERIFY_MOUNT_POINT}/$(basename "${APP_PATH}")"; then
+  hdiutil detach "${VERIFY_MOUNT_POINT}" -quiet
+  error "The packaged app signature is invalid after creating the DMG."
+fi
+hdiutil detach "${VERIFY_MOUNT_POINT}" -quiet
+log "Packaged app signature verified"
 
 if [[ -n "${CODE_SIGN_IDENTITY:-}" ]]; then
   log "Signing DMG"
