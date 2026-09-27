@@ -1,4 +1,5 @@
 import ASRCore
+import Foundation
 import SwiftUI
 
 enum SpeechModelProviderFilter {
@@ -24,12 +25,27 @@ enum SpeechModelAvailabilityFilter: String, CaseIterable, Identifiable {
     }
 }
 
-enum SpeechModelLanguageFilter: String, CaseIterable, Identifiable {
+enum SpeechModelLanguageFilter: Hashable, Identifiable {
     case all
     case multilingual
     case englishOnly
+    case automaticDetection
+    case language(DictationLanguage)
 
-    var id: String { rawValue }
+    static var allCases: [SpeechModelLanguageFilter] {
+        [.all, .multilingual, .englishOnly, .automaticDetection]
+            + DictationLanguage.allCases.filter { $0 != .auto }.map { .language($0) }
+    }
+
+    var id: String {
+        switch self {
+        case .all: return "all"
+        case .multilingual: return "multilingual"
+        case .englishOnly: return "englishOnly"
+        case .automaticDetection: return "automaticDetection"
+        case .language(let language): return "language.\(language.rawValue)"
+        }
+    }
 
     func localizedDisplayName(language: AppLanguage) -> String {
         switch self {
@@ -39,6 +55,69 @@ enum SpeechModelLanguageFilter: String, CaseIterable, Identifiable {
             return language.text("Mehrsprachig", "Multilingual")
         case .englishOnly:
             return language.text("Nur Englisch", "English only")
+        case .automaticDetection:
+            return language.text("Auto-Erkennung", "Auto detection")
+        case .language(let dictationLanguage):
+            return dictationLanguage.localizedDisplayName(
+                interfaceLanguageCode: language.embeddedInterfaceCode
+            )
+        }
+    }
+}
+
+enum SpeechModelManagementMatcher {
+    static func supports(_ language: DictationLanguage, model: VoiceModelDescriptor) -> Bool {
+        if language == .auto { return model.supportsAutomaticLanguageDetection }
+        if let fixedCode = model.languageCode { return fixedCode == language.rawValue }
+        return model.supportedLanguageCodes?.contains(language.rawValue) ?? true
+    }
+
+    static func matches(
+        _ query: String,
+        model: VoiceModelDescriptor,
+        provider: VoiceProviderDescriptor?
+    ) -> Bool {
+        let words = query.split(whereSeparator: \.isWhitespace)
+        if words.isEmpty { return true }
+
+        let languageCodes = model.languageCode.map { [$0] }
+            ?? model.supportedLanguageCodes.map { Array($0) }
+            ?? DictationLanguage.allCases.filter { $0 != .auto }.map(\.rawValue)
+        let languageNames = languageCodes.flatMap { code in
+            ["de", "en"].compactMap { localeCode in
+                Locale(identifier: localeCode).localizedString(forLanguageCode: code)
+            }
+        }
+        var details = [
+            model.displayName, model.id, model.providerID, provider?.displayName ?? "",
+            model.sizeLabel, model.localFileName ?? "", model.downloadIdentifier ?? "",
+            model.runtimeID ?? "", "\(model.speedScore)/10", "\(model.accuracyScore)/10",
+            "geschwindigkeit", "speed", "genauigkeit", "accuracy", "größe", "size"
+        ] + languageCodes + languageNames
+
+        if model.languageCode == nil { details += ["mehrsprachig", "multilingual"] }
+        if model.supportsAutomaticLanguageDetection {
+            details += ["auto", "automatische Spracherkennung", "automatic language detection"]
+        }
+        if model.supportsTranslationToEnglish {
+            details += ["übersetzung", "translation", "translate"]
+        }
+        if model.supportsLiveTranscription { details += ["live", "streaming", "live text"] }
+        if model.supportsQualityProfile { details += ["qualität", "quality profile"] }
+        if model.runtimeID != nil { details += ["offline", "runtime"] }
+
+        let searchable = details.map {
+            $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale.current)
+        }
+        return words.allSatisfy { word in
+            let term = String(word).folding(
+                options: [.caseInsensitive, .diacriticInsensitive], locale: Locale.current
+            )
+            return searchable.contains { value in
+                if term.count > 2 { return value.contains(term) }
+                return value.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                    .contains(Substring(term))
+            }
         }
     }
 }
@@ -316,6 +395,10 @@ extension SettingsView {
             TextField("", text: $speechModelSearchText)
                 .textFieldStyle(.plain)
                 .accessibilityLabel(text("Modelle suchen", "Search models"))
+                .accessibilityHint(text(
+                    "Suche nach Anbieter, Sprache, Modellname oder Eigenschaften.",
+                    "Search by provider, language, model name, or capabilities."
+                ))
 
             if !speechModelSearchText.isEmpty {
                 Button {
@@ -395,8 +478,6 @@ extension SettingsView {
     }
 
     private var filteredVoiceModelsForManagement: [VoiceModelDescriptor] {
-        let query = speechModelSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
         return appState.allVoiceModels.filter { model in
             let matchesProvider = speechModelProviderFilter == SpeechModelProviderFilter.allProvidersID
                 || model.providerID == speechModelProviderFilter
@@ -418,15 +499,16 @@ extension SettingsView {
                     return model.languageCode == nil
                 case .englishOnly:
                     return model.languageCode == DictationLanguage.english.rawValue
+                case .automaticDetection:
+                    return model.supportsAutomaticLanguageDetection
+                case .language(let language):
+                    return SpeechModelManagementMatcher.supports(language, model: model)
                 }
             }()
-            let matchesSearch = query.isEmpty
-                || model.displayName.lowercased().contains(query)
-                || model.id.lowercased().contains(query)
-                || model.providerID.lowercased().contains(query)
-                || (modelManagementProviders.first(where: { $0.id == model.providerID })?.displayName
-                    .lowercased().contains(query) ?? false)
-                || (model.languageCode?.lowercased().contains(query) ?? false)
+            let provider = modelManagementProviders.first { $0.id == model.providerID }
+            let matchesSearch = SpeechModelManagementMatcher.matches(
+                speechModelSearchText, model: model, provider: provider
+            )
             return matchesProvider && matchesAvailability && matchesLanguage && matchesSearch
         }
     }
@@ -449,7 +531,16 @@ extension SettingsView {
     private func voiceModelSummary(for model: VoiceModelDescriptor) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(model.displayName)
-            Text("\(model.languageCode?.uppercased() ?? "ALL") • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)")
+            let providerName = modelManagementProviders.first { $0.id == model.providerID }?
+                .displayName ?? model.providerID
+            let languageSummary: String = {
+                if let code = model.languageCode { return code.uppercased() }
+                if let codes = model.supportedLanguageCodes {
+                    return text("\(codes.count) Sprachen", "\(codes.count) languages")
+                }
+                return text("Mehrsprachig", "Multilingual")
+            }()
+            Text("\(providerName) • \(languageSummary) • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)")
                 .font(.footnote)
             .foregroundStyle(.secondary)
             .lineLimit(2)
