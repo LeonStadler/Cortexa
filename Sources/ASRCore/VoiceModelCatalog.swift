@@ -42,6 +42,8 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
     public let supportsLiveTranscription: Bool
     public let supportsAutomaticLanguageDetection: Bool
     public let supportsLanguageSelection: Bool
+    public let supportsQualityProfile: Bool
+    public let preferredCompatibleModelID: String?
     /// Nil means that the model accepts every language supported by the app.
     public let supportedLanguageCodes: Set<String>?
     public let maximumRecordingDurationSeconds: Int?
@@ -64,6 +66,8 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
         supportsLiveTranscription: Bool = true,
         supportsAutomaticLanguageDetection: Bool = true,
         supportsLanguageSelection: Bool = true,
+        supportsQualityProfile: Bool = true,
+        preferredCompatibleModelID: String? = nil,
         supportedLanguageCodes: Set<String>? = nil,
         maximumRecordingDurationSeconds: Int? = nil,
         speedScore: Int,
@@ -84,6 +88,8 @@ public struct VoiceModelDescriptor: Identifiable, Codable, Equatable, Sendable {
         self.supportsLiveTranscription = supportsLiveTranscription
         self.supportsAutomaticLanguageDetection = supportsAutomaticLanguageDetection
         self.supportsLanguageSelection = supportsLanguageSelection
+        self.supportsQualityProfile = supportsQualityProfile
+        self.preferredCompatibleModelID = preferredCompatibleModelID
         self.supportedLanguageCodes = supportedLanguageCodes
         self.maximumRecordingDurationSeconds = maximumRecordingDurationSeconds
         self.speedScore = speedScore
@@ -200,6 +206,7 @@ public enum LocalVoiceModelCatalog {
             id: "whisper.pro.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Pro (English)", languageCode: "en", languageScope: .english,
             supportsTranslationToEnglish: false, supportsAutomaticLanguageDetection: false,
+            preferredCompatibleModelID: "whisper.pro",
             speedScore: 7, accuracyScore: 8,
             sizeLabel: formattedDownloadSize(proModelExpectedBytes),
             expectedDownloadBytes: proModelExpectedBytes,
@@ -217,6 +224,7 @@ public enum LocalVoiceModelCatalog {
             id: "whisper.standard.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Standard (English)", languageCode: "en", languageScope: .english,
             supportsTranslationToEnglish: false, supportsAutomaticLanguageDetection: false,
+            preferredCompatibleModelID: "whisper.standard",
             speedScore: 8, accuracyScore: 5,
             sizeLabel: formattedDownloadSize(defaultModelExpectedBytes),
             expectedDownloadBytes: defaultModelExpectedBytes,
@@ -232,6 +240,7 @@ public enum LocalVoiceModelCatalog {
             id: "whisper.nano.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Nano (English)", languageCode: "en", languageScope: .english,
             supportsTranslationToEnglish: false, supportsAutomaticLanguageDetection: false,
+            preferredCompatibleModelID: "whisper.nano",
             speedScore: 9, accuracyScore: 3,
             sizeLabel: "150 MB", installState: .downloadable,
             localFileName: "ggml-base.en-q5_1.bin", downloadIdentifier: "base.en-q5_1"),
@@ -245,6 +254,7 @@ public enum LocalVoiceModelCatalog {
             id: "whisper.fast.en", providerID: VoiceProviderID.whisperCpp.rawValue,
             displayName: "Fast (English)", languageCode: "en", languageScope: .english,
             supportsTranslationToEnglish: false, supportsAutomaticLanguageDetection: false,
+            preferredCompatibleModelID: "whisper.fast",
             speedScore: 10, accuracyScore: 1,
             sizeLabel: "75 MB", installState: .downloadable, localFileName: "ggml-tiny.en.bin",
             downloadIdentifier: "tiny.en"),
@@ -256,6 +266,7 @@ public enum LocalVoiceModelCatalog {
             displayName: "Parakeet TDT v3", languageCode: nil, languageScope: .multilingual,
             supportsTranslationToEnglish: false, supportsLiveTranscription: false,
             supportsAutomaticLanguageDetection: true, supportsLanguageSelection: false,
+            supportsQualityProfile: false,
             supportedLanguageCodes: ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"],
             maximumRecordingDurationSeconds: 24 * 60,
             speedScore: 10, accuracyScore: 8,

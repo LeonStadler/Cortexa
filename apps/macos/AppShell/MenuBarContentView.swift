@@ -178,7 +178,7 @@ struct MenuBarContentView: View {
         if appState.finalResultDeliveryMode == .clipboardOnly {
             return text("Zwischenablage", "Clipboard")
         }
-        return appState.streamingEnabled
+        return appState.effectiveStreamingEnabled
             ? text("Live", "Live") : text("Am Ende einfügen", "Insert on Stop")
     }
 
@@ -384,7 +384,7 @@ struct MenuBarContentView: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(text("Sprachmodell", "Voice model"))
                 Spacer(minLength: 8)
-                Text(appState.selectedVoiceModel?.displayName ?? text("Auswählen…", "Choose…"))
+                Text(appState.activeVoiceModel?.displayName ?? text("Auswählen…", "Choose…"))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -394,14 +394,14 @@ struct MenuBarContentView: View {
 
     private func selectVoiceModelFromMenu(_ model: VoiceModelDescriptor) {
         if appState.isVoiceModelInstalled(model) {
-            appState.setSelectedVoiceModel(model)
+            appState.selectActiveVoiceModel(model)
         } else if model.installState != .unavailable {
             appState.installVoiceModel(model)
         }
     }
 
     private func voiceModelMenuRowTitle(for model: VoiceModelDescriptor) -> String {
-        let prefix = appState.selectedVoiceModelID == model.id ? "✓ " : "\u{3000}"
+        let prefix = appState.activeVoiceModel?.id == model.id ? "✓ " : "\u{3000}"
         let suffix: String
         if appState.isVoiceModelBusy(model) {
             suffix = text(" · lädt", " · busy")
@@ -450,7 +450,7 @@ struct MenuBarContentView: View {
                 text("Inhaltsstreaming", "Content streaming"),
                 isOn: $appState.aiProcessingApplyDuringLiveInsertion
             )
-            .disabled(!appState.streamingEnabled || !appState.selectedVoiceModelSupportsLiveTranscription || appState.visibleAIModels.isEmpty)
+            .disabled(!appState.effectiveStreamingEnabled || appState.visibleAIModels.isEmpty)
 
             Toggle(
                 text("Endergebnis einfügen", "Insert final result"),
@@ -593,28 +593,30 @@ struct MenuBarContentView: View {
                 Divider()
             }
 
-            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: $appState.streamingEnabled)
-                .disabled(appState.finalResultDeliveryMode == .clipboardOnly || !appState.selectedVoiceModelSupportsLiveTranscription)
+            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: appState.capabilityLiveTextBinding)
+                .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
 
-            Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
+            Picker(text("Sprache", "Language"), selection: appState.capabilityLanguageBinding) {
                 ForEach(visibleMenuBarLanguages) { language in
                     Text(
                         language.localizedDisplayName(
                             interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        + (appState.supportsCapability(.language(language))
+                            ? "" : text(" · Modellwechsel nötig", " · Change model"))
                     )
                     .tag(language)
                 }
             }
 
-            if appState.speechTranslationAvailable {
-                Picker(text("Übersetzung", "Translation"), selection: $appState.translationOutputMode) {
-                    ForEach(TranslationOutputMode.allCases) { mode in
-                        Text(
-                            mode.localizedDisplayName(
-                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        )
-                        .tag(mode)
-                    }
+            Picker(text("Übersetzung", "Translation"), selection: appState.capabilityTranslationBinding) {
+                ForEach(TranslationOutputMode.allCases) { mode in
+                    Text(
+                        mode.localizedDisplayName(
+                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                        + (appState.supportsCapability(.translation(mode))
+                            ? "" : text(" · Modellwechsel nötig", " · Change model"))
+                    )
+                    .tag(mode)
                 }
             }
 
@@ -627,12 +629,19 @@ struct MenuBarContentView: View {
                     menuBarVoiceModelMenu
                 }
 
-                Picker(text("Qualität", "Quality"), selection: $appState.performanceProfile) {
+                Picker(text("Qualität", "Quality"), selection: appState.capabilityQualityBinding) {
                     ForEach(DictationPerformance.allCases) { profile in
                         Text(
                             profile.localizedDisplayName(
                                 interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                            + (appState.supportsCapability(.quality(profile))
+                                ? "" : text(" · Modellwechsel nötig", " · Change model"))
                         ).tag(profile)
+                    }
+                }
+                if !appState.supportsCapability(.quality(appState.performanceProfile)) {
+                    Button(text("Modell für Qualität wechseln…", "Change model for quality…")) {
+                        appState.requestVoiceCapability(.quality(appState.performanceProfile))
                     }
                 }
             }

@@ -30,6 +30,7 @@ final class SessionConfigurationBuilderTests: XCTestCase {
             supportsLiveTranscription: false,
             supportsAutomaticLanguageDetection: true,
             supportsLanguageSelection: false,
+            supportsQualityProfile: false,
             supportedLanguageCodes: ["de", "en", "fr"],
             speedScore: 10,
             accuracyScore: 8,
@@ -42,6 +43,7 @@ final class SessionConfigurationBuilderTests: XCTestCase {
             from: makeInput(
                 selectedLanguage: .auto,
                 translationOutputMode: .english,
+                performanceProfile: .accurate,
                 selectedVoiceProviderID: VoiceProviderID.nvidiaParakeet.rawValue,
                 selectedVoiceModelID: parakeet.id,
                 voiceModels: [parakeet],
@@ -53,6 +55,7 @@ final class SessionConfigurationBuilderTests: XCTestCase {
         XCTAssertEqual(result.selectedVoiceProviderID, VoiceProviderID.nvidiaParakeet.rawValue)
         XCTAssertEqual(result.selectedVoiceModelID, parakeet.id)
         XCTAssertEqual(result.translationOutput, TranslationOutputMode.original)
+        XCTAssertEqual(result.performance, DictationPerformance.auto)
     }
 
     func testBuildSelectsExpectedModeForEveryStreamingAndDeliveryCombination() {
@@ -180,6 +183,7 @@ final class SessionConfigurationBuilderTests: XCTestCase {
         streamingEnabled: Bool = true,
         selectedLanguage: DictationLanguage = .german,
         translationOutputMode: TranslationOutputMode = .original,
+        performanceProfile: DictationPerformance = .auto,
         finalResultDeliveryMode: FinalResultDeliveryMode = .insert,
         muteMusicWhileDictating: Bool = false,
         asrInitialPrompt: String? = nil,
@@ -196,7 +200,7 @@ final class SessionConfigurationBuilderTests: XCTestCase {
             streamingEnabled: streamingEnabled,
             selectedLanguage: selectedLanguage,
             translationOutputMode: translationOutputMode,
-            performanceProfile: .auto,
+            performanceProfile: performanceProfile,
             selectedVoiceProviderID: selectedVoiceProviderID,
             selectedVoiceModelID: selectedVoiceModelID,
             voiceLanguageOverrides: voiceLanguageOverrides,

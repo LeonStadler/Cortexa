@@ -98,12 +98,14 @@ extension SettingsView {
         if speechHasMatches {
             LabeledContent {
                 Picker(
-                    text("Eingabesprache", "Input language"), selection: $appState.selectedLanguage
+                    text("Eingabesprache", "Input language"), selection: appState.capabilityLanguageBinding
                 ) {
                     ForEach(appState.selectedVoiceModelLanguageOptions) { language in
                         Text(
                             language.localizedDisplayName(
                                 interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                                + (appState.supportsCapability(.language(language))
+                                    ? "" : text(" · Modellwechsel nötig", " · Change model"))
                         ).tag(language)
                     }
                 }
@@ -114,21 +116,19 @@ extension SettingsView {
                 SettingsFieldLabel(
                     title: text("Eingabesprache", "Input language"),
                     helpText: text(
-                        "Bei multilingualen Modellen kann die Sprache frei gewählt werden. Bei rein englischen Modellen reduziert sich die Auswahl automatisch.",
-                        "For multilingual models you can choose freely. For English-only models the picker is reduced automatically."
+                        "Nicht unterstützte Sprachen bieten einen bestätigten Modellwechsel an.",
+                        "Unsupported languages offer a confirmed model change."
                     )
                 )
             }
 
-            if let selectedModel = appState.selectedVoiceModel {
+            if let selectedModel = appState.activeVoiceModel {
                 Text(
-                    selectedModel.languageCode == nil
-                        ? text(
-                            "Multilinguales Modell: alle Sprachen verfügbar.",
-                            "Multilingual model: all languages available.")
-                        : text(
-                            "Sprache ist an das Modell gebunden.", "Language is bound to the model."
-                        )
+                    selectedModel.supportsLanguageSelection
+                        ? text("Sprachen werden nach Modellfähigkeit angeboten.",
+                            "Languages are offered according to model capabilities.")
+                        : text("Dieses Modell verwendet automatische Spracherkennung.",
+                            "This model uses automatic language detection.")
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -148,12 +148,14 @@ extension SettingsView {
             LabeledContent {
                 Picker(
                     text("Qualitätsprofil", "Quality profile"),
-                    selection: $appState.performanceProfile
+                    selection: appState.capabilityQualityBinding
                 ) {
                     ForEach(DictationPerformance.allCases) { mode in
                         Text(
                             mode.localizedDisplayName(
                                 interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                                + (appState.supportsCapability(.quality(mode))
+                                    ? "" : text(" · Modellwechsel nötig", " · Change model"))
                         )
                         .tag(mode)
                     }
@@ -161,7 +163,6 @@ extension SettingsView {
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 180)
-                .disabled(appState.selectedVoiceModel?.runtimeID == "nemo-speech")
             } label: {
                 SettingsFieldLabel(
                     title: text("Qualitätsprofil", "Quality profile"),
@@ -176,7 +177,22 @@ extension SettingsView {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            if let selectedModel = appState.selectedVoiceModel {
+            if appState.activeVoiceModel?.supportsQualityProfile == false,
+                appState.performanceProfile != .auto {
+                Text(text(
+                    "Gespeichertes Profil \(appState.performanceProfile.displayName) ist für dieses Modell pausiert.",
+                    "The saved \(appState.performanceProfile.displayName) profile is paused for this model."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            if appState.activeVoiceModel?.supportsQualityProfile == false {
+                Button(text("Modell für Qualitätsprofil wechseln…", "Change model for quality profile…")) {
+                    appState.requestVoiceCapability(.quality(appState.performanceProfile))
+                }
+            }
+
+            if let selectedModel = appState.activeVoiceModel {
                 LabeledContent(text("Modell-Details", "Model details")) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(
@@ -193,15 +209,16 @@ extension SettingsView {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .id(selectedModel.id)
             }
         }
     }
 
     private var qualityProfileExplanation: String {
-        if appState.selectedVoiceModel?.runtimeID == "nemo-speech" {
+        if appState.activeVoiceModel?.supportsQualityProfile == false {
             return text(
-                "Parakeet verwendet feste Einstellungen der NeMo-Runtime. Das Qualitätsprofil gilt derzeit nur für Whisper und ist deshalb deaktiviert.",
-                "Parakeet uses fixed NeMo runtime settings. The quality profile currently applies only to Whisper, so it is disabled."
+                "Dieses Modell verwendet feste Laufzeitparameter. Ein Qualitätsprofil kann durch Wechsel zu einem kompatiblen Modell gewählt werden.",
+                "This model uses fixed runtime parameters. Choose a quality profile by switching to a compatible model."
             )
         }
         return text(
@@ -212,16 +229,18 @@ extension SettingsView {
 
     @ViewBuilder
     var translationContent: some View {
-        if speechHasMatches, appState.speechTranslationAvailable {
+        if speechHasMatches {
             LabeledContent {
                 Picker(
                     text("Übersetzen nach", "Translate to"),
-                    selection: $appState.translationOutputMode
+                    selection: appState.capabilityTranslationBinding
                 ) {
                     ForEach(TranslationOutputMode.allCases) { mode in
                         Text(
                             mode.localizedDisplayName(
                                 interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                                + (appState.supportsCapability(.translation(mode))
+                                    ? "" : text(" · Modellwechsel nötig", " · Change model"))
                         )
                         .tag(mode)
                     }
@@ -229,7 +248,6 @@ extension SettingsView {
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .settingsFormMenuPickerSlot(minWidth: 170)
-                .disabled(!appState.speechTranslationAvailable)
             } label: {
                 SettingsFieldLabel(
                     title: text("Übersetzen nach", "Translate to"),
@@ -239,16 +257,14 @@ extension SettingsView {
                     )
                 )
             }
-        } else if speechHasMatches {
-            Text(
-                appState.speechTranslationUnavailableReason
-                    ?? text(
-                        "Dieses Modell unterstützt keine Übersetzung.",
-                        "This model does not support translation."
-                    )
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            if appState.effectiveTranslationOutputMode != appState.translationOutputMode {
+                Text(text(
+                    "Die gespeicherte Übersetzung ist für dieses Modell pausiert.",
+                    "The saved translation is paused for this model."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -446,12 +462,12 @@ extension SettingsView {
 
     private var voiceModelSelectionBinding: Binding<String> {
         Binding(
-            get: { appState.selectedVoiceModelID },
+            get: { appState.activeVoiceModel?.id ?? appState.selectedVoiceModelID },
             set: { newValue in
                 guard let model = appState.allVoiceModels.first(where: { $0.id == newValue })
                 else { return }
                 if appState.isVoiceModelInstalled(model) {
-                    appState.setSelectedVoiceModel(model)
+                    appState.selectActiveVoiceModel(model)
                 } else if model.installState != .unavailable {
                     pendingVoiceModelForInstallation = model
                 }
@@ -547,7 +563,7 @@ extension SettingsView {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(
-                appState.selectedVoiceModelID == model.id
+                appState.activeVoiceModel?.id == model.id
                     || appState.voiceProviders.first(where: { $0.id == model.providerID })?.isAvailable
                         != true)
 
@@ -646,7 +662,7 @@ extension SettingsView {
                 )
             }
 
-            Toggle(isOn: $appState.streamingEnabled) {
+            Toggle(isOn: appState.capabilityLiveTextBinding) {
                 SettingsFieldLabel(
                     title: text("Live-Text einfügen", "Insert live text"),
                     helpText: text(
@@ -657,13 +673,12 @@ extension SettingsView {
             }
             .disabled(
                 appState.finalResultDeliveryMode == .clipboardOnly
-                    || !appState.selectedVoiceModelSupportsLiveTranscription
                     || !appState.dictationCapability.allowsDirectInsertion)
 
             if !appState.selectedVoiceModelSupportsLiveTranscription {
                 Text(text(
-                    "Parakeet verarbeitet die Aufnahme erst nach dem Stoppen; Live-Text und Live-AI bleiben daher ausgeschaltet.",
-                    "Parakeet processes the recording after you stop; live text and live AI therefore stay off."
+                    "Das aktive Modell unterstützt keinen Live-Text. Wähle die Option für einen Modellwechsel.",
+                    "The active model does not support live text. Select the option to change models."
                 ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)

@@ -280,6 +280,8 @@ enum HistoryRetentionPolicy: String, CaseIterable, Identifiable {
 
 @MainActor
 final class MacAppState: ObservableObject {
+    private(set) var voiceSelectionRevision: UInt64 = 0
+
     @Published var streamingEnabled: Bool {
         didSet {
             userDefaults.set(streamingEnabled, forKey: UserDefaultsKeys.streamingEnabled)
@@ -288,6 +290,7 @@ final class MacAppState: ObservableObject {
 
     @Published var selectedLanguage: DictationLanguage {
         didSet {
+            if oldValue != selectedLanguage { voiceSelectionRevision &+= 1 }
             userDefaults.set(selectedLanguage.rawValue, forKey: UserDefaultsKeys.selectedLanguage)
             sanitizeSpeechModelSelections()
         }
@@ -318,6 +321,7 @@ final class MacAppState: ObservableObject {
 
     @Published var selectedVoiceProviderID: String {
         didSet {
+            if oldValue != selectedVoiceProviderID { voiceSelectionRevision &+= 1 }
             userDefaults.set(
                 selectedVoiceProviderID, forKey: UserDefaultsKeys.selectedVoiceProviderID)
             sanitizeSpeechModelSelections()
@@ -326,6 +330,7 @@ final class MacAppState: ObservableObject {
 
     @Published var selectedVoiceModelID: String {
         didSet {
+            if oldValue != selectedVoiceModelID { voiceSelectionRevision &+= 1 }
             userDefaults.set(selectedVoiceModelID, forKey: UserDefaultsKeys.selectedVoiceModelID)
             sanitizeSpeechModelSelections()
         }
@@ -333,6 +338,7 @@ final class MacAppState: ObservableObject {
 
     @Published var voiceLanguageOverrides: [VoiceLanguageOverride] {
         didSet {
+            if oldValue != voiceLanguageOverrides { voiceSelectionRevision &+= 1 }
             persistVoiceLanguageOverrides()
         }
     }
@@ -971,11 +977,11 @@ final class MacAppState: ObservableObject {
     }
 
     var selectedVoiceModelSupportsTranslation: Bool {
-        selectedVoiceModel?.supportsTranslationToEnglish ?? false
+        activeVoiceModel?.supportsTranslationToEnglish ?? false
     }
 
     var selectedVoiceModelSupportsLiveTranscription: Bool {
-        selectedVoiceModel?.supportsLiveTranscription ?? true
+        activeVoiceModel?.supportsLiveTranscription ?? false
     }
 
     var speechTranslationAvailable: Bool {
@@ -984,7 +990,7 @@ final class MacAppState: ObservableObject {
 
     var speechTranslationUnavailableReason: String? {
         guard !speechTranslationAvailable else { return nil }
-        guard let selectedVoiceModel else {
+        guard let selectedVoiceModel = activeVoiceModel else {
             return "Kein Speech-Modell ausgewählt."
         }
         return
@@ -992,20 +998,22 @@ final class MacAppState: ObservableObject {
     }
 
     var selectedVoiceModelLanguageOptions: [DictationLanguage] {
-        voiceLanguageOptions(for: selectedVoiceModel)
+        [.auto] + DictationLanguage.allCases.filter { $0 != .auto }
     }
 
     var menuBarLanguageOptions: [DictationLanguage] {
-        selectedVoiceModelLanguageOptions
+        [.auto] + DictationLanguage.allCases.filter {
+            $0 != .auto && (visibleMenuBarLanguages.contains($0.rawValue) || $0 == selectedLanguage)
+        }
     }
 
     var selectedVoiceModelLanguageHintText: String? {
-        guard let selectedVoiceModel else { return nil }
+        guard let selectedVoiceModel = activeVoiceModel else { return nil }
         if let languageCode = selectedVoiceModel.languageCode {
             let languageName =
                 DictationLanguage(rawValue: languageCode)?.displayName ?? languageCode.uppercased()
             return
-                "Dieses Modell ist auf \(languageName) festgelegt. Die Sprachauswahl reduziert sich deshalb auf \(languageName) und Auto."
+                "Dieses Modell ist auf \(languageName) festgelegt. Andere Sprachen erfordern einen Modellwechsel."
         }
         return nil
     }
@@ -1584,12 +1592,6 @@ final class MacAppState: ObservableObject {
             },
             setSelectedLanguage: { [weak self] language in
                 self?.selectedLanguage = language
-            },
-            currentTranslationOutputMode: { [weak self] in
-                self?.translationOutputMode ?? .original
-            },
-            setTranslationOutputMode: { [weak self] mode in
-                self?.translationOutputMode = mode
             },
             currentSelectedVoiceProviderID: { [weak self] in
                 self?.selectedVoiceProviderID ?? LocalVoiceModelCatalog.defaultProviderID

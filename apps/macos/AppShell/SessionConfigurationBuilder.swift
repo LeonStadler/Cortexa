@@ -44,7 +44,8 @@ struct SessionConfigurationBuilder {
             translationOutput: selectedModel?.supportsTranslationToEnglish == false
                 ? .original
                 : input.translationOutputMode,
-            performance: input.performanceProfile,
+            performance: selectedModel?.supportsQualityProfile == false
+                ? .auto : input.performanceProfile,
             selectedVoiceProviderID: effectiveVoiceProviderID(
                 for: input.selectedLanguage, input: input
             ),
@@ -79,37 +80,13 @@ struct SessionConfigurationBuilder {
         for language: DictationLanguage,
         input: SessionConfigurationInput
     ) -> VoiceModelDescriptor? {
-        let overrideDescriptor: VoiceModelDescriptor?
-        if language != .auto,
-            let overrideID = input.voiceLanguageOverrides.first(where: {
-                $0.languageCode == language.rawValue
-            })?.modelID
-        {
-            overrideDescriptor = input.voiceModels.first(where: { $0.id == overrideID })
-        } else {
-            overrideDescriptor = nil
-        }
-
-        if let overrideDescriptor, canUseVoiceModel(overrideDescriptor, for: language, input: input)
-        {
-            return overrideDescriptor
-        }
-
-        if let selectedVoiceModel = selectedVoiceModelDescriptor(input: input),
-            canUseVoiceModel(selectedVoiceModel, for: language, input: input)
-        {
-            return selectedVoiceModel
-        }
-
-        if let standard = input.voiceModels.first(where: {
-            $0.id == LocalVoiceModelCatalog.defaultModelID
-        }),
-            canUseVoiceModel(standard, for: language, input: input)
-        {
-            return standard
-        }
-
-        return input.voiceModels.first(where: { canUseVoiceModel($0, for: language, input: input) })
+        VoiceModelCapabilityPolicy().effectiveModel(
+            for: language,
+            selectedModelID: input.selectedVoiceModelID,
+            overrides: input.voiceLanguageOverrides,
+            catalog: input.voiceModels,
+            installedFiles: input.installedVoiceModelFileNames
+        )
     }
 
     private func dictationMode(
@@ -122,31 +99,4 @@ struct SessionConfigurationBuilder {
         return streamingEnabled ? .streaming : .finalize
     }
 
-    private func selectedVoiceModelDescriptor(
-        input: SessionConfigurationInput
-    ) -> VoiceModelDescriptor? {
-        input.voiceModels.first(where: { $0.id == input.selectedVoiceModelID })
-    }
-
-    private func canUseVoiceModel(
-        _ descriptor: VoiceModelDescriptor,
-        for language: DictationLanguage,
-        input: SessionConfigurationInput
-    ) -> Bool {
-        if !isVoiceModelInstalled(descriptor, input: input) {
-            return false
-        }
-        if language == .auto { return descriptor.supportsAutomaticLanguageDetection }
-        guard descriptor.supportsLanguageSelection else { return false }
-        if let languageCode = descriptor.languageCode, languageCode != language.rawValue { return false }
-        return descriptor.supportedLanguageCodes?.contains(language.rawValue) ?? true
-    }
-
-    private func isVoiceModelInstalled(
-        _ descriptor: VoiceModelDescriptor,
-        input: SessionConfigurationInput
-    ) -> Bool {
-        guard let localFileName = descriptor.localFileName else { return false }
-        return input.installedVoiceModelFileNames.contains(localFileName)
-    }
 }

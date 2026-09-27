@@ -185,7 +185,7 @@ struct SettingsView: View {
 
     /// Live rewrite / adjustment radius affects streaming partials only.
     var isLiveRewriteScopeApplicable: Bool {
-        appState.streamingEnabled
+        appState.effectiveStreamingEnabled
             && appState.finalResultDeliveryMode != .clipboardOnly
             && appState.dictationCapability.allowsDirectInsertion
     }

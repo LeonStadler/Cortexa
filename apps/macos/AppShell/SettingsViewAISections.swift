@@ -31,7 +31,7 @@ extension SettingsView {
                             text("Inhaltsstreaming", "Content streaming"),
                             isOn: $appState.aiProcessingApplyDuringLiveInsertion
                         )
-                        .disabled(!appState.streamingEnabled || !appState.selectedVoiceModelSupportsLiveTranscription)
+                        .disabled(!appState.effectiveStreamingEnabled)
 
                         Toggle(
                             text("Endergebnis einfügen", "Insert final result"),

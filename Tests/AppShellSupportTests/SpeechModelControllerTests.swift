@@ -55,7 +55,7 @@
             )
         }
 
-        func testSanitizeSpeechModelSelectionsFallsBackToValidDefaultsAndResetsTranslation() {
+        func testSanitizeSpeechModelSelectionsFallsBackToValidDefaultsAndKeepsTranslationPreference() {
             let state = SpeechModelControllerState(
                 selectedLanguage: .german,
                 translationOutputMode: .english,
@@ -192,6 +192,29 @@
             XCTAssertEqual(state.selectedLanguage, .english)
         }
 
+        func testSanitizeKeepsGermanWhenEnglishGlobalModelHasGermanOverride() {
+            let englishModel = LocalVoiceModelCatalog.model(id: "whisper.nano.en")!
+            let germanModel = LocalVoiceModelCatalog.model(id: "whisper.nano")!
+            let state = SpeechModelControllerState(
+                selectedLanguage: .german,
+                translationOutputMode: .original,
+                selectedVoiceProviderID: LocalVoiceModelCatalog.defaultProviderID,
+                selectedVoiceModelID: englishModel.id,
+                voiceLanguageOverrides: [
+                    VoiceLanguageOverride(languageCode: "de", modelID: germanModel.id)
+                ],
+                voiceProviders: LocalVoiceModelCatalog.availableProviders(),
+                voiceModels: LocalVoiceModelCatalog.availableModels(includeParakeet: false),
+                installedVoiceModelFileNames: [englishModel.localFileName!, germanModel.localFileName!],
+                voiceModelOperationStates: [:]
+            )
+
+            makeController(state: state).sanitizeSpeechModelSelections()
+
+            XCTAssertEqual(state.selectedLanguage, .german)
+            XCTAssertEqual(state.voiceLanguageOverrides.first?.modelID, germanModel.id)
+        }
+
         func testLanguageOptionsAndTranslationCapabilityFollowSelectedModel() {
             let englishModel = LocalVoiceModelCatalog.model(id: "whisper.standard.en")!
             let standardModel = LocalVoiceModelCatalog.model(id: LocalVoiceModelCatalog.defaultModelID)!
@@ -262,8 +285,6 @@
                 voiceModelInstaller: VoiceModelInstaller(),
                 currentSelectedLanguage: { state.selectedLanguage },
                 setSelectedLanguage: { state.selectedLanguage = $0 },
-                currentTranslationOutputMode: { state.translationOutputMode },
-                setTranslationOutputMode: { state.translationOutputMode = $0 },
                 currentSelectedVoiceProviderID: { state.selectedVoiceProviderID },
                 setSelectedVoiceProviderID: { state.selectedVoiceProviderID = $0 },
                 currentSelectedVoiceModelID: { state.selectedVoiceModelID },

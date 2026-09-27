@@ -33,8 +33,6 @@ final class SpeechModelController {
     private let voiceModelInstaller: VoiceModelInstaller
     private let currentSelectedLanguage: () -> DictationLanguage
     private let setSelectedLanguage: (DictationLanguage) -> Void
-    private let currentTranslationOutputMode: () -> TranslationOutputMode
-    private let setTranslationOutputMode: (TranslationOutputMode) -> Void
     private let currentSelectedVoiceProviderID: () -> String
     private let setSelectedVoiceProviderID: (String) -> Void
     private let currentSelectedVoiceModelID: () -> String
@@ -55,8 +53,6 @@ final class SpeechModelController {
         voiceModelInstaller: VoiceModelInstaller,
         currentSelectedLanguage: @escaping () -> DictationLanguage,
         setSelectedLanguage: @escaping (DictationLanguage) -> Void,
-        currentTranslationOutputMode: @escaping () -> TranslationOutputMode,
-        setTranslationOutputMode: @escaping (TranslationOutputMode) -> Void,
         currentSelectedVoiceProviderID: @escaping () -> String,
         setSelectedVoiceProviderID: @escaping (String) -> Void,
         currentSelectedVoiceModelID: @escaping () -> String,
@@ -76,8 +72,6 @@ final class SpeechModelController {
         self.voiceModelInstaller = voiceModelInstaller
         self.currentSelectedLanguage = currentSelectedLanguage
         self.setSelectedLanguage = setSelectedLanguage
-        self.currentTranslationOutputMode = currentTranslationOutputMode
-        self.setTranslationOutputMode = setTranslationOutputMode
         self.currentSelectedVoiceProviderID = currentSelectedVoiceProviderID
         self.setSelectedVoiceProviderID = setSelectedVoiceProviderID
         self.currentSelectedVoiceModelID = currentSelectedVoiceModelID
@@ -143,6 +137,43 @@ final class SpeechModelController {
     }
 
     func installVoiceModel(_ descriptor: VoiceModelDescriptor) {
+        startVoiceModelInstallation(descriptor) { [weak self] in
+            guard let self else { return }
+            let language = self.currentSelectedLanguage()
+            let hadOverride = language != .auto && self.currentVoiceLanguageOverrides().contains {
+                $0.languageCode == language.rawValue
+            }
+            if self.isVoiceProviderAvailable(descriptor.providerID) {
+                if self.currentSelectedVoiceProviderID() != descriptor.providerID {
+                    self.setSelectedVoiceProviderID(descriptor.providerID)
+                }
+                if self.currentSelectedVoiceModelID() != descriptor.id {
+                    self.setSelectedVoiceModelID(descriptor.id)
+                }
+                if hadOverride, VoiceModelCapabilityPolicy().supports(
+                    language: language, model: descriptor) {
+                    var overrides = self.currentVoiceLanguageOverrides()
+                    overrides.removeAll { $0.languageCode == language.rawValue }
+                    overrides.append(VoiceLanguageOverride(
+                        languageCode: language.rawValue, modelID: descriptor.id))
+                    self.setVoiceLanguageOverrides(overrides)
+                }
+            }
+            self.sanitizeSpeechModelSelections()
+        }
+    }
+
+    func installVoiceModelForCapability(
+        _ descriptor: VoiceModelDescriptor,
+        onInstalled: @escaping @MainActor () -> Void
+    ) {
+        startVoiceModelInstallation(descriptor, onInstalled: onInstalled)
+    }
+
+    private func startVoiceModelInstallation(
+        _ descriptor: VoiceModelDescriptor,
+        onInstalled: @escaping @MainActor () -> Void
+    ) {
         guard voiceModelOperationState(for: descriptor) == nil else { return }
         guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue
                 || descriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue else {
@@ -175,15 +206,7 @@ final class SpeechModelController {
                 self.setInstalledVoiceModelFileNames(installedFileNames)
                 self.setVoiceProviders(LocalVoiceModelCatalog.availableProviders(
                     parakeetBinaryURL: VoiceModelInstaller.resolveNemoSpeechCLI()))
-                if self.isVoiceProviderAvailable(descriptor.providerID) {
-                    if self.currentSelectedVoiceProviderID() != descriptor.providerID {
-                        self.setSelectedVoiceProviderID(descriptor.providerID)
-                    }
-                    if self.currentSelectedVoiceModelID() != descriptor.id {
-                        self.setSelectedVoiceModelID(descriptor.id)
-                    }
-                }
-                self.sanitizeSpeechModelSelections()
+                onInstalled()
                 self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde installiert.")
             } catch {
                 if error is CancellationError || Task.isCancelled {
@@ -439,7 +462,14 @@ final class SpeechModelController {
         if let selectedVoiceModel {
             let availableLanguages = Set(
                 voiceLanguageOptions(for: selectedVoiceModel).map(\.rawValue))
-            if !availableLanguages.contains(currentSelectedLanguage().rawValue) {
+            let language = currentSelectedLanguage()
+            let hasUsableOverride = currentVoiceLanguageOverrides().contains { entry in
+                guard entry.languageCode == language.rawValue,
+                    let model = currentVoiceModels().first(where: { $0.id == entry.modelID })
+                else { return false }
+                return canUseVoiceModel(model, for: language)
+            }
+            if !availableLanguages.contains(language.rawValue) && !hasUsableOverride {
                 setSelectedLanguage(voiceLanguageOptions(for: selectedVoiceModel).first ?? .english)
             }
         }
@@ -458,9 +488,6 @@ final class SpeechModelController {
             }
         )
 
-        if !selectedVoiceModelSupportsTranslation, currentTranslationOutputMode() != .original {
-            setTranslationOutputMode(.original)
-        }
     }
 
     private var selectedVoiceModel: VoiceModelDescriptor? {
@@ -469,10 +496,6 @@ final class SpeechModelController {
 
     private func isVoiceProviderAvailable(_ providerID: String) -> Bool {
         currentVoiceProviders().contains(where: { $0.id == providerID && $0.isAvailable })
-    }
-
-    private var selectedVoiceModelSupportsTranslation: Bool {
-        selectedVoiceModel?.supportsTranslationToEnglish ?? false
     }
 
     private func setOperation(_ operation: VoiceModelOperationKind, for modelID: String) {

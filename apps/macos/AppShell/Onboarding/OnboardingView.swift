@@ -260,9 +260,8 @@ struct OnboardingView: View {
 
             Toggle(
                 text("Live-Text einfügen", "Insert live text"),
-                isOn: $appState.streamingEnabled
+                isOn: appState.capabilityLiveTextBinding
             )
-            .disabled(!appState.selectedVoiceModelSupportsLiveTranscription)
 
             Picker(
                 text("Finales Ergebnis", "Final result"),
