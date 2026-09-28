@@ -2,9 +2,9 @@
 
 Offline-first Diktat und Transkription für **macOS** (Schwerpunkt) und **iOS/iPadOS** (Tastatur-Extension-Workflow). Technische Ziele und Modulgrenzen unten; **vollständige Funktions-/Implementierungsmatrix:** [`docs/features-and-implementation.md`](docs/features-and-implementation.md).
 
-## Status: proprietär
+## Lizenz: Apache-2.0
 
-Dieses Repository und die gebündelte **Dokumentation dienen der internen Entwicklung und dem Release** — **keine Open-Source-Veröffentlichung**. Weitergabe von Quellcode oder Binärprodukten nur nach eigenen Vereinbarungen. Details zum proprietären Status: [`docs/licensing.md`](docs/licensing.md#proprietary).
+Cortexa ist quelloffen und unter der [Apache License 2.0](LICENSE) lizenziert. Copyright- und Markenhinweise stehen in [`NOTICE`](NOTICE); Drittanbieterkomponenten und Modelle behalten ihre jeweiligen Lizenzen. Details: [`docs/licensing.md`](docs/licensing.md).
 
 ## Dokumentation (Index)
 
@@ -169,4 +169,4 @@ Projekt: `apps/ios/WisprLocaliOS/WisprLocaliOS.xcodeproj` — Targets **WisprLoc
 
 ---
 
-**English summary:** Cortexa is a local-first dictation stack for Apple platforms. The repo is **proprietary** (not open source); use [`docs/README.md`](docs/README.md) and [`docs/features-and-implementation.md`](docs/features-and-implementation.md) for full technical coverage.
+**English summary:** Cortexa is an open-source, local-first dictation stack for Apple platforms, licensed under the [Apache License 2.0](LICENSE). Third-party components and models retain their own licenses; see [`docs/licensing.md`](docs/licensing.md), [`docs/third-party-notices.md`](docs/third-party-notices.md), [`docs/README.md`](docs/README.md), and [`docs/features-and-implementation.md`](docs/features-and-implementation.md) for details.

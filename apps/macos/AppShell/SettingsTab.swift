@@ -11,6 +11,7 @@ enum SettingsTab: String, Hashable, CaseIterable {
     case dictionary
     case snippets
     case about
+    case licenses
     case advanced
 
     enum Group: CaseIterable, Hashable {
@@ -39,7 +40,7 @@ enum SettingsTab: String, Hashable, CaseIterable {
             return .writing
         case .history, .advanced:
             return .system
-        case .about:
+        case .about, .licenses:
             return .about
         }
     }
@@ -58,6 +59,7 @@ enum SettingsTab: String, Hashable, CaseIterable {
         case .ai: return "sparkles"
         case .history: return "clock.arrow.circlepath"
         case .about: return "person.crop.circle"
+        case .licenses: return "doc.text"
         case .dictionary: return "text.book.closed"
         case .snippets: return "text.badge.plus"
         case .advanced: return "wrench.and.screwdriver"
@@ -82,6 +84,8 @@ enum SettingsTab: String, Hashable, CaseIterable {
             return language.text("Verlauf", "History")
         case .about:
             return language.text("Über Cortexa", "About Cortexa")
+        case .licenses:
+            return language.text("Lizenzen", "Licenses")
         case .dictionary:
             return language.text("Wörterbuch", "Dictionary")
         case .snippets:
@@ -132,6 +136,11 @@ enum SettingsTab: String, Hashable, CaseIterable {
             return language.text(
                 "Produktinformationen, Credits und Versionsdetails ansehen.",
                 "View product information, credits, and version details."
+            )
+        case .licenses:
+            return language.text(
+                "Cortexas Lizenz und erforderliche Hinweise zu verwendeten Drittanbieter-Komponenten ansehen.",
+                "View Cortexa's license and required notices for third-party components."
             )
         case .dictionary:
             return language.text(

@@ -2,6 +2,14 @@
 
 ## Features
 
+- 2026-09-28: Lizenzübersicht in den macOS-Einstellungen ergänzt.
+  - Dateien: `apps/macos/AppShell/SettingsTab.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsSearchPresentation.swift`, `apps/macos/AppShell/LicensesSettingsPage.swift`, `apps/macos/WisprLocalMac/project.yml`, `apps/macos/README.md`, `docs/third-party-notices.md`, `docs/licensing.md`, `docs/README.md`, `VERSION`.
+  - Funktionalität: Unter „Über Cortexa“ gibt es nun „Lizenzen“. Die Seite zeigt Cortexas Apache-2.0-Lizenz zuerst und danach die Lizenztypen/Attributionen für whisper.cpp, Sparkle, NVIDIA NeMo-Speech.cpp und Parakeet TDT v3. Jeder Drittanbieter-Eintrag öffnet direkt eine auf den gebündelten Stand gepinnte Lizenzquelle; die Parakeet-Modellkarte ist zusätzlich verlinkt. Vollständige Lizenztexte und Hinweise werden mit der macOS-App gebündelt und in den Einstellungen dargestellt. Siehe auch den Eintrag zur Apache-2.0-Umstellung am 2026-09-28.
+
+- 2026-09-28: Cortexa auf Apache License 2.0 umgestellt und Lizenzquellen präzisiert.
+  - Dateien: `LICENSE`, `NOTICE`, `README.md`, `docs/licensing.md`, `docs/third-party-notices.md`, `docs/README.md`, `apps/macos/README.md`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `apps/macos/AppShell/LicensesSettingsPage.swift`, `apps/macos/WisprLocalMac/project.yml`, `Tests/DocsContractTests/DocsContractTests.swift`, `VERSION`.
+  - Funktionalität: Das Repository und die App weisen Cortexa nun als Apache-2.0-lizenziert aus; Copyright- und Markennotizen stehen in `NOTICE`, der vollständige Lizenztext wird mit der App gebündelt. Veraltete Aussagen zum proprietären Status wurden korrigiert. Drittanbieter-Lizenzlinks und Dokumentation nennen für whisper.cpp, Sparkle und NeMo-Speech.cpp konkrete gepinnte Commits beziehungsweise Versionen. Feature-Version `0.47.0`.
+
 - 2026-09-27: Modellverwaltung um Anbieter-, Sprach- und Detailsuche erweitert.
   - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `Tests/AppShellSupportTests/SpeechModelManagementMatcherTests.swift`, `apps/macos/README.md`, `VERSION`.
   - Funktionalität: Die Modellsuche kombiniert mehrere Begriffe und findet Anbieter, lokalisierte Sprachnamen und Sprachcodes, Größe, Runtime, Dateinamen sowie unterstützte Fähigkeiten. Nicht unterstützte Sprachen oder Fähigkeiten erzeugen keine Treffer. Der Sprachfilter bietet neben Sprachumfang nun konkrete Erkennungssprachen und Auto-Erkennung; Modellzeilen nennen ihren Anbieter und den tatsächlichen Sprachumfang. Feature-Version `0.45.0`.
@@ -43,6 +51,12 @@
 - 2026-09-28: Lokalen Open-Source-macOS-Release ohne Apple-Developer-ID eingerichtet.
   - Dateien: `scripts/build_macos_open_source_release.sh`, `scripts/create_macos_dmg.sh`, `README.md`, `docs/distribution.md`, `docs/macos-release-checklist.md`, `docs/permissions-macos.md`, `docs/licensing.md`, `docs/README.md`, `Tests/DocsContractTests/PermissionRecoveryContractTests.swift`.
   - Funktionalität: Ein einzelner lokaler Build-Befehl initialisiert Whisper bei Bedarf, baut und validiert Cortexa samt Whisper-Runtime gezielt für arm64 mit ad-hoc Signatur, erstellt einen überprüften DMG mit SHA-256 und Installationshinweisen und räumt frühere Build-Ausgaben des Checkouts auf. Die DMG-Verpackung erlaubt ad-hoc signierte Apps ausschließlich für diesen expliziten Open-Source-Pfad. Dokumentation erklärt die erstmalige macOS-Freigabe sowie mögliche erneute Berechtigungsabfragen bei Updates. Kein Produktversionsbump, da dies eine Release-Tooling-Änderung ist.
+
+## Docs
+
+- 2026-09-28: Versionierung, lokaler DMG-Test und GitHub-Veröffentlichung in `AGENTS.md` festgehalten.
+  - Dateien: `AGENTS.md`, `changelog.md`.
+  - Funktionalität: Der verbindliche Ablauf beschreibt Branch- und Commit-Vorbereitung, Versionsbump nach erfolgreichen Implementierungstests, arm64-DMG-Build, Prüfsummen-/Image-Prüfung, Nutzerfreigabe nach Installationstest und erst danach Push sowie GitHub-Release. Er dokumentiert außerdem die Gatekeeper-Hinweise, Release-Assets und Rückprüfung der heruntergeladenen GitHub-Dateien. Kein Produktversionsbump, da nur Prozessdokumentation geändert wurde.
 
 ## Fixes
 

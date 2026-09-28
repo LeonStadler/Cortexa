@@ -24,7 +24,8 @@ final class DocsContractTests: XCTestCase {
         let readme = try readRepositoryFile("README.md")
         let ciWorkflow = try readRepositoryFile(".github/workflows/ci.yml")
 
-        XCTAssertTrue(licensing.contains("keine Open-Source-Software"))
+        XCTAssertTrue(licensing.contains("Apache License, Version 2.0"))
+        XCTAssertTrue(licensing.contains("NOTICE"))
         XCTAssertTrue(licensing.contains("keine lokale Lizenzschlüssel-Aktivierung"))
         XCTAssertFalse(readme.contains("WISPR_LICENSE_PUBLIC_KEY_BASE64"))
         XCTAssertFalse(ciWorkflow.contains("WISPR_LICENSE_PUBLIC_KEY_BASE64"))

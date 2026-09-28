@@ -34,6 +34,12 @@ targets:
       - path: ../AppShell/Resources/Cortexa.icon
       - path: ../AppShell/Resources/Localizable.xcstrings
       - path: ../../../changelog.md
+      - path: ../AppShell/Resources/third-party-notices.md
+        buildPhase: resources
+        type: file
+      - path: ../AppShell/Resources/Apache-2.0.txt
+        buildPhase: resources
+        type: file
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wisprlocal.mac

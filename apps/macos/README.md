@@ -47,6 +47,7 @@ Operational notes:
 - `Settings…` from the menu bar opens an explicit preference-styled settings window, which is more reliable for the agent/menu bar app than relying on the default SwiftUI settings selector.
 - The settings let you switch the visible app UI between German and English.
 - The settings window is organized into a sidebar-driven preferences layout for general app preferences, dictation, shortcuts, history, about, snippets, and advanced options.
+- The `Lizenzen` settings item sits directly below `Über Cortexa`, showing Cortexa's Apache-2.0 license first, followed by notices and direct license links for bundled dependencies and optional speech-model/runtime downloads.
 - The settings shell and the menu bar content are now split into dedicated files so UI structure stays separate from app bootstrap and state orchestration.
 - The settings sidebar now also includes a dedicated `AI` tab, while translation remains under `Diktat` because it belongs to the ASR/transcription path rather than the text-rewrite provider layer.
 - The settings use a fixed source-list sidebar plus a global native search field above the detail view, so switching sections and searching across areas stays compact and predictable.
@@ -58,7 +59,7 @@ Operational notes:
 - The settings window keeps a fixed width so long history entries do not stretch the preferences layout horizontally.
 - The settings window now leans more heavily on native macOS structures such as toolbar search, `Form`-based content flow, and restrained `GroupBox` grouping instead of a heavily custom header/search/card shell.
 - The history tab shows compact transcript cards with short previews first; longer dictations can be expanded inline for the full text without destabilizing the window layout.
-- The `About` tab introduces the product and author, includes a short profile of Leon Stadler based on his website, and links out to his personal site for more background; Cortexa is proprietary software (see `docs/licensing.md`).
+- The `About` tab introduces the product and author, includes a short profile of Leon Stadler based on his website, and links out to his personal site for more background; Cortexa is licensed under Apache-2.0 (see `docs/licensing.md`).
 - The `About` tab also renders the bundled release notes from `changelog.md` in a styled changelog section, with a development fallback to the source tree when the bundle resource is temporarily unavailable.
 - Advanced options contain updates and diagnostics; the diagnostics preview can be expanded and copied.
 - The search results view announces grouped matches and uses clearer accessibility labels for the search field, result grouping, and transcript history previews.

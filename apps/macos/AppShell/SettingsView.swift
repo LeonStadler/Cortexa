@@ -369,6 +369,8 @@ struct SettingsView: View {
                 changelogContent: erasedView { aboutChangelogContent },
                 supportContent: erasedView { aboutSupportContent }
             )
+        case .licenses:
+            LicensesSettingsPage(language: effectiveLanguage)
         case .dictionary:
             DictionarySettingsPage(
                 newEntrySectionTitle: text("Neuer Begriff", "New term"),

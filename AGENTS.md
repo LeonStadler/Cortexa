@@ -21,6 +21,72 @@ Bei **großen** Funktionsänderung Änderung an einer oder mehreren Dateien (Bug
 - **Major-Update** (z. B. Branch-Merge, mehrere Features, größere Umstellung): Erhöhung um **0.2.0** oder nach Absprache.
 - **Versionen um 1.0.0**: Werden vom Nutzer angekündigt/freigegeben – nicht eigenständig auf 1.0.0 setzen.
 
+## macOS-Version, Build und GitHub-Release
+
+Der aktuelle öffentliche Vertriebsweg ist ein lokal gebauter Open-Source-DMG für Apple Silicon. Dafür braucht es kein Apple-Developer-Programm, keine Developer-ID und keine Notarisierung. Die App wird ad-hoc signiert, damit ihre Dateien geprüft werden können; macOS kann beim ersten Öffnen eine Freigabe verlangen. Nach Updates kann macOS Mikrofon- oder Bedienungshilfenrechte erneut abfragen. Sparkle/Appcast ist nicht Teil dieses Ablaufs.
+
+### Neue Version bauen und lokal testen
+
+1. Auf dem passenden `feature/...`, `bugfix/...` oder `chore/...`-Branch arbeiten. `main` und andere Worktrees vor Build-Bereinigung prüfen; nie versehentlich deren Artefakte verwenden.
+2. Nach erfolgreicher Implementierung und den relevanten Tests `VERSION` nach den obigen Regeln anheben und `changelog.md` mit Datum, geänderten Dateien, Verhalten und neuer Version aktualisieren. Release-Artefakte müssen dieselbe Version tragen.
+3. Änderungen für den Build in einem lokalen Commit festhalten, damit das später veröffentlichte Tag genau auf den getesteten Quellstand zeigen kann. Den Commit vor der Nutzerfreigabe nicht pushen.
+4. Paket-Build und betroffene Tests ausführen. Danach den Release-DMG auf einem Apple-Silicon-Mac bauen:
+
+   ```bash
+   swift build
+   swift test
+   ./scripts/build_macos_open_source_release.sh
+   ```
+
+   Der Build-Aufruf löscht vorher **nur `artifacts/mac/` in diesem Checkout**, initialisiert das angepinnte Whisper-Submodul bei Bedarf und baut App sowie Whisper-CLI als arm64. Er erstellt `artifacts/mac/Cortexa-<VERSION>.dmg`, eine portable `.sha256`-Datei und Installationshinweise. Die Release-App enthält absichtlich kein Modell; Onboarding lädt das Modell beim ersten Start.
+5. Vor der Installation Paket und Prüfsumme prüfen:
+
+   ```bash
+   hdiutil verify "artifacts/mac/Cortexa-$(cat VERSION).dmg"
+   (cd artifacts/mac && shasum -a 256 -c "Cortexa-$(cat ../../VERSION).dmg.sha256")
+   ```
+
+   Danach DMG auf dem Ziel-Mac installieren und App starten. Gatekeeper-Freigabe laut Installationshinweisen bestätigen; Modell-Download, Mikrofon, Bedienungshilfen und Diktat praktisch testen. Release nicht veröffentlichen, bevor der Nutzer den Installationstest ausdrücklich freigegeben hat.
+
+### Nach ausdrücklicher Freigabe veröffentlichen
+
+1. Prüfen, dass der lokale Release-Branch sauber ist, der getestete Commit noch HEAD ist und die Remote-Branch-/Tag-/Release-Lage frisch abgerufen wurde. `v<VERSION>` darf noch nicht existieren; veröffentlichte Versionstags nicht wiederverwenden oder verschieben.
+2. Den getesteten Branch-Commit zu `origin` pushen. Nicht eigenständig nach `main` mergen und keinen PR erstellen, solange der Nutzer das nicht angefordert hat.
+3. GitHub-Release am getesteten Commit anlegen und DMG, Prüfsumme und Installationshinweise anhängen. Release-Hinweise nennen Version, arm64/Apple Silicon, fehlende Developer-ID/Notarisierung, Gatekeeper-Freigabe und Modell-Download beim ersten Start. Beispiel:
+
+   ```bash
+   VERSION_VALUE="$(cat VERSION)"
+   gh release create "v${VERSION_VALUE}" \
+     "artifacts/mac/Cortexa-${VERSION_VALUE}.dmg" \
+     "artifacts/mac/Cortexa-${VERSION_VALUE}.dmg.sha256" \
+     "artifacts/mac/Cortexa-${VERSION_VALUE}-install-notes.txt" \
+     --target "$(git rev-parse HEAD)" \
+     --title "Cortexa ${VERSION_VALUE}" \
+     --notes-file /path/to/release-notes.md
+   ```
+
+4. GitHub-Release anschließend zurücklesen und die Assets erneut herunterladen. Prüfsumme und Image-Integrität müssen auch für die Downloads gültig sein:
+
+   ```bash
+   VERSION_VALUE="$(cat VERSION)"
+   VERIFY_DIR="$(mktemp -d)"
+   gh release view "v${VERSION_VALUE}" --json url,tagName,targetCommitish,assets
+   gh release download "v${VERSION_VALUE}" \
+     --pattern "Cortexa-${VERSION_VALUE}.dmg" \
+     --pattern "Cortexa-${VERSION_VALUE}.dmg.sha256" \
+     --dir "${VERIFY_DIR}"
+   (
+     cd "${VERIFY_DIR}"
+     shasum -a 256 -c "Cortexa-${VERSION_VALUE}.dmg.sha256"
+     hdiutil verify "Cortexa-${VERSION_VALUE}.dmg"
+   )
+   ```
+
+   Bei Abweichung Release nicht als erfolgreich melden; Ursache beheben und erneut verifizieren.
+5. Den passenden GitHub-Release-Tracker (aktuell Issue #8) mit Release-URL und den noch offenen Update-/Appcast-Punkten kommentieren. Issue nur schließen, wenn alle dortigen Akzeptanzkriterien erfüllt sind.
+
+Wenn ein Release-Asset nach Veröffentlichung korrigiert werden muss, nur das betroffene Asset gezielt ersetzen (`gh release upload ... --clobber`) und danach Download, Prüfsumme und DMG erneut verifizieren. Den Versions-Tag nicht auf einen anderen Commit verschieben.
+
 ## Dokumentation aktualisieren
 
 Bei **größeren** Änderungen die **zugehörige Projekt-Dokumentation** anpassen. Dokumentations-Updates sind erforderlich, wenn:

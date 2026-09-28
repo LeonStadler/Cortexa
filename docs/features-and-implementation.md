@@ -107,4 +107,4 @@ Siehe [../apps/ios/README.md](../apps/ios/README.md) und [ios-keyboard-plan.md](
 - **whisper.cpp** (lokal gebaut, als CLI/XCFramework ins Bundle) — Lizenz siehe Upstream-Projekt im Submodule/Build-Pfad.
 - **Sparkle** (macOS-Updater) — eingebettet im App-Bundle.
 
-Proprietärer Gesamtstatus: [licensing.md](licensing.md#proprietary).
+Lizenzierung von Cortexa und Drittkomponenten: [licensing.md](licensing.md).

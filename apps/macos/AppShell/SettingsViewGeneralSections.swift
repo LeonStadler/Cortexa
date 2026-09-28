@@ -229,8 +229,8 @@ extension SettingsView {
     @ViewBuilder
     var aboutDeveloperRows: some View {
         if matches([
-            "about", "über", "ueber", "leon", "stadler", "website", "webseite", "proprietär",
-            "proprietary", "lizenz", "intermedia", "design", "fotografie", "vorarlberg",
+            "about", "über", "ueber", "leon", "stadler", "website", "webseite", "apache",
+            "open source", "open-source", "lizenz", "intermedia", "design", "fotografie", "vorarlberg",
         ]) {
             Image("CortexaLogoHorizontal")
                 .renderingMode(.template)
@@ -286,8 +286,8 @@ extension SettingsView {
         if matches(["support", "spenden", "donate", "website", "webseite"]) {
             Text(
                 text(
-                    "Cortexa ist quelloffen einsehbar, aber nicht als offenes Community-Projekt zur freien Mitarbeit organisiert. Issues, Releases und technische Details liegen im Repository.",
-                    "Cortexa is source-visible, but not organized as an open community contribution project. Issues, releases, and technical details live in the repository."
+                    "Cortexa ist unter Apache 2.0 quelloffen lizenziert. Issues, Releases und technische Details liegen im Repository.",
+                    "Cortexa is open source under Apache 2.0. Issues, releases, and technical details live in the repository."
                 )
             )
             .font(.footnote)

@@ -1,13 +1,14 @@
 # Cortexa — Dokumentationsindex
 
-Überblick über alle technischen Unterlagen im Repo. **Hinweis:** Cortexa ist [proprietäre Software](licensing.md#proprietary); die Dokumentation dient internen Builds, Mitwirkenden und Release-Prozessen — nicht als Lizenz zur Weiterverwendung des Quellcodes.
+Überblick über alle technischen Unterlagen im Repo. **Hinweis:** Cortexa ist unter [Apache-2.0](../LICENSE) quelloffen lizenziert. Drittanbieterkomponenten und heruntergeladene Modelle haben eigene Lizenzen.
 
 | Dokument                                                         | Inhalt                                                                    |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [features-and-implementation.md](features-and-implementation.md) | Funktionsumfang nach Plattform und Zuordnung zu Swift-Paketen / AppShell  |
 | [system-design.md](system-design.md)                             | Architektur, Datenflüsse, Session-State-Machine, Sicherheit & Performance |
 | [api-design.md](api-design.md)                                   | Öffentliche Protokolle, Konfigurationstypen, Pipeline-Reihenfolge         |
-| [licensing.md](licensing.md)                                     | Proprietärer Status und interne Weitergabe                                |
+| [licensing.md](licensing.md)                                     | Apache-2.0, Marken und Weitergabe                                         |
+| [third-party-notices.md](third-party-notices.md)                 | Mitgelieferte Drittanbieter-Lizenztexte und Modellattributionen            |
 | [permissions-macos.md](permissions-macos.md)                     | Mikrofon, Bedienungshilfen, eingeschränkter Modus ohne AX                 |
 | [build-xcframework.md](build-xcframework.md)                     | whisper.cpp / XCFramework / Runtime-Bundle                                |
 | [distribution.md](distribution.md)                               | Offene macOS-DMG-Releases, optionale Signierung, Sparkle, iOS-Build       |

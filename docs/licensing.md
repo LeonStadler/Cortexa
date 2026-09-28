@@ -1,14 +1,17 @@
-# Proprietärer Status
+# Lizenzierung von Cortexa
 
-<a id="proprietary"></a>
+## Cortexa
 
-## Proprietäre Software und Weitergabe
+Der Quellcode von Cortexa steht unter der **Apache License, Version 2.0**. Der vollständige Lizenztext liegt in [`LICENSE`](../LICENSE); eine ergänzende Copyright- und Markennotiz steht in [`NOTICE`](../NOTICE).
 
-- **Cortexa** (Quellcode, Marken, gebündelte Produktassets) ist **keine Open-Source-Software** und ist für eine **öffentliche OSS-Veröffentlichung nicht vorgesehen**.
-- Dieses Repository und diese Dokumentation beschreiben interne Entwicklung, Builds und Releases. Sie begründen keine Lizenz zur Weitergabe, Bearbeitung oder Weiterveröffentlichung des Codes durch Dritte.
-- Drittkomponenten, zum Beispiel whisper.cpp und Sparkle, unterliegen eigenen Lizenzen des jeweiligen Upstream-Projekts. Die Pflicht zur Einhaltung dieser Lizenzen bleibt bei der Distribution der Binärprodukte bestehen.
-- Für Kunden- oder Team-Zugang gelten separate Vereinbarungen zu Support, Nutzung und Weitergabe unabhängig von diesem Repo.
+Cortexa verlangt keine lokale Lizenzschlüssel-Aktivierung. Die optionale Sparkle-Update-Funktion verwendet separat konfigurierte Update-Signaturen.
 
-## Produktzugang
+Die Apache-2.0-Lizenz erlaubt Nutzung, Änderung und Weitergabe unter ihren Bedingungen. Bei Weitergabe müssen insbesondere Lizenz-, Copyright- und NOTICE-Hinweise erhalten bleiben. Sie gewährt keine Markenrechte zur Bewerbung oder Befürwortung anderer Produkte mit dem Namen oder Logo von Cortexa.
 
-Cortexa verwendet aktuell keine lokale Lizenzschlüssel-Aktivierung in den App-Shells. Die aktuellen Open-Source-macOS-Releases werden als lokal gebauter DMG ohne Developer ID und Notarisierung über GitHub veröffentlicht. Sparkle bleibt optional und ist im aktuellen Releasepfad nicht aktiviert; Produktzugang und Distribution werden organisatorisch außerhalb der App geregelt.
+## Drittanbieter und Modelle
+
+Die Cortexa-Lizenz ändert nicht die Bedingungen für externe Komponenten oder Modelle. Der macOS-Build bündelt `whisper.cpp` (MIT) und Sparkle (MIT mit zusätzlichen externen Lizenzhinweisen). Parakeet TDT 0.6B v3 (NVIDIA, CC BY 4.0) sowie NeMo-Speech.cpp (Apache-2.0 mit zusätzlichen Drittanbieterbedingungen) werden bei Bedarf separat heruntergeladen.
+
+Die vollständigen gebündelten Hinweise und Attributionen stehen in [`third-party-notices.md`](third-party-notices.md) und in der App unter **Über Cortexa → Lizenzen**. Die NeMo-Runtime behält außerdem ihre mitgelieferten `LICENSE`, `NOTICE` und Drittanbieterhinweise im Cortexa-verwalteten Runtime-Verzeichnis.
+
+Die jeweiligen Upstream-Lizenzen gelten weiterhin für diese Komponenten und Modelle. Bei jeder Weitergabe müssen ihre Copyright-, Lizenz- und NOTICE-Pflichten zusätzlich zur Cortexa-Lizenz erfüllt werden.
