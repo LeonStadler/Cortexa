@@ -48,6 +48,10 @@
 
 ## Chores
 
+- 2026-09-28: Publish-Prüfung für GitHub-Draft-Releases korrigiert.
+  - Dateien: `.github/workflows/release.yml`, `AGENTS.md`, `docs/distribution.md`, `changelog.md`.
+  - Funktionalität: Der Publish-Workflow erwartet keinen Git-Tag vor der Veröffentlichung, weil GitHub den Tag bei einem Draft noch nicht anlegt. Stattdessen prüft er den im Draft dokumentierten Quell-Commit gegen die aktuelle `main`-Historie, bindet beim Veröffentlichen den Tag explizit an diesen Commit und kontrolliert anschließend dessen Ziel. Bugfix-Version `0.47.1`.
+
 - 2026-09-28: GitHub-Actions-Releasepfad für macOS-DMGs eingerichtet.
   - Dateien: `.github/workflows/release.yml`, `AGENTS.md`, `README.md`, `docs/distribution.md`, `docs/macos-release-checklist.md`, `changelog.md`, `VERSION`.
   - Funktionalität: Der manuell auf `main` gestartete Workflow baut und prüft den arm64-DMG auf einem öffentlichen GitHub-Runner und legt DMG, SHA-256 und Installationshinweise als Draft-Release an. Ein separater `publish`-Lauf prüft Version, Tag, Quell-Commit, Assets, Prüfsumme und DMG-Integrität, bevor er den Draft veröffentlicht. Das hält den Installationstest als Freigabeschritt bei. Chore-Patch `0.47.1`.

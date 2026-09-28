@@ -56,8 +56,8 @@ Ein gemergter PR oder ein Commit auf `main` veröffentlicht **nicht automatisch*
 
 1. Nach dem Merge `origin/main` frisch abrufen. Vorher sicherstellen, dass `VERSION` und `changelog.md` den beabsichtigten Release abbilden und `v<VERSION>` weder lokal noch auf GitHub existiert.
 2. GitHub Actions **macOS Release** auf `main` mit `action=prepare` und `version=<VERSION>` starten. Der Workflow verweigert den Lauf, wenn `main` während des Builds weiterläuft, die Version nicht passt oder Tag/Release schon existiert. Er führt Swift-Build und Tests aus, baut den arm64-DMG und erstellt den Draft am getesteten `main`-Stand.
-3. Prüfen, dass der Draft-Tag auf den gebauten Commit zeigt. Draft-Assets herunterladen und Prüfsumme sowie DMG-Integrität unabhängig prüfen. Den DMG installieren und praktisch abnehmen.
-4. Nach ausdrücklicher Nutzerfreigabe denselben Workflow auf `main` mit `action=publish` und derselben `version=<VERSION>` starten. Der Workflow veröffentlicht ausschließlich einen passenden Draft, dessen Tag und Quell-Commit im Release-Text übereinstimmen. Er erstellt keinen neuen Build und kann einen bereits veröffentlichten Release nicht erneut veröffentlichen.
+3. Den Quell-Commit aus dem Draft mit dem aktuellen `main`-Verlauf abgleichen. GitHub legt den eigentlichen Git-Tag erst beim Veröffentlichen des Drafts an. Draft-Assets herunterladen und Prüfsumme sowie DMG-Integrität unabhängig prüfen. Den DMG installieren und praktisch abnehmen.
+4. Nach ausdrücklicher Nutzerfreigabe denselben Workflow auf `main` mit `action=publish` und derselben `version=<VERSION>` starten. Der Workflow prüft Draft, Version, Assets und Prüfsumme, legt den Tag beim Veröffentlichen explizit auf den getesteten Quell-Commit und liest anschließend dessen Ziel zurück. Er erstellt keinen neuen Build und kann einen bereits veröffentlichten Release nicht erneut veröffentlichen.
 
 ### Nach ausdrücklicher Freigabe veröffentlichen
 
