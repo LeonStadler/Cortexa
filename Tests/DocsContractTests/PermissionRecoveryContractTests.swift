@@ -61,6 +61,7 @@
             XCTAssertTrue(releaseScript.contains("codesign --force --deep --sign -"))
             XCTAssertTrue(releaseScript.contains("CORTEXA_ALLOW_ADHOC=1"))
             XCTAssertTrue(releaseScript.contains("Cortexa-${APP_VERSION}.dmg"))
+            XCTAssertTrue(releaseScript.contains("cd \"${ARTIFACTS_DIR}\""))
             XCTAssertTrue(releaseScript.contains("hdiutil verify"))
         }
 

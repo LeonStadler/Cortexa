@@ -95,7 +95,7 @@ Das Skript räumt alte Dateien unter `artifacts/mac/` in diesem Checkout auf und
 
 ```bash
 hdiutil verify artifacts/mac/Cortexa-*.dmg
-shasum -a 256 -c artifacts/mac/Cortexa-*.dmg.sha256
+(cd artifacts/mac && shasum -a 256 -c Cortexa-*.dmg.sha256)
 ```
 
 Die App trägt eine ad-hoc-Signatur zur Integritätsprüfung. `TeamIdentifier` ist absichtlich nicht gesetzt; Gatekeeper-Warnung beim Erststart ist damit zu erwarten. Ein optionaler künftiger Weg kann mit `Developer ID Application` signieren. GitHub Releases erhalten erst nach manueller Installation und Produktabnahme durch den Nutzer den getesteten DMG.

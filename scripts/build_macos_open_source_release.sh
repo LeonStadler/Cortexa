@@ -74,7 +74,10 @@ EXPORT_PATH="${ARTIFACTS_DIR}/release" \
 
 log "Verifying the generated DMG"
 hdiutil verify "${DMG_PATH}"
-shasum -a 256 "${DMG_PATH}" >"${DMG_PATH}.sha256"
+(
+  cd "${ARTIFACTS_DIR}"
+  shasum -a 256 "$(basename "${DMG_PATH}")" >"$(basename "${DMG_PATH}").sha256"
+)
 
 cat >"${ARTIFACTS_DIR}/Cortexa-${APP_VERSION}-install-notes.txt" <<'EOF'
 Cortexa macOS installation
