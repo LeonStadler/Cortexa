@@ -29,9 +29,21 @@ fi
 [[ -s "${RESOURCES_DIR}/${APP_ICON_FILE}" ]] || error "Compiled app icon is missing at ${RESOURCES_DIR}/${APP_ICON_FILE}."
 
 command -v otool >/dev/null 2>&1 || error "Missing required tool otool"
-FOUNDATION_MODELS_LINK="$(otool -L "${APP_BINARY}" | grep -F 'FoundationModels.framework/' || true)"
+APP_DEBUG_BINARY="${APP_BINARY}.debug.dylib"
+FOUNDATION_MODELS_LINK=""
+for LINK_TARGET in "${APP_BINARY}" "${APP_DEBUG_BINARY}"; do
+  [[ -f "${LINK_TARGET}" ]] || continue
+  LINK_LINE="$(otool -L "${LINK_TARGET}" | grep -F 'FoundationModels.framework/' || true)"
+  if [[ -n "${LINK_LINE}" ]]; then
+    FOUNDATION_MODELS_LINK="${LINK_TARGET}: ${LINK_LINE}"
+    break
+  fi
+done
 if [[ -z "${FOUNDATION_MODELS_LINK}" ]]; then
   otool -L "${APP_BINARY}" >&2
+  if [[ -f "${APP_DEBUG_BINARY}" ]]; then
+    otool -L "${APP_DEBUG_BINARY}" >&2
+  fi
   error "Cortexa was built without FoundationModels.framework. Use the macOS 26 SDK or later."
 fi
 printf '[validate_macos_app_runtime] Foundation Models link verified: %s\n' "${FOUNDATION_MODELS_LINK}"
