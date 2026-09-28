@@ -29,9 +29,12 @@ fi
 [[ -s "${RESOURCES_DIR}/${APP_ICON_FILE}" ]] || error "Compiled app icon is missing at ${RESOURCES_DIR}/${APP_ICON_FILE}."
 
 command -v otool >/dev/null 2>&1 || error "Missing required tool otool"
-if ! otool -L "${APP_BINARY}" | grep -Fq "/System/Library/Frameworks/FoundationModels.framework/"; then
+FOUNDATION_MODELS_LINK="$(otool -L "${APP_BINARY}" | grep -F 'FoundationModels.framework/' || true)"
+if [[ -z "${FOUNDATION_MODELS_LINK}" ]]; then
+  otool -L "${APP_BINARY}" >&2
   error "Cortexa was built without FoundationModels.framework. Use the macOS 26 SDK or later."
 fi
+printf '[validate_macos_app_runtime] Foundation Models link verified: %s\n' "${FOUNDATION_MODELS_LINK}"
 
 RUNTIME_DIR="${APP_PATH}/Contents/Resources/Runtime"
 CLI_PATH="${RUNTIME_DIR}/whisper-cli"
