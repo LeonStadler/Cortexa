@@ -11,4 +11,4 @@
 
 ## Produktzugang
 
-Cortexa verwendet aktuell keine lokale Lizenzschlüssel-Aktivierung in den App-Shells. Releases werden über Signatur, Notarisierung und Sparkle-Updates ausgeliefert; Produktzugang und Distribution werden organisatorisch außerhalb der App geregelt.
+Cortexa verwendet aktuell keine lokale Lizenzschlüssel-Aktivierung in den App-Shells. Die aktuellen Open-Source-macOS-Releases werden als lokal gebauter DMG ohne Developer ID und Notarisierung über GitHub veröffentlicht. Sparkle bleibt optional und ist im aktuellen Releasepfad nicht aktiviert; Produktzugang und Distribution werden organisatorisch außerhalb der App geregelt.

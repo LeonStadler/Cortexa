@@ -38,6 +38,12 @@
   - Dateien: `apps/macos/AppShell/AIProviderController.swift`, `apps/macos/AppShell/MacAppStateFacadeActions.swift`, `apps/macos/AppShell/SettingsViewAIProviderSections.swift`, `VERSION`
   - Funktionalität: Aktivierte Anbieter synchronisieren ihren Modellkatalog automatisch beim Öffnen der AI-Einstellungen. Zusätzlich kann der ausgewählte Anbieter jederzeit über „Modelle aktualisieren“ manuell synchronisiert werden. Parallel laufende Abrufe werden pro Anbieter zusammengeführt; erfolgreiche leere Antworten entfernen veraltete Modelle, Fehler bleiben sichtbar und behalten die letzte bekannte Liste. Die Version wurde als Feature-Release auf `0.29.0` angehoben.
 
+## Chores
+
+- 2026-09-28: Lokalen Open-Source-macOS-Release ohne Apple-Developer-ID eingerichtet.
+  - Dateien: `scripts/build_macos_open_source_release.sh`, `scripts/create_macos_dmg.sh`, `README.md`, `docs/distribution.md`, `docs/macos-release-checklist.md`, `docs/permissions-macos.md`, `docs/licensing.md`, `docs/README.md`, `Tests/DocsContractTests/PermissionRecoveryContractTests.swift`.
+  - Funktionalität: Ein einzelner lokaler Build-Befehl initialisiert Whisper bei Bedarf, baut und validiert Cortexa samt Whisper-Runtime gezielt für arm64 mit ad-hoc Signatur, erstellt einen überprüften DMG mit SHA-256 und Installationshinweisen und räumt frühere Build-Ausgaben des Checkouts auf. Die DMG-Verpackung erlaubt ad-hoc signierte Apps ausschließlich für diesen expliziten Open-Source-Pfad. Dokumentation erklärt die erstmalige macOS-Freigabe sowie mögliche erneute Berechtigungsabfragen bei Updates. Kein Produktversionsbump, da dies eine Release-Tooling-Änderung ist.
+
 ## Fixes
 
 - 2026-09-28: Qualitätsprofile nur für kompatible Sprachmodelle anzeigen.

@@ -40,9 +40,9 @@ Accessibility onboarding text:
 
 ## Updates and TCC identity
 
-macOS binds Privacy & Security grants to the signed app identity, not just to the displayed name. Every Cortexa update must retain `com.wisprlocal.mac` and use the same Apple signing team. Distributable updates must use the same `Developer ID Application` identity and be notarized; a local development build can use `Apple Development` on the developer's own Mac.
+macOS binds Privacy & Security grants to the app's code identity, not just to the displayed name. Current open-source DMGs use an ad-hoc signature and retain `com.wisprlocal.mac`, but have no stable Apple team identity. macOS may ask for microphone or Accessibility approval again after an app update. Signing with a `Developer ID Application` certificate and notarization remain an optional future distribution path, not a requirement for the current release.
 
-The release archive and DMG scripts reject missing or ad-hoc signing identities. Never create an installable DMG from a Debug app signed with `Sign to Run Locally`; its ad-hoc signature has no stable team identity, so replacement can cause macOS to ask for protected-resource permissions again.
+The open-source release entry point is `scripts/build_macos_open_source_release.sh`; it signs the completed Release app ad hoc, verifies that signature after packaging, and creates the DMG without an Apple certificate. Do not treat this signature as a trust identity or a guarantee that TCC grants survive replacement. The legacy Developer-ID archive flow continues to enforce a persistent team identity for users who later choose that distribution route.
 
 The normal Accessibility flow is one deliberate app action:
 

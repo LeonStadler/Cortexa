@@ -16,7 +16,7 @@ Dieses Repository und die gebündelte **Dokumentation dienen der internen Entwic
 | [`docs/api-design.md`](docs/api-design.md)                                   | Swift-Protokolle, Konfiguration, Pipeline       |
 | [`docs/permissions-macos.md`](docs/permissions-macos.md)                     | Mikrofon, Bedienungshilfen                      |
 | [`docs/build-xcframework.md`](docs/build-xcframework.md)                     | whisper.cpp / Runtime-Bundle                    |
-| [`docs/distribution.md`](docs/distribution.md)                               | Archive, Notarisierung, DMG, Sparkle, iOS       |
+| [`docs/distribution.md`](docs/distribution.md)                               | Offene macOS-DMG-Releases, optionale Signierung, Sparkle, iOS |
 | [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md)         | Release-Abnahme                                 |
 | [`apps/macos/README.md`](apps/macos/README.md)                               | Menüleiste, Settings, Betrieb                   |
 | [`apps/ios/README.md`](apps/ios/README.md)                                   | Host-App, Keyboard, App Group                   |
@@ -119,20 +119,20 @@ Features implemented in macOS app shell:
 
 ## macOS: Release
 
-Archiv:
+Für die aktuelle Open-Source-Distribution ist kein Apple-Developer-Konto erforderlich. Auf einem Apple-Silicon-Mac erstellt das folgende Skript einen arm64-Release-DMG ohne Developer-ID-Zertifikat oder Notarisierung. macOS zeigt beim ersten Öffnen möglicherweise eine Sicherheitswarnung; Installationshinweise liegen neben dem DMG.
 
 ```bash
-DEVELOPMENT_TEAM=YOURTEAMID CODE_SIGN_IDENTITY="Developer ID Application" \
-./scripts/archive_macos_release.sh
+./scripts/build_macos_open_source_release.sh
 ```
 
-Ausgabe: `artifacts/mac/Cortexa.xcarchive`. Für eine veröffentlichte Version muss das konkrete Developer-ID-Zertifikat samt privatem Schlüssel im Schlüsselbund vorhanden sein; ohne persistente Apple-Signatur verweigert das Script das Archiv absichtlich.
+Das Skript bereinigt alte lokale macOS-Build-Artefakte, baut Runtime und App neu und erzeugt einen DMG, eine SHA-256-Datei sowie kurze Installationshinweise unter `artifacts/mac/`. Den getesteten DMG kann man anschließend manuell als GitHub Release veröffentlichen. Details: [`docs/distribution.md`](docs/distribution.md) und [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
 
-**Build-Secrets** (in Xcode-Projekt injiziert): `SPARKLE_FEED_URL`, `SPARKLE_PUBLIC_ED_KEY`. Vor Release: `./scripts/preflight_macos_release.sh`. Checkliste: [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
+Ein Developer-ID-signierter und notarisiert ausgelieferter Release bleibt als optionaler Distributionsweg dokumentiert; er ist für die aktuellen Open-Source-Releases nicht erforderlich.
 
-Export / DMG / Appcast:
+Legacy-Export / Appcast:
 
 ```bash
+DEVELOPMENT_TEAM=YOURTEAMID CODE_SIGN_IDENTITY="Developer ID Application" ./scripts/archive_macos_release.sh
 DEVELOPMENT_TEAM=YOURTEAMID ./scripts/export_macos_release.sh
 CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/create_macos_dmg.sh
 SPARKLE_PRIVATE_KEY_FILE=/path/to/sparkle_private_key SPARKLE_BIN_DIR=/path/to/generate_appcast \

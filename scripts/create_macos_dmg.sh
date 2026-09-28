@@ -36,11 +36,20 @@ log "Validating bundled runtime payload"
 "${ROOT_DIR}/scripts/validate_macos_app_runtime.sh" "${APP_PATH}"
 
 SIGNING_DETAILS="$(codesign -dvvv "${APP_PATH}" 2>&1)" || error "Could not inspect app signature at ${APP_PATH}."
-if ! grep -Eq '^Authority=(Apple Development|Developer ID Application):' <<<"${SIGNING_DETAILS}"; then
-  error "Refusing to package an ad-hoc or unsigned app. Build the app with a persistent Apple Development or Developer ID Application identity first."
+IS_ADHOC_SIGNATURE=0
+if grep -Eq '^Signature=adhoc$' <<<"${SIGNING_DETAILS}"; then
+  IS_ADHOC_SIGNATURE=1
 fi
-if grep -Eq '^TeamIdentifier=(not set)?$' <<<"${SIGNING_DETAILS}"; then
-  error "Refusing to package an app without a TeamIdentifier; Privacy & Security grants may not survive replacement."
+
+if [[ "${IS_ADHOC_SIGNATURE}" -eq 1 ]]; then
+  if [[ "${CORTEXA_ALLOW_ADHOC:-0}" != "1" ]]; then
+    error "Ad-hoc signed apps are accepted only for the open-source release path; set CORTEXA_ALLOW_ADHOC=1 explicitly."
+  fi
+  log "Packaging an ad-hoc signed app; macOS will require the user to approve it on first launch."
+elif ! grep -Eq '^Authority=(Apple Development|Developer ID Application):' <<<"${SIGNING_DETAILS}"; then
+  error "App must have an Apple Development, Developer ID Application, or explicitly enabled ad-hoc signature."
+elif grep -Eq '^TeamIdentifier=(not set)?$' <<<"${SIGNING_DETAILS}"; then
+  error "Refusing to package a persistent Apple signature without a TeamIdentifier; Privacy & Security grants may not survive replacement."
 fi
 codesign --verify --deep --strict "${APP_PATH}" || error "App signature verification failed at ${APP_PATH}."
 

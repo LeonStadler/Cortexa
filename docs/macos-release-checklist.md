@@ -2,29 +2,19 @@
 
 ## Ziel
 
-Diese Checkliste ist der letzte Nachweis, dass `Cortexa` als reale macOS-Menüleisten-App stabil funktioniert und als signierter/notarisierter Download ausgeliefert werden kann. Target, Scheme und Bundle-ID bleiben technisch `WisprLocalMac` bzw. `com.wisprlocal.mac`.
+Diese Checkliste prüft einen lokal gebauten Open-Source-DMG vor einem manuellen GitHub-Release. Der aktuelle Release benötigt kein Apple-Developer-Programm, Developer-ID-Zertifikat oder Notarisierung. Target, Scheme und Bundle-ID bleiben technisch `WisprLocalMac` bzw. `com.wisprlocal.mac`.
 
-## 1. Produktionsvariablen setzen
+## 1. Voraussetzungen
 
-```bash
-export SPARKLE_FEED_URL='https://deine-domain.tld/appcast.xml'
-export SPARKLE_PUBLIC_ED_KEY='DEIN_SPARKLE_PUBLIC_ED_KEY'
-```
+Xcode, XcodeGen, CMake, Python 3 und Git müssen auf dem Apple-Silicon-Mac verfügbar sein. Das Whisper-Submodul wird bei Bedarf vom Build-Skript initialisiert. Für den arm64-Open-Source-DMG werden keine Release-Secrets benötigt.
 
-## 2. Release-Preflight
+## 2. Open-Source-Build
 
 ```bash
-./scripts/preflight_macos_release.sh
+./scripts/build_macos_open_source_release.sh
 ```
 
-Erwartung:
-- `whisper-cli` ist im Runtime-Bundle vorhanden
-- `whisper-cli` hat keine nicht-systemischen `@rpath`-/Dylib-Abhängigkeiten und besteht den Start-Probe
-- **kein** gebündeltes ggml-Modell im Release-Bundle (`modelFileNames: []`)
-- `runtime-manifest.json` ist vorhanden
-- `WisprLocalMac.xcodeproj` wurde neu generiert
-- `Cortexa.icon` ist als einzige Dock-Icon-Quelle eingebunden; ein separates `AppIcon.appiconset` wird nicht verwendet
-- `MARKETING_VERSION` entspricht `VERSION`
+Das Skript baut Runtime und Release-App ohne Apple-Anmeldedaten und schreibt DMG, SHA-256 sowie Installationshinweise nach `artifacts/mac/`.
 
 ## 2b. First-Run-Onboarding (manuell)
 
@@ -42,7 +32,7 @@ Erwartung:
 
 Erwartung:
 - `Cortexa.app` wurde gebaut
-- Release-Archive und DMG nutzen eine persistente Apple-Signatur mit gesetzter Team-ID; Debug-Bundles mit `Sign to Run Locally` dürfen nicht installiert oder als DMG gepackt werden
+- Das Release-Bundle startet und transkribiert mit dem enthaltenen CLI und Modell; die Open-Source-DMG-Signatur dient der Integritätsprüfung und ist keine Apple-Entwickleridentität
 - die im App-Bundle enthaltene CLI transkribiert synthetisierte Sprache mit dem gebündelten Standardmodell zu einem nicht-leeren Text
 - Dock-Icon wird aus `Cortexa.icon` kompiliert und zeigt die Liquid-Glass-/Appearance-Varianten korrekt
 - App startet aus dem gebauten Bundle
@@ -89,42 +79,39 @@ Erwartung:
 Prüfen:
 - Mikrofonrecht entziehen -> Aufnahme blockiert mit klarer UI
 - AX-Recht entziehen -> Insert blockiert mit klarer UI
-- zwei nacheinander installierte, gleich signierte Builds -> `Identifier`, `TeamIdentifier` und designated requirement bleiben stabil
+- bei einem Update kann macOS die erneute Freigabe geschützter Ressourcen verlangen, da der Open-Source-Release keine persistente Team-Signatur besitzt
 - Accessibility-Freigabe anfragen -> der macOS-Hinweis erscheint; Cortexa öffnet Systemeinstellungen nicht zusätzlich automatisch
 - Sleep/Wake -> Hotkey funktioniert weiter
 - App-Neustart -> Runtime wird neu vorbereitet, Status bleibt konsistent
 - CLI absichtlich durch ein nicht startbares Artefakt ersetzen -> kein „ASR CLI runtime ready“, sondern ein konkreter Initialisierungsfehler
 
-## 7. Release-Erstellung
+## 7. Open-Source-Release bauen
 
 ```bash
-DEVELOPMENT_TEAM=DEINTEAM CODE_SIGN_IDENTITY="Developer ID Application" ./scripts/archive_macos_release.sh
-DEVELOPMENT_TEAM=DEINTEAM ./scripts/export_macos_release.sh
-CODE_SIGN_IDENTITY="Developer ID Application: Dein Name (TEAMID)" ./scripts/create_macos_dmg.sh
+./scripts/build_macos_open_source_release.sh
 ```
 
-Der Archive-Schritt bricht ohne persistente Apple-Signatur absichtlich ab. Prüfen:
+Das Skript räumt alte Dateien unter `artifacts/mac/` in diesem Checkout auf und erstellt DMG, SHA-256-Prüfsumme sowie Installationshinweise. Vor dem GitHub-Upload:
 
 ```bash
-codesign -dvvv artifacts/mac/Cortexa.xcarchive/Products/Applications/Cortexa.app 2>&1 \
-  | rg 'Identifier=|TeamIdentifier=|Authority='
+hdiutil verify artifacts/mac/Cortexa-*.dmg
+shasum -a 256 -c artifacts/mac/Cortexa-*.dmg.sha256
 ```
 
-Erwartung: `Identifier=com.wisprlocal.mac`, ein gesetztes `TeamIdentifier` und `Authority=Developer ID Application: ...`. Kein `TeamIdentifier=not set` und keine ad-hoc-Signatur.
+Die App trägt eine ad-hoc-Signatur zur Integritätsprüfung. `TeamIdentifier` ist absichtlich nicht gesetzt; Gatekeeper-Warnung beim Erststart ist damit zu erwarten. Ein optionaler künftiger Weg kann mit `Developer ID Application` signieren. GitHub Releases erhalten erst nach manueller Installation und Produktabnahme durch den Nutzer den getesteten DMG.
 
-## 8. Notarisierung und Validierung
+## 8. Erststart auf einem anderen Mac
 
-Beispiel:
+1. `Cortexa.app` aus dem eingebundenen DMG nach `Programme` ziehen.
+2. Cortexa per Rechtsklick → **Öffnen** starten und die macOS-Rückfrage bestätigen.
+3. Falls macOS den Start weiter blockiert: den Startversuch wiederholen und anschließend **Systemeinstellungen → Datenschutz & Sicherheit → Dennoch öffnen** wählen.
+4. Mikrofon- und Bedienungshilfenberechtigung erteilen und ein Diktat testen.
 
-```bash
-xcrun notarytool submit artifacts/mac/Cortexa.dmg --keychain-profile DEIN_PROFIL --wait
-xcrun stapler staple artifacts/mac/Cortexa.dmg
-./scripts/verify_macos_release_bundle.sh artifacts/mac/Cortexa.dmg
-```
+macOS-Versionen können den Wortlaut und Ort der Freigabe leicht ändern. Weisen Release-Hinweise darauf hin, dass Cortexa nicht von einem verifizierten Apple-Entwickler signiert ist. Bei künftigen DMG-Updates kann macOS wegen der wechselnden ad-hoc Signatur erneut um Mikrofon- oder Bedienungshilfenfreigabe bitten.
 
-Erwartung:
-- `spctl` erfolgreich
-- `stapler validate` erfolgreich
+## 9. Optionaler Developer-ID-Weg
+
+Die bisherigen Skripte `archive_macos_release.sh`, `export_macos_release.sh` und `verify_macos_release_bundle.sh` bleiben für einen späteren signierten/notarisierten Distributionsweg erhalten. Dort werden `codesign -dvvv`, `TeamIdentifier` und die designated requirement geprüft. Sie gehören nicht zum aktuellen Release-Ablauf.
 
 ## 9. Updater
 

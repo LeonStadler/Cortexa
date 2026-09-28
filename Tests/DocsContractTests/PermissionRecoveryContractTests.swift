@@ -44,12 +44,24 @@
             XCTAssertFalse(archiveScript.contains("--sign -"))
         }
 
-        func testDMGScriptRejectsAdHocAppBundles() throws {
+        func testDMGScriptAllowsAdHocAppsOnlyForOpenSourceRelease() throws {
             let dmgScript = try readRepositoryFile("scripts/create_macos_dmg.sh")
 
-            XCTAssertTrue(dmgScript.contains("Refusing to package an ad-hoc or unsigned app"))
-            XCTAssertTrue(dmgScript.contains("TeamIdentifier"))
+            XCTAssertTrue(dmgScript.contains("CORTEXA_ALLOW_ADHOC"))
+            XCTAssertTrue(dmgScript.contains("Ad-hoc signed apps are accepted only for the open-source release path"))
+            XCTAssertTrue(dmgScript.contains("persistent Apple signature without a TeamIdentifier"))
             XCTAssertTrue(dmgScript.contains("codesign --verify --deep --strict"))
+        }
+
+        func testOpenSourceReleaseBuildDoesNotRequireAppleSigningCredentials() throws {
+            let releaseScript = try readRepositoryFile("scripts/build_macos_open_source_release.sh")
+
+            XCTAssertTrue(releaseScript.contains("CODE_SIGNING_ALLOWED=NO"))
+            XCTAssertTrue(releaseScript.contains("ARCHS=arm64"))
+            XCTAssertTrue(releaseScript.contains("codesign --force --deep --sign -"))
+            XCTAssertTrue(releaseScript.contains("CORTEXA_ALLOW_ADHOC=1"))
+            XCTAssertTrue(releaseScript.contains("Cortexa-${APP_VERSION}.dmg"))
+            XCTAssertTrue(releaseScript.contains("hdiutil verify"))
         }
 
         func testDictationStartDoesNotPromptForAccessibility() throws {

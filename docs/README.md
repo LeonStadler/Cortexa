@@ -10,7 +10,7 @@
 | [licensing.md](licensing.md)                                     | Proprietärer Status und interne Weitergabe                                |
 | [permissions-macos.md](permissions-macos.md)                     | Mikrofon, Bedienungshilfen, eingeschränkter Modus ohne AX                 |
 | [build-xcframework.md](build-xcframework.md)                     | whisper.cpp / XCFramework / Runtime-Bundle                                |
-| [distribution.md](distribution.md)                               | macOS-Archive, Export, Notarisierung, DMG, Sparkle, iOS-Build             |
+| [distribution.md](distribution.md)                               | Offene macOS-DMG-Releases, optionale Signierung, Sparkle, iOS-Build       |
 | [macos-release-checklist.md](macos-release-checklist.md)         | Manuelle Abnahme vor Release                                              |
 | [ios-keyboard-plan.md](ios-keyboard-plan.md)                     | iOS-Tastatur-Extension, Grenzen vs. macOS                                 |
 | [mvp-milestones.md](mvp-milestones.md)                           | Meilensteine / Planungsstand                                              |
