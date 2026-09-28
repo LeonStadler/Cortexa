@@ -9,7 +9,7 @@ env:
 
 jobs:
   swift-package:
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -24,7 +24,7 @@ jobs:
         run: swift test
 
   project-validation:
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: swift-package
     steps:
       - name: Checkout
@@ -42,7 +42,7 @@ jobs:
         run: bash ./scripts/generate_ios_xcodeproj.sh
 
   macos-release-validation:
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: project-validation
     env:
       SPARKLE_FEED_URL: https://example.com/appcast.xml

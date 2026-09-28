@@ -25,7 +25,7 @@ concurrency:
 jobs:
   prepare:
     if: inputs.action == 'prepare'
-    runs-on: macos-15
+    runs-on: macos-26
     permissions:
       contents: write
     env:
@@ -59,6 +59,9 @@ jobs:
 
       - name: Install release tools
         run: brew install cmake xcodegen
+
+      - name: Verify release SDK supports Apple Foundation Models
+        run: ./scripts/verify_macos_release_sdk.sh
 
       - name: Verify generated project
         run: ./scripts/generate_macos_xcodeproj.sh --check
@@ -99,7 +102,7 @@ jobs:
 
   publish:
     if: inputs.action == 'publish'
-    runs-on: macos-15
+    runs-on: macos-26
     permissions:
       contents: write
     env:

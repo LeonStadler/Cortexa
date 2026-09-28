@@ -45,6 +45,8 @@ require_command plutil
 require_command git
 require_command grep
 
+"${ROOT_DIR}/scripts/verify_macos_release_sdk.sh"
+
 validate_non_empty "SPARKLE_FEED_URL" "${SPARKLE_FEED_URL:-}"
 validate_non_empty "SPARKLE_PUBLIC_ED_KEY" "${SPARKLE_PUBLIC_ED_KEY:-}"
 

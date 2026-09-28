@@ -34,7 +34,8 @@ Erwartung:
 - `Cortexa.app` wurde gebaut
 - Das Release-Bundle startet und transkribiert mit dem enthaltenen CLI und Modell; die Open-Source-DMG-Signatur dient der Integritätsprüfung und ist keine Apple-Entwickleridentität
 - die im App-Bundle enthaltene CLI transkribiert synthetisierte Sprache mit dem gebündelten Standardmodell zu einem nicht-leeren Text
-- Dock-Icon wird aus `Cortexa.icon` kompiliert und zeigt die Liquid-Glass-/Appearance-Varianten korrekt
+- Dock-/Finder-Icon wird aus `Cortexa.icon` kompiliert und zeigt die Liquid-Glass-/Appearance-Varianten korrekt; das gebaute Bundle enthält `Cortexa.icns` und korrekte `CFBundleIconName`-/`CFBundleIconFile`-Werte
+- Das Cortexa-Binary ist gegen `FoundationModels.framework` gelinkt, damit Apple On-Device auf unterstützten macOS-Versionen verfügbar ist
 - App startet aus dem gebauten Bundle
 - kein dauerhaftes Dock-Icon
 - Menüleisten-Icon erscheint
