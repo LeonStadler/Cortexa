@@ -2,6 +2,10 @@
 
 ## Fixes
 
+- 2026-09-29: Vollständige Entfernung abgebrochener Cortexa-NeMo-Runtime-Installationen bei der Deinstallation.
+  - Dateien: `apps/macos/AppShell/AppUninstaller.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`, `changelog.md`.
+  - Funktionalität: Die Deinstallation entfernt jetzt neben bestätigten Runtime-Versionen auch versteckte Cortexa-Staging- und Backup-Ordner, wenn Versionsmuster und UUID exakt zur Installationsroutine passen. Nicht passende Ordner sowie externe Runtimes und unbekannte Modellcache-Dateien bleiben erhalten. Patch-Version `0.48.2`.
+
 - 2026-09-29: Deinstallationsfehler beim Zurücksetzen der Datenschutzfreigaben liefern jetzt aussagekräftige Diagnoseinformationen.
   - Dateien: `apps/macos/AppShell/AppUninstaller.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `VERSION`, `changelog.md`.
   - Funktionalität: Der Deinstallationshelfer erfasst Standardausgabe und Fehlerausgabe von `tccutil`, nennt bei Fehlschlägen den Exit-Code und zeigt eine verständliche Meldung, wenn keine Diagnoseausgabe zurückkommt. Die Fehlermeldung weist jetzt darauf hin, dass App-Daten vor einem später fehlgeschlagenen Schritt bereits gelöscht worden sein können. Patch-Version `0.48.1`.

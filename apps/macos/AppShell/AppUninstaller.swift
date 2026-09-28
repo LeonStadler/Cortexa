@@ -203,10 +203,13 @@ struct AppUninstallCleanup {
         let entries = try fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
+            options: []
         )
         for entry in entries {
-            guard isManagedNemoRuntime(entry) else { continue }
+            let values = try entry.resourceValues(forKeys: [.isDirectoryKey])
+            guard values.isDirectory == true,
+                  isManagedNemoRuntime(entry) || isInterruptedManagedNemoRuntime(entry)
+            else { continue }
             try removeItem(entry)
         }
 
@@ -225,6 +228,22 @@ struct AppUninstallCleanup {
         return manifest.managedBy == "Cortexa"
             && manifest.runtimeID == "nemo-speech"
             && manifest.version == directory.lastPathComponent
+    }
+
+    private func isInterruptedManagedNemoRuntime(_ directory: URL) -> Bool {
+        let components = directory.lastPathComponent.split(separator: ".", omittingEmptySubsequences: false)
+        guard components.count == 5,
+              components[0].isEmpty,
+              components[1].allSatisfy(\.isNumber),
+              components[2].allSatisfy(\.isNumber),
+              components[3].allSatisfy(\.isNumber),
+              let transaction = components.last,
+              let separator = transaction.firstIndex(of: "-"),
+              ["installing", "previous"].contains(String(transaction[..<separator]))
+        else {
+            return false
+        }
+        return UUID(uuidString: String(transaction[transaction.index(after: separator)...])) != nil
     }
 
     private func removeTemporaryDownloadDirectories(in directory: URL) throws {

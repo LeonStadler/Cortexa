@@ -75,6 +75,18 @@ final class AppUninstallerTests: XCTestCase {
         try Data(manifest.utf8).write(
             to: managedRuntime.appendingPathComponent("cortexa-runtime.json")
         )
+        let interruptedRuntime = runtimeRoot.appendingPathComponent(
+            ".0.1.0.installing-12345678-1234-1234-1234-123456789abc", isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: interruptedRuntime, withIntermediateDirectories: true)
+        try Data("partial runtime".utf8).write(
+            to: interruptedRuntime.appendingPathComponent("nemo-speech")
+        )
+        let unrelatedRuntime = runtimeRoot.appendingPathComponent(
+            ".local.installing-12345678-1234-1234-1234-123456789abc", isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: unrelatedRuntime, withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: unrelatedRuntime.appendingPathComponent("keep.txt"))
         let externalMarker = unmanagedRuntime.appendingPathComponent("keep.txt")
         try Data("keep".utf8).write(to: externalMarker)
 
@@ -108,7 +120,9 @@ final class AppUninstallerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: parakeetModel.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: partialDownload.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: managedRuntime.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: interruptedRuntime.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: cortexaTemporary.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unrelatedRuntime.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelatedModel.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelatedTemporary.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: externalMarker.path))
