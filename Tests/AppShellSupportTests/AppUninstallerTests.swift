@@ -5,6 +5,31 @@ import XCTest
 @testable import AppShellSupport
 
 final class AppUninstallerTests: XCTestCase {
+    func testCommandRunnerCapturesStandardOutputAndErrorOnFailure() throws {
+        let result = try AppUninstallCommandRunner.run(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "printf 'stdout diagnostic'; printf 'stderr diagnostic' >&2; exit 17"]
+        )
+
+        XCTAssertEqual(result.terminationStatus, 17)
+        XCTAssertTrue(result.output.contains("stdout diagnostic"))
+        XCTAssertTrue(result.output.contains("stderr diagnostic"))
+    }
+
+    func testPrivacyResetFailureIncludesExitCodeAndFallbackDiagnostic() {
+        let error = AppUninstallerError.privacyResetFailed(
+            service: "Microphone",
+            bundleIdentifier: "com.wisprlocal.mac",
+            exitCode: 70,
+            output: ""
+        )
+
+        XCTAssertEqual(
+            error.errorDescription,
+            "tccutil konnte Microphone für com.wisprlocal.mac nicht zurücksetzen (Exit-Code 70): tccutil hat keine Diagnoseausgabe geliefert."
+        )
+    }
+
     func testCleanupRemovesOnlyCortexaManagedModelAndRuntimeFiles() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

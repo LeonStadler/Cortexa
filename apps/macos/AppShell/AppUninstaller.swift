@@ -79,11 +79,37 @@ struct AppUninstallFailure: Equatable {
     let message: String
 }
 
+struct AppUninstallCommandResult: Equatable {
+    let terminationStatus: Int32
+    let output: String
+}
+
+enum AppUninstallCommandRunner {
+    static func run(executableURL: URL, arguments: [String]) throws -> AppUninstallCommandResult {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = arguments
+        let diagnosticPipe = Pipe()
+        process.standardOutput = diagnosticPipe
+        process.standardError = diagnosticPipe
+        try process.run()
+        let outputData = diagnosticPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        return AppUninstallCommandResult(
+            terminationStatus: process.terminationStatus,
+            output: String(data: outputData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        )
+    }
+}
+
 enum AppUninstallerError: LocalizedError {
     case invalidAppBundle(URL)
     case missingExecutable
     case loginItemCleanupFailed(String)
     case helperLaunchFailed(String)
+    case privacyResetFailed(service: String, bundleIdentifier: String, exitCode: Int32, output: String)
 
     var errorDescription: String? {
         switch self {
@@ -95,6 +121,9 @@ enum AppUninstallerError: LocalizedError {
             return "Der automatische Anmeldestart konnte nicht deaktiviert werden: \(reason)"
         case .helperLaunchFailed(let reason):
             return "Der Deinstallationshelfer konnte nicht sicher gestartet werden: \(reason)"
+        case .privacyResetFailed(let service, let bundleIdentifier, let exitCode, let output):
+            let diagnostic = output.isEmpty ? "tccutil hat keine Diagnoseausgabe geliefert." : output
+            return "tccutil konnte \(service) für \(bundleIdentifier) nicht zurücksetzen (Exit-Code \(exitCode)): \(diagnostic)"
         }
     }
 }
@@ -361,7 +390,7 @@ enum AppUninstallHelperMode {
                 showResult(
                     title: "Deinstallation nicht abgeschlossen",
                     message: failures.map { "\($0.step): \($0.message)" }.joined(separator: "\n")
-                        + "\n\nCortexa bleibt installiert. Bitte behebe die Fehler und versuche es erneut."
+                        + "\n\nCortexas App-Daten können bereits gelöscht sein. Die App bleibt installiert, damit du die fehlgeschlagenen Schritte erneut versuchen kannst."
                 )
                 return
             }
@@ -411,21 +440,16 @@ enum AppUninstallHelperMode {
     }
 
     private static func resetPrivacyService(_ service: String) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-        process.arguments = ["reset", service, "com.wisprlocal.mac"]
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let output = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let reason = String(data: output, encoding: .utf8) ?? "Unbekannter Systemfehler."
-            throw NSError(
-                domain: "AppUninstaller.Privacy",
-                code: Int(process.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey: "tccutil konnte \(service) nicht zurücksetzen: \(reason)"]
+        let result = try AppUninstallCommandRunner.run(
+            executableURL: URL(fileURLWithPath: "/usr/bin/tccutil"),
+            arguments: ["reset", service, "com.wisprlocal.mac"]
+        )
+        guard result.terminationStatus == 0 else {
+            throw AppUninstallerError.privacyResetFailed(
+                service: service,
+                bundleIdentifier: "com.wisprlocal.mac",
+                exitCode: result.terminationStatus,
+                output: result.output
             )
         }
     }

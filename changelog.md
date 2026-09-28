@@ -2,6 +2,10 @@
 
 ## Fixes
 
+- 2026-09-29: Deinstallationsfehler beim Zurücksetzen der Datenschutzfreigaben liefern jetzt aussagekräftige Diagnoseinformationen.
+  - Dateien: `apps/macos/AppShell/AppUninstaller.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `VERSION`, `changelog.md`.
+  - Funktionalität: Der Deinstallationshelfer erfasst Standardausgabe und Fehlerausgabe von `tccutil`, nennt bei Fehlschlägen den Exit-Code und zeigt eine verständliche Meldung, wenn keine Diagnoseausgabe zurückkommt. Die Fehlermeldung weist jetzt darauf hin, dass App-Daten vor einem später fehlgeschlagenen Schritt bereits gelöscht worden sein können. Patch-Version `0.48.1`.
+
 - 2026-09-28: macOS-DMG enthält wieder das Cortexa-App-Icon und die Apple-On-Device-Integration.
   - Dateien: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `scripts/validate_macos_app_runtime.sh`, `scripts/verify_macos_release_sdk.sh`, `scripts/preflight_macos_release.sh`, `apps/macos/README.md`, `docs/macos-release-checklist.md`, `docs/distribution.md`, `AGENTS.md`, `VERSION`, `changelog.md`.
   - Funktionalität: CI und Release bauen jetzt mit dem macOS-26-Runner und Xcode 26+, das die Icon-Composer-Datei zu `Cortexa.icns` kompiliert und `FoundationModels.framework` verlinkt. Ein SDK-Preflight und die Bundle-Validierung brechen den Build ab, wenn Framework oder Icon fehlen. Patch-Version `0.47.2`.
