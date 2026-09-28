@@ -21,6 +21,9 @@ struct SettingsView: View {
     @State var speechModelAvailabilityFilter: SpeechModelAvailabilityFilter = .all
     @State var speechModelProviderFilter: String = SpeechModelProviderFilter.allProvidersID
     @State var speechModelLanguageFilter: SpeechModelLanguageFilter = .all
+    @State var showsUninstallConfirmation = false
+    @State var showsUninstallError = false
+    @State var uninstallErrorMessage = ""
     @State var newDictionaryTerm: String = ""
     @State var newDictionaryLanguageCode: String = ""
     @State var newDictionaryCategory: DictionaryTermCategory = .personalTerm
@@ -282,11 +285,53 @@ struct SettingsView: View {
                 appState.refreshPermissionStatesWithStabilization()
             }
         )
+        .confirmationDialog(
+            text("Cortexa vollständig deinstallieren?", "Completely uninstall Cortexa?"),
+            isPresented: $showsUninstallConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(text("Cortexa deinstallieren", "Uninstall Cortexa"), role: .destructive) {
+                beginUninstall()
+            }
+            Button(text("Abbrechen", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(
+                text(
+                    "Dabei werden alle Diktate, Wörterbucheinträge, Textbausteine, Einstellungen, lokalen Modelle und API-Schlüssel gelöscht. Die Mikrofon- und Bedienungshilfenfreigaben werden zurückgesetzt. Die App wird anschließend in den Papierkorb verschoben.",
+                    "This deletes all dictations, dictionary terms, snippets, settings, local models, and API keys. Microphone and Accessibility permissions are reset. The app is then moved to the Trash."
+                )
+            )
+        }
+        .alert(
+            text("Deinstallation konnte nicht gestartet werden", "Could not start uninstall"),
+            isPresented: $showsUninstallError
+        ) {
+            Button(text("OK", "OK"), role: .cancel) {}
+        } message: {
+            Text(uninstallErrorMessage)
+        }
         .onAppear {
             appState.selectedSettingsTab = SettingsTab(rawValue: persistedSettingsTabID) ?? .general
         }
         .onChange(of: currentSelectedTab) { _, tab in
             persistedSettingsTabID = tab.persistenceID
+        }
+    }
+
+    private func beginUninstall() {
+        guard !appState.isSessionActive, voiceModelOperationStore.states.isEmpty else {
+            uninstallErrorMessage = text(
+                "Beende zuerst das aktive Diktat und alle Modellvorgänge.",
+                "Finish the active dictation and model operations first."
+            )
+            showsUninstallError = true
+            return
+        }
+        do {
+            try AppUninstaller.begin()
+        } catch {
+            uninstallErrorMessage = error.localizedDescription
+            showsUninstallError = true
         }
     }
 
@@ -397,12 +442,14 @@ struct SettingsView: View {
                 updatesSectionTitle: text("Updates", "Updates"),
                 diagnosticsSectionTitle: text("Diagnose", "Diagnostics"),
                 permissionsSectionTitle: text("Berechtigungen", "Permissions"),
+                uninstallSectionTitle: text("Deinstallation", "Uninstall"),
                 appInfoContent: erasedView { aboutAppInfoRows },
                 runtimeContent: erasedView { voiceModelRuntimeContent },
                 storageContent: erasedView { advancedStorageContent },
                 updatesContent: erasedView { updatesContent },
                 diagnosticsContent: erasedView { diagnosticsContent },
-                permissionsContent: erasedView { advancedPermissionsContent }
+                permissionsContent: erasedView { advancedPermissionsContent },
+                uninstallContent: erasedView { advancedUninstallContent }
             )
         }
     }

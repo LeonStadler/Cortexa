@@ -79,6 +79,9 @@ struct WisprLocalMacApp: App {
     private let onboardingWindowPresenter: OnboardingWindowPresenter
 
     init() {
+        if AppUninstallHelperMode.runIfRequested(arguments: ProcessInfo.processInfo.arguments) {
+            exit(0)
+        }
         SingleInstanceGuard.exitIfAnotherInstanceIsRunning()
 
         let configuration = MacAppConfiguration.load()
