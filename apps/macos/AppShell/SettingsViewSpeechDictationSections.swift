@@ -88,12 +88,14 @@ enum SpeechModelManagementMatcher {
                 Locale(identifier: localeCode).localizedString(forLanguageCode: code)
             }
         }
-        var details = [
+        var details: [String] = [
             model.displayName, model.id, model.providerID, provider?.displayName ?? "",
             model.sizeLabel, model.localFileName ?? "", model.downloadIdentifier ?? "",
             model.runtimeID ?? "", "\(model.speedScore)/10", "\(model.accuracyScore)/10",
             "geschwindigkeit", "speed", "genauigkeit", "accuracy", "größe", "size"
-        ] + languageCodes + languageNames
+        ]
+        details.append(contentsOf: languageCodes)
+        details.append(contentsOf: languageNames)
 
         if model.languageCode == nil { details += ["mehrsprachig", "multilingual"] }
         if model.supportsAutomaticLanguageDetection {
@@ -106,12 +108,13 @@ enum SpeechModelManagementMatcher {
         if model.supportsQualityProfile { details += ["qualität", "quality profile"] }
         if model.runtimeID != nil { details += ["offline", "runtime"] }
 
-        let searchable = details.map {
-            $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale.current)
+        let foldingOptions: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        let searchable: [String] = details.map { detail in
+            detail.folding(options: foldingOptions, locale: .current)
         }
         return words.allSatisfy { word in
             let term = String(word).folding(
-                options: [.caseInsensitive, .diacriticInsensitive], locale: Locale.current
+                options: foldingOptions, locale: .current
             )
             return searchable.contains { value in
                 if term.count > 2 { return value.contains(term) }

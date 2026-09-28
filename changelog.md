@@ -68,6 +68,10 @@
 
 ## Fixes
 
+- 2026-09-28: Modell-Detailsuche mit kleineren, explizit typisierten String-Ausdrücken für den macOS-15-Compiler stabilisiert.
+  - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `changelog.md`.
+  - Funktionalität: Die Modell-Suchdaten werden schrittweise aufgebaut und mit einem gemeinsamen typisierten Faltoptionen-Wert normalisiert. Das beseitigt den Compiler-Timeout im Apple-Silicon-Release-Runner, ohne Suchverhalten oder Treffer zu ändern. Bugfix-Version `0.47.1`.
+
 - 2026-09-28: Qualitätsprofile nur für kompatible Sprachmodelle anzeigen.
   - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/MenuBarContentView.swift`, `apps/macos/README.md`, `VERSION`, `changelog.md`.
   - Funktionalität: Modelle ohne Qualitätsprofile zeigen in Settings nur einen Hinweis auf ihre festen Erkennungsparameter; wirkungslose Auswahl- und Modellwechsel-Aktionen entfallen auch in der Menüleiste. Die gespeicherte Whisper-Auswahl bleibt erhalten. Whisper-Profile erklären jetzt die Auswirkungen auf Suchaufwand, Laufzeit und Live-Zwischenstände. Bugfix-Version `0.45.1`.
