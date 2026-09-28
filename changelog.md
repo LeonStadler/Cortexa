@@ -40,6 +40,10 @@
 
 ## Fixes
 
+- 2026-09-28: Qualitätsprofile nur für kompatible Sprachmodelle anzeigen.
+  - Dateien: `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/MenuBarContentView.swift`, `apps/macos/README.md`, `VERSION`, `changelog.md`.
+  - Funktionalität: Modelle ohne Qualitätsprofile zeigen in Settings nur einen Hinweis auf ihre festen Erkennungsparameter; wirkungslose Auswahl- und Modellwechsel-Aktionen entfallen auch in der Menüleiste. Die gespeicherte Whisper-Auswahl bleibt erhalten. Whisper-Profile erklären jetzt die Auswirkungen auf Suchaufwand, Laufzeit und Live-Zwischenstände. Bugfix-Version `0.45.1`.
+
 - 2026-09-28: Release-Archive, DMG- und App-Smoke prüfen die enthaltene Whisper-Runtime; Berechtigungshinweise sind in den Settings gezielter erreichbar.
   - Dateien: `apps/macos/AppShell/PermissionCoordinator.swift`, `apps/macos/AppShell/SettingsFormPages.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `Tests/AppShellSupportTests/PermissionCoordinatorTests.swift`, `Tests/DocsContractTests/DocsContractTests.swift`, `Tests/DocsContractTests/PermissionRecoveryContractTests.swift`, `scripts/archive_macos_release.sh`, `scripts/create_macos_dmg.sh`, `scripts/smoke_test_macos_app.sh`, `scripts/validate_macos_app_runtime.sh`, `docs/distribution.md`.
   - Funktionalität: Release-Artefakte und Smoke-Läufe prüfen vorab, ob das App-Bundle eine ausführbare `whisper-cli`, Modellverzeichnis und gültige Runtime-Manifestdatei enthält. Das Manifest wird mit Python geprüft und die CLI mit `--help` gestartet. Die Accessibility-Anfrage öffnet nur noch den nativen macOS-Einstiegspunkt; offene Berechtigungen werden in den passenden Settings-Bereich geleitet.

@@ -629,19 +629,14 @@ struct MenuBarContentView: View {
                     menuBarVoiceModelMenu
                 }
 
-                Picker(text("Qualität", "Quality"), selection: appState.capabilityQualityBinding) {
-                    ForEach(DictationPerformance.allCases) { profile in
-                        Text(
-                            profile.localizedDisplayName(
-                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                            + (appState.supportsCapability(.quality(profile))
-                                ? "" : text(" · Modellwechsel nötig", " · Change model"))
-                        ).tag(profile)
-                    }
-                }
-                if !appState.supportsCapability(.quality(appState.performanceProfile)) {
-                    Button(text("Modell für Qualität wechseln…", "Change model for quality…")) {
-                        appState.requestVoiceCapability(.quality(appState.performanceProfile))
+                if appState.activeVoiceModel?.supportsQualityProfile == true {
+                    Picker(text("Qualität", "Quality"), selection: appState.capabilityQualityBinding) {
+                        ForEach(DictationPerformance.allCases) { profile in
+                            Text(
+                                profile.localizedDisplayName(
+                                    interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                            ).tag(profile)
+                        }
                     }
                 }
             }

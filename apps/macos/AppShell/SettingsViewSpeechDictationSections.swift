@@ -224,50 +224,42 @@ extension SettingsView {
     @ViewBuilder
     var speechQualityContent: some View {
         if speechHasMatches {
-            LabeledContent {
-                Picker(
-                    text("Qualitätsprofil", "Quality profile"),
-                    selection: appState.capabilityQualityBinding
-                ) {
-                    ForEach(DictationPerformance.allCases) { mode in
-                        Text(
-                            mode.localizedDisplayName(
-                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                                + (appState.supportsCapability(.quality(mode))
-                                    ? "" : text(" · Modellwechsel nötig", " · Change model"))
-                        )
-                        .tag(mode)
+            if appState.activeVoiceModel?.supportsQualityProfile == true {
+                LabeledContent {
+                    Picker(
+                        text("Qualitätsprofil", "Quality profile"),
+                        selection: appState.capabilityQualityBinding
+                    ) {
+                        ForEach(DictationPerformance.allCases) { mode in
+                            Text(
+                                mode.localizedDisplayName(
+                                    interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
+                            )
+                            .tag(mode)
+                        }
                     }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .settingsFormMenuPickerSlot(minWidth: 180)
-            } label: {
-                SettingsFieldLabel(
-                    title: text("Qualitätsprofil", "Quality profile"),
-                    helpText: text(
-                        "Steuert Laufzeitparameter wie Beam-Search, Chunking und Threads.",
-                        "Controls runtime parameters like beam search, chunking, and threads."
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .settingsFormMenuPickerSlot(minWidth: 180)
+                } label: {
+                    SettingsFieldLabel(
+                        title: text("Qualitätsprofil", "Quality profile"),
+                        helpText: text(
+                            "Steuert Whisper-Suchaufwand und Rechenleistung; bei Live-Erkennung auch, wie häufig Zwischenstände entstehen. Mehr Aufwand kann länger dauern und garantiert keine bessere Erkennung.",
+                            "Controls Whisper's search effort and compute use; during live recognition, it also affects how often partial text appears. More effort can take longer and does not guarantee better recognition."
+                        )
                     )
-                )
-            }
+                }
 
-            Text(qualityProfileExplanation)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            if appState.activeVoiceModel?.supportsQualityProfile == false,
-                appState.performanceProfile != .auto {
-                Text(text(
-                    "Gespeichertes Profil \(appState.performanceProfile.displayName) ist für dieses Modell pausiert.",
-                    "The saved \(appState.performanceProfile.displayName) profile is paused for this model."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-            if appState.activeVoiceModel?.supportsQualityProfile == false {
-                Button(text("Modell für Qualitätsprofil wechseln…", "Change model for quality profile…")) {
-                    appState.requestVoiceCapability(.quality(appState.performanceProfile))
+                Text(qualityProfileExplanation)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                LabeledContent(text("Qualitätsprofil", "Quality profile")) {
+                    Text(qualityProfileExplanation)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
@@ -294,16 +286,35 @@ extension SettingsView {
     }
 
     private var qualityProfileExplanation: String {
-        if appState.activeVoiceModel?.supportsQualityProfile == false {
+        guard appState.activeVoiceModel?.supportsQualityProfile == true else {
             return text(
-                "Dieses Modell verwendet feste Laufzeitparameter. Ein Qualitätsprofil kann durch Wechsel zu einem kompatiblen Modell gewählt werden.",
-                "This model uses fixed runtime parameters. Choose a quality profile by switching to a compatible model."
+                "Dieses Modell verwendet feste Erkennungsparameter. Deine gespeicherte Whisper-Auswahl bleibt erhalten und gilt wieder, wenn du ein kompatibles Modell auswählst.",
+                "This model uses fixed recognition settings. Your saved Whisper profile is kept and applies again when you select a compatible model."
             )
         }
-        return text(
-            "Auto passt das Preset an Gerät und Laufzeit an. Schnell priorisiert Reaktionszeit, Ausgeglichen balanciert Stabilität und Tempo, Präzise investiert mehr in die finale Erkennung.",
-            "Auto adapts the preset to the device and runtime. Fast prioritizes responsiveness, Balanced trades speed for stability, and Accurate spends more on the final recognition pass."
-        )
+
+        switch appState.effectivePerformanceProfile {
+        case .auto:
+            return text(
+                "Auto passt die Erkennungsparameter an Speicher, Prozessorkerne und Wärmeentwicklung deines Macs an.",
+                "Auto adapts recognition settings to your Mac's memory, processor cores, and thermal state."
+            )
+        case .fast:
+            return text(
+                "Schnell nutzt weniger Suchaufwand. Bei Live-Erkennung erscheinen Zwischenstände dadurch früher.",
+                "Fast uses less search effort. During live recognition, partial text appears sooner."
+            )
+        case .balanced:
+            return text(
+                "Ausgeglichen verwendet mittleren Suchaufwand als Kompromiss zwischen Tempo und Erkennung.",
+                "Balanced uses a middle level of search effort as a tradeoff between speed and recognition."
+            )
+        case .accurate:
+            return text(
+                "Präzise nutzt mehr Suchaufwand für die finale Erkennung. Das kann länger dauern und verbessert das Ergebnis nicht in jedem Fall.",
+                "Accurate uses more search effort for final recognition. This can take longer and does not improve the result in every case."
+            )
+        }
     }
 
     @ViewBuilder
