@@ -48,10 +48,19 @@ Der aktuelle öffentliche Vertriebsweg ist ein lokal gebauter Open-Source-DMG f�
 
    Danach DMG auf dem Ziel-Mac installieren und App starten. Gatekeeper-Freigabe laut Installationshinweisen bestätigen; Modell-Download, Mikrofon, Bedienungshilfen und Diktat praktisch testen. Release nicht veröffentlichen, bevor der Nutzer den Installationstest ausdrücklich freigegeben hat.
 
+### Releases nach PR-Merge oder Änderungen auf `main`
+
+Ein gemergter PR oder ein Commit auf `main` veröffentlicht **nicht automatisch** einen Release. Ein Release wird nur erstellt, wenn eine neue Produktversion mit passendem `VERSION`- und Changelog-Eintrag vorgesehen ist und der Nutzer die Veröffentlichung nach dem Installationstest ausdrücklich freigegeben hat. Reine Dokumentations- oder Prozessänderungen lösen keinen Produktrelease aus.
+
+1. Nach dem Merge `origin/main` frisch abrufen. Den Release aus dem dann aktuellen `main` bauen und prüfen, nicht aus dem alten PR-Branch. Vorher sicherstellen, dass `VERSION` und `changelog.md` den beabsichtigten Release abbilden und `v<VERSION>` weder lokal noch auf GitHub existiert.
+2. Swift-Build, relevante Tests und den arm64-DMG auf genau diesem `main`-Commit ausführen. Danach DMG und Prüfsumme prüfen und den DMG installieren sowie praktisch testen. Wurde der PR erst nach einem Branch-Build gemergt oder änderte sich `main` nach dem Build, ist dieser Build veraltet: vom finalen `main`-Commit neu bauen und erneut testen.
+3. Vor der Freigabe darf der geprüfte Release-Commit lokal committed bleiben; für die Veröffentlichung muss `origin/main` genau diesen geprüften Commit enthalten. Falls `main` noch nicht gepusht ist, erst nach ausdrücklicher Nutzerfreigabe pushen. Keinen Release-Tag an den PR-Branch oder einen inzwischen überholten `main`-Stand hängen.
+4. Den Release-Tag auf den geprüften `main`-Stand setzen und GitHub-Release-Assets hochladen. GitHub akzeptiert beim Erstellen eines Releases hier den Branch-Namen `main`; verwende `--target main`, nicht den Commit-SHA. Direkt danach prüfen, dass der neue Tag tatsächlich auf den geprüften Commit zeigt.
+
 ### Nach ausdrücklicher Freigabe veröffentlichen
 
 1. Prüfen, dass der lokale Release-Branch sauber ist, der getestete Commit noch HEAD ist und die Remote-Branch-/Tag-/Release-Lage frisch abgerufen wurde. `v<VERSION>` darf noch nicht existieren; veröffentlichte Versionstags nicht wiederverwenden oder verschieben.
-2. Den getesteten Branch-Commit zu `origin` pushen. Nicht eigenständig nach `main` mergen und keinen PR erstellen, solange der Nutzer das nicht angefordert hat.
+2. Den getesteten Branch-Commit zu `origin` pushen. Nicht eigenständig nach `main` mergen und keinen PR erstellen, solange der Nutzer das nicht angefordert hat. Wenn der Nutzer ausdrücklich einen Merge nach `main` verlangt, gilt der Ablauf unter „Releases nach PR-Merge oder Änderungen auf `main`“; ein bereits gemergter PR wird nicht noch einmal gemergt.
 3. GitHub-Release am getesteten Commit anlegen und DMG, Prüfsumme und Installationshinweise anhängen. Release-Hinweise nennen Version, arm64/Apple Silicon, fehlende Developer-ID/Notarisierung, Gatekeeper-Freigabe und Modell-Download beim ersten Start. Beispiel:
 
    ```bash
@@ -60,7 +69,7 @@ Der aktuelle öffentliche Vertriebsweg ist ein lokal gebauter Open-Source-DMG f�
      "artifacts/mac/Cortexa-${VERSION_VALUE}.dmg" \
      "artifacts/mac/Cortexa-${VERSION_VALUE}.dmg.sha256" \
      "artifacts/mac/Cortexa-${VERSION_VALUE}-install-notes.txt" \
-     --target "$(git rev-parse HEAD)" \
+     --target main \
      --title "Cortexa ${VERSION_VALUE}" \
      --notes-file /path/to/release-notes.md
    ```

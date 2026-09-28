@@ -54,6 +54,10 @@
 
 ## Docs
 
+- 2026-09-28: Release-Ablauf nach PR-Merge und direkten Änderungen auf `main` präzisiert.
+  - Dateien: `AGENTS.md`, `changelog.md`.
+  - Funktionalität: Dokumentiert, dass ein PR-Merge keinen automatischen Produktrelease auslöst; Release-Build und Tests müssen vom finalen `main`-Commit stammen, geänderte oder veraltete Branch-Builds werden neu erstellt, und Veröffentlichung erfolgt erst nach Installationstest und ausdrücklicher Freigabe. Der GitHub-Release-Befehl verwendet `--target main` und prüft danach die Tag-Zuordnung. Kein Produktversionsbump, da reine Prozessdokumentation.
+
 - 2026-09-28: Versionierung, lokaler DMG-Test und GitHub-Veröffentlichung in `AGENTS.md` festgehalten.
   - Dateien: `AGENTS.md`, `changelog.md`.
   - Funktionalität: Der verbindliche Ablauf beschreibt Branch- und Commit-Vorbereitung, Versionsbump nach erfolgreichen Implementierungstests, arm64-DMG-Build, Prüfsummen-/Image-Prüfung, Nutzerfreigabe nach Installationstest und erst danach Push sowie GitHub-Release. Er dokumentiert außerdem die Gatekeeper-Hinweise, Release-Assets und Rückprüfung der heruntergeladenen GitHub-Dateien. Kein Produktversionsbump, da nur Prozessdokumentation geändert wurde.
