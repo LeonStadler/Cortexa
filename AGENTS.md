@@ -25,6 +25,8 @@ Bei **großen** Funktionsänderung Änderung an einer oder mehreren Dateien (Bug
 
 Der aktuelle öffentliche Vertriebsweg ist ein von GitHub Actions gebauter Open-Source-DMG für Apple Silicon. Dafür braucht es kein Apple-Developer-Programm, keine Developer-ID und keine Notarisierung. Die App wird ad-hoc signiert, damit ihre Dateien geprüft werden können; macOS kann beim ersten Öffnen eine Freigabe verlangen. Nach Updates kann macOS Mikrofon- oder Bedienungshilfenrechte erneut abfragen. Sparkle/Appcast ist nicht Teil dieses Ablaufs.
 
+Die Repository-Einstellungen lassen Pull Requests ausgeschaltet. GitHub Actions ist aktiviert, darf aber nur `actions/checkout@v5` verwenden; das `GITHUB_TOKEN`-Standardrecht ist read-only, und Workflows dürfen keine Pull Requests erstellen oder genehmigen. Beim Ergänzen eines weiteren Actions-Imports muss die Allowlist unter Settings → Actions → General bewusst angepasst werden.
+
 ### Neue Version bauen und lokal testen
 
 1. Auf dem passenden `feature/...`, `bugfix/...` oder `chore/...`-Branch arbeiten. `main` und andere Worktrees vor Build-Bereinigung prüfen; nie versehentlich deren Artefakte verwenden.
