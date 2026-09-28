@@ -9,7 +9,8 @@ error() {
 command -v xcodebuild >/dev/null 2>&1 || error "xcodebuild is required."
 command -v xcrun >/dev/null 2>&1 || error "xcrun is required."
 
-XCODE_VERSION="$(xcodebuild -version | awk '$1 == "Xcode" {print $2; exit}')"
+XCODE_VERSION_OUTPUT="$(xcodebuild -version)"
+XCODE_VERSION="$(awk '$1 == "Xcode" {print $2; exit}' <<< "${XCODE_VERSION_OUTPUT}")"
 MACOS_SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 MACOS_SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 XCODE_MAJOR="${XCODE_VERSION%%.*}"
