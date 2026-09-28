@@ -125,7 +125,7 @@ Für die aktuelle Open-Source-Distribution ist kein Apple-Developer-Konto erford
 ./scripts/build_macos_open_source_release.sh
 ```
 
-Das Skript bereinigt alte lokale macOS-Build-Artefakte, baut Runtime und App neu und erzeugt einen DMG, eine SHA-256-Datei sowie kurze Installationshinweise unter `artifacts/mac/`. Den getesteten DMG kann man anschließend manuell als GitHub Release veröffentlichen. Details: [`docs/distribution.md`](docs/distribution.md) und [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
+Das Skript bereinigt alte lokale macOS-Build-Artefakte, baut Runtime und App neu und erzeugt einen DMG, eine SHA-256-Datei sowie kurze Installationshinweise unter `artifacts/mac/`. Für GitHub Releases startet der Workflow **macOS Release** auf `main` den Build und legt einen Draft mit den geprüften Dateien an. Nach lokalem Installationstest wird derselbe Workflow zum Veröffentlichen des Drafts verwendet. Details: [`docs/distribution.md`](docs/distribution.md) und [`docs/macos-release-checklist.md`](docs/macos-release-checklist.md).
 
 Ein Developer-ID-signierter und notarisiert ausgelieferter Release bleibt als optionaler Distributionsweg dokumentiert; er ist für die aktuellen Open-Source-Releases nicht erforderlich.
 

@@ -3,10 +3,10 @@
 ## macOS open-source release workflow
 
 - The visible product name and generated app bundle are **Cortexa** (`Cortexa.app`); the target and scheme retain the technical name `WisprLocalMac`, and the bundle identifier remains `com.wisprlocal.mac`.
-- The open-source release is built locally on an Apple Silicon Mac and uploaded manually as a GitHub Release after installation and acceptance testing. It requires Xcode, XcodeGen, CMake, Python 3, and Git, but no Apple Developer Program membership, Developer ID certificate, Apple account secret, or notarization. The app and bundled Whisper CLI are both arm64.
+- The open-source release is built on GitHub Actions' standard `macos-15` Apple Silicon runner, with no self-hosted machine or Apple credentials. The workflow runs only when manually dispatched from `main`: `action=prepare` builds and verifies the arm64 DMG and creates a draft release; after installation and acceptance testing, `action=publish` publishes that exact draft. It requires no Apple Developer Program membership, Developer ID certificate, Apple account secret, or notarization. The app and bundled Whisper CLI are both arm64.
 - The app bundle receives an ad-hoc code signature to seal its files and verify that packaging did not alter it. This is not an Apple developer identity. Gatekeeper may block the first launch; the user must choose **Open** from the app's context menu or approve it in **System Settings → Privacy & Security**.
 - Ad-hoc signing has no stable Apple team identity. macOS may ask again for protected-resource permissions after a future app replacement. The bundle identifier stays `com.wisprlocal.mac`, but this does not guarantee TCC permission continuity without the same persistent signing identity.
-- The release command cleans previous files in this checkout's `artifacts/mac/`, initializes the pinned Whisper submodule when needed, builds the CLI and app, validates runtime contents, creates a drag-and-drop DMG, verifies it, and writes a SHA-256 checksum and install notes.
+- The local release command cleans previous files in this checkout's `artifacts/mac/`, initializes the pinned Whisper submodule when needed, builds the CLI and app, validates runtime contents, creates a drag-and-drop DMG, verifies it, and writes a SHA-256 checksum and install notes. CI runs the same command on a fresh hosted runner, then attaches these three assets to the draft release.
 
 ```bash
 ./scripts/build_macos_open_source_release.sh
@@ -20,7 +20,7 @@ Expected assets:
 
 The Finder DMG layout uses the matching 800 × 500 SVG background and `dmgbuild` metadata. `create_macos_dmg.sh` verifies the app's ad-hoc signature after packaging. Release builds contain no speech model; onboarding downloads one on first launch. The Whisper CLI is linked statically against Whisper/GGML, and `validate_macos_app_runtime.sh` verifies the executable and runtime manifest.
 
-For the manual release checklist, see [`macos-release-checklist.md`](macos-release-checklist.md). The old Developer ID archive, export, notarization, stapling, and Sparkle appcast scripts remain available for a future signed distribution, but they are not part of the current release path.
+To prepare a draft from `main`, run **Actions → macOS Release** with `action=prepare` and the value from `VERSION`. To publish it after installation testing, run the same workflow with `action=publish` and the same version. The workflow checks branch, version, source commit, and draft state before each operation. For manual local verification steps, see [`macos-release-checklist.md`](macos-release-checklist.md). The old Developer ID archive, export, notarization, stapling, and Sparkle appcast scripts remain available for a future signed distribution, but they are not part of the current release path.
 
 ## Updater configuration
 

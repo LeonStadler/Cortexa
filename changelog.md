@@ -48,6 +48,10 @@
 
 ## Chores
 
+- 2026-09-28: GitHub-Actions-Releasepfad für macOS-DMGs eingerichtet.
+  - Dateien: `.github/workflows/release.yml`, `AGENTS.md`, `README.md`, `docs/distribution.md`, `docs/macos-release-checklist.md`, `changelog.md`, `VERSION`.
+  - Funktionalität: Der manuell auf `main` gestartete Workflow baut und prüft den arm64-DMG auf einem öffentlichen GitHub-Runner und legt DMG, SHA-256 und Installationshinweise als Draft-Release an. Ein separater `publish`-Lauf prüft Version, Tag, Quell-Commit, Assets, Prüfsumme und DMG-Integrität, bevor er den Draft veröffentlicht. Das hält den Installationstest als Freigabeschritt bei. Chore-Patch `0.47.1`.
+
 - 2026-09-28: Lokalen Open-Source-macOS-Release ohne Apple-Developer-ID eingerichtet.
   - Dateien: `scripts/build_macos_open_source_release.sh`, `scripts/create_macos_dmg.sh`, `README.md`, `docs/distribution.md`, `docs/macos-release-checklist.md`, `docs/permissions-macos.md`, `docs/licensing.md`, `docs/README.md`, `Tests/DocsContractTests/PermissionRecoveryContractTests.swift`.
   - Funktionalität: Ein einzelner lokaler Build-Befehl initialisiert Whisper bei Bedarf, baut und validiert Cortexa samt Whisper-Runtime gezielt für arm64 mit ad-hoc Signatur, erstellt einen überprüften DMG mit SHA-256 und Installationshinweisen und räumt frühere Build-Ausgaben des Checkouts auf. Die DMG-Verpackung erlaubt ad-hoc signierte Apps ausschließlich für diesen expliziten Open-Source-Pfad. Dokumentation erklärt die erstmalige macOS-Freigabe sowie mögliche erneute Berechtigungsabfragen bei Updates. Kein Produktversionsbump, da dies eine Release-Tooling-Änderung ist.

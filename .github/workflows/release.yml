@@ -1,0 +1,143 @@
+name: macOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Prepare a draft for installation testing or publish an approved draft
+        required: true
+        type: choice
+        options:
+          - prepare
+          - publish
+      version:
+        description: Version from VERSION, without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: inputs.action == 'prepare'
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - name: Check out main with Whisper submodule
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          submodules: recursive
+
+      - name: Verify release source and version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Release preparation must be dispatched from main." >&2; exit 1; }
+          [[ "$RELEASE_VERSION" == "$(cat VERSION)" ]] || { echo "Requested version does not match VERSION." >&2; exit 1; }
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version must use MAJOR.MINOR.PATCH." >&2; exit 1; }
+          MAIN_SHA="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          [[ "$MAIN_SHA" == "$GITHUB_SHA" ]] || { echo "main moved after this workflow was dispatched; start a new run." >&2; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${RELEASE_VERSION} already exists." >&2
+            exit 1
+          fi
+          if gh release view "v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "Release v${RELEASE_VERSION} already exists." >&2
+            exit 1
+          fi
+
+      - name: Install release tools
+        run: brew install cmake xcodegen
+
+      - name: Verify generated project
+        run: ./scripts/generate_macos_xcodeproj.sh --check
+
+      - name: Build and test Swift package
+        run: |
+          swift build
+          swift test
+
+      - name: Build and verify Apple Silicon DMG
+        run: ./scripts/build_macos_open_source_release.sh
+
+      - name: Create draft GitHub release
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          MAIN_SHA="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          [[ "$MAIN_SHA" == "$GITHUB_SHA" ]] || { echo "main moved during the build; rerun from the current main commit." >&2; exit 1; }
+          NOTES_FILE="${RUNNER_TEMP}/release-notes.md"
+          cat >"${NOTES_FILE}" <<EOF
+          Cortexa ${RELEASE_VERSION} — macOS, Apple Silicon (arm64)
+
+          Source commit: ${GITHUB_SHA}
+
+          This draft was built by GitHub Actions for installation testing. It is not signed with an Apple Developer ID and is not notarized. macOS may require approving the first launch; see the included install notes. Speech models download from the app when needed.
+
+          Install the DMG and verify the app before publishing this draft.
+          EOF
+          gh release create "v${RELEASE_VERSION}" \
+            "artifacts/mac/Cortexa-${RELEASE_VERSION}.dmg" \
+            "artifacts/mac/Cortexa-${RELEASE_VERSION}.dmg.sha256" \
+            "artifacts/mac/Cortexa-${RELEASE_VERSION}-install-notes.txt" \
+            --target main \
+            --draft \
+            --title "Cortexa ${RELEASE_VERSION}" \
+            --notes-file "${NOTES_FILE}"
+
+  publish:
+    if: inputs.action == 'publish'
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Publish the tested draft
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Publishing must be dispatched from main." >&2; exit 1; }
+          [[ "$RELEASE_VERSION" == "$(cat VERSION)" ]] || { echo "Requested version does not match VERSION on main." >&2; exit 1; }
+          RELEASE_JSON="$(gh release view "v${RELEASE_VERSION}" --json isDraft,tagName,body)"
+          [[ "$(jq -r '.isDraft' <<<"${RELEASE_JSON}")" == "true" ]] || { echo "Release v${RELEASE_VERSION} is not a draft." >&2; exit 1; }
+          [[ "$(jq -r '.tagName' <<<"${RELEASE_JSON}")" == "v${RELEASE_VERSION}" ]] || { echo "Release tag does not match the requested version." >&2; exit 1; }
+          git ls-remote --exit-code --tags origin "refs/tags/v${RELEASE_VERSION}" >/dev/null || { echo "Release tag v${RELEASE_VERSION} is missing." >&2; exit 1; }
+          TAG_COMMIT="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${RELEASE_VERSION}" --jq '.object.sha')"
+          TAG_TYPE="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${RELEASE_VERSION}" --jq '.object.type')"
+          if [[ "${TAG_TYPE}" == "tag" ]]; then
+            TAG_COMMIT="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${TAG_COMMIT}" --jq '.object.sha')"
+          fi
+          grep -Fq "Source commit: ${TAG_COMMIT}" <<<"$(jq -r '.body' <<<"${RELEASE_JSON}")" || { echo "Draft does not identify the tagged source commit." >&2; exit 1; }
+          ASSET_NAMES="$(gh release view "v${RELEASE_VERSION}" --json assets --jq '.assets[].name')"
+          for ASSET_NAME in \
+            "Cortexa-${RELEASE_VERSION}.dmg" \
+            "Cortexa-${RELEASE_VERSION}.dmg.sha256" \
+            "Cortexa-${RELEASE_VERSION}-install-notes.txt"; do
+            grep -Fxq "${ASSET_NAME}" <<<"${ASSET_NAMES}" || { echo "Draft asset is missing: ${ASSET_NAME}" >&2; exit 1; }
+          done
+          VERIFY_DIR="$(mktemp -d "${RUNNER_TEMP}/release-assets.XXXXXX")"
+          gh release download "v${RELEASE_VERSION}" \
+            --pattern "Cortexa-${RELEASE_VERSION}.dmg" \
+            --pattern "Cortexa-${RELEASE_VERSION}.dmg.sha256" \
+            --dir "${VERIFY_DIR}"
+          (cd "${VERIFY_DIR}" && shasum -a 256 -c "Cortexa-${RELEASE_VERSION}.dmg.sha256" && hdiutil verify "Cortexa-${RELEASE_VERSION}.dmg")
+          gh release edit "v${RELEASE_VERSION}" --draft=false
