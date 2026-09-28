@@ -56,6 +56,7 @@ struct SettingsSearchPresentation {
             destination(.snippets, "saved-snippets", "Textbausteine", "Ersetzungen verwalten", ["snippets", "snippet", "textbaustein", "replacement"]),
             destination(.advanced, "updates", "Updates", "Aktualisierungen", ["update", "aktualisierung", "release"]),
             destination(.advanced, "diagnostics", "Diagnose", "Technische Informationen", ["diagnostics", "diagnose", "logs", "protokolle"]),
+            destination(.advanced, "uninstall", "Deinstallation", "App und lokale Daten entfernen", ["deinstall", "deinstallieren", "uninstall", "remove", "löschen", "modelle"]),
             destination(.licenses, "licenses", "Lizenzen", "Cortexa und Drittanbieter", ["license", "lizenz", "lizenzen", "mit", "apache", "cc-by", "sparkle", "whisper", "nvidia", "parakeet"]),
         ]
     }

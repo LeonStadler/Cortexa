@@ -142,6 +142,47 @@ extension SettingsView {
     }
 
     @ViewBuilder
+    var advancedUninstallContent: some View {
+        if matches(["deinstall", "deinstallation", "uninstall", "remove app", "app löschen", "modelle löschen"]) {
+            LabeledContent {
+                Button(role: .destructive) {
+                    showsUninstallConfirmation = true
+                } label: {
+                    Label(
+                        text("Cortexa vollständig deinstallieren …", "Completely uninstall Cortexa …"),
+                        systemImage: "trash"
+                    )
+                }
+                .disabled(appState.isSessionActive || !voiceModelOperationStore.states.isEmpty)
+                .help(
+                    text(
+                        "Löscht lokale App-Daten und Modelle, setzt Zugriffsfreigaben zurück und verschiebt Cortexa in den Papierkorb.",
+                        "Deletes local app data and models, resets permissions, and moves Cortexa to the Trash."
+                    )
+                )
+                if appState.isSessionActive || !voiceModelOperationStore.states.isEmpty {
+                    Text(
+                        text(
+                            "Beende zuerst das aktive Diktat und alle Modellvorgänge.",
+                            "Finish the active dictation and model operations first."
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            } label: {
+                SettingsFieldLabel(
+                    title: text("Deinstallation", "Uninstall"),
+                    helpText: text(
+                        "Entfernt die von Cortexa verwalteten Daten, Modelle, Einstellungen und gespeicherten API-Schlüssel.",
+                        "Removes data, models, settings, and saved API keys managed by Cortexa."
+                    )
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
     var voiceModelRuntimeContent: some View {
         if matches([
             "voice", "sprachmodell", "model runtime", "runtime", "duration", "dauer", "warm",

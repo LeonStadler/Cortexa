@@ -8,6 +8,10 @@
 
 ## Features
 
+- 2026-09-29: Vollständige Deinstallation über die erweiterten Einstellungen ergänzt.
+  - Dateien: `apps/macos/AppShell/AppUninstaller.swift`, `apps/macos/AppShell/WisprLocalMacApp.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsViewGeneralSections.swift`, `apps/macos/AppShell/SettingsFormPages.swift`, `apps/macos/AppShell/SettingsSearchPresentation.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `Tests/AppShellSupportTests/SettingsSearchPresentationTests.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`, `changelog.md`.
+  - Funktionalität: Die bestätigte Aktion beendet Cortexa, entfernt App-Daten, Cache, bekannte lokale Modelle, validierte Cortexa-Runtimes, Einstellungen und Remote-AI-Schlüssel, setzt Mikrofon- und Bedienungshilfenfreigaben zurück und verschiebt das App-Bundle zuletzt in den Papierkorb. Bei laufendem Diktat oder Modellvorgängen bleibt die Aktion deaktiviert; fehlgeschlagene Schritte werden gemeldet und lassen die App zur Wiederholung installiert. Externe NeMo-Runtimes und nicht zuordenbare Modellcache-Dateien bleiben erhalten. Feature-Version `0.48.0`.
+
 - 2026-09-28: Lizenzübersicht in den macOS-Einstellungen ergänzt.
   - Dateien: `apps/macos/AppShell/SettingsTab.swift`, `apps/macos/AppShell/SettingsView.swift`, `apps/macos/AppShell/SettingsSearchPresentation.swift`, `apps/macos/AppShell/LicensesSettingsPage.swift`, `apps/macos/WisprLocalMac/project.yml`, `apps/macos/README.md`, `docs/third-party-notices.md`, `docs/licensing.md`, `docs/README.md`, `VERSION`.
   - Funktionalität: Unter „Über Cortexa“ gibt es nun „Lizenzen“. Die Seite zeigt Cortexas Apache-2.0-Lizenz zuerst und danach die Lizenztypen/Attributionen für whisper.cpp, Sparkle, NVIDIA NeMo-Speech.cpp und Parakeet TDT v3. Jeder Drittanbieter-Eintrag öffnet direkt eine auf den gebündelten Stand gepinnte Lizenzquelle; die Parakeet-Modellkarte ist zusätzlich verlinkt. Vollständige Lizenztexte und Hinweise werden mit der macOS-App gebündelt und in den Einstellungen dargestellt. Siehe auch den Eintrag zur Apache-2.0-Umstellung am 2026-09-28.

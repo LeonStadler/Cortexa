@@ -17,6 +17,12 @@ final class SettingsSearchPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.results.first?.sectionID, "providers")
     }
 
+    func testSearchFindsCleanUninstallSettings() {
+        let presentation = SettingsSearchPresentation(searchText: "deinstallieren", language: .german)
+
+        XCTAssertEqual(presentation.results.map(\.id), ["advanced.uninstall"])
+    }
+
     func testSearchDoesNotExposePersonalTextOrUnknownTerms() {
         let presentation = SettingsSearchPresentation(searchText: "private dictation text", language: .german)
 

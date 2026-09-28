@@ -66,6 +66,7 @@ Cortexa is an offline-first dictation/transcription product for Apple platforms.
 - current macOS shell includes runtime install bootstrap, permission deep-links,
   snippet persistence/import/export UI, personal dictionary persistence/import/export UI,
   language/performance selection, transcript history, and hotkey control
+- full uninstall is initiated from Advanced settings and handed to a second app process; after the main app exits, it removes app-owned local storage, preferences, managed models/runtimes and Keychain credentials, resets Cortexa's Microphone and Accessibility consent, then moves the app bundle to Trash. External runtimes and unowned model-cache files remain untouched.
 - optional context-aware AI post-processing (`off`, `finalOnly`, `liveOnly`, `liveAndFinal`)
 - optional media auto-pause/resume during dictation (best effort for Apple Music and Spotify)
 - local audit log for session/diagnostic events with simple rotation and hardened file permissions / file protection

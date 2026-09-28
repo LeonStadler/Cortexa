@@ -313,12 +313,14 @@ struct AdvancedSettingsPage: View {
     let updatesSectionTitle: String
     let diagnosticsSectionTitle: String
     let permissionsSectionTitle: String
+    let uninstallSectionTitle: String
     let appInfoContent: AnyView
     let runtimeContent: AnyView
     let storageContent: AnyView
     let updatesContent: AnyView
     let diagnosticsContent: AnyView
     let permissionsContent: AnyView
+    let uninstallContent: AnyView
 
     private var sections: [SettingsPageSection] {
         [
@@ -343,6 +345,11 @@ struct AdvancedSettingsPage: View {
                 id: "permissions",
                 title: permissionsSectionTitle,
                 content: permissionsContent
+            ),
+            SettingsPageSection(
+                id: "uninstall",
+                title: uninstallSectionTitle,
+                content: uninstallContent
             ),
         ]
     }
