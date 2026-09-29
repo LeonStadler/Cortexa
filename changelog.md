@@ -66,6 +66,10 @@
 
 ## Chores
 
+- 2026-09-29: Whisper-CLI-CI-Smoke-Test verwendet ein festes Sprachsample statt macOS-Texte-to-Speech.
+  - Dateien: `scripts/verify_whisper_cli_runtime.sh`, `changelog.md`.
+  - Funktionalität: Der macOS-Smoke-Test transkribiert jetzt das im gepinnten whisper.cpp-Submodul enthaltene JFK-WAV-Sample. Dadurch hängt die CI-Prüfung nicht mehr von der auf GitHub-Runnern erzeugten `say`-Audioausgabe ab. Wenn Whisper keinen Text erzeugt, zeigt der Fehler zusätzlich die CLI-Ausgaben.
+
 - 2026-09-29: Release-Notizen automatisch aus gemergten PRs und direkten Commits erstellen.
   - Dateien: `.github/release.yml`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/workflows/release.yml`, `scripts/generate_macos_release_notes.sh`, `AGENTS.md`, `docs/distribution.md`, `changelog.md`.
   - Funktionalität: Der manuelle macOS-Release-Workflow erzeugt jetzt kategorisierte GitHub-Release-Notizen einschließlich Beitragenden und Commit-Nachrichten ohne PR. Eine PR-Vorlage beschreibt verständliche Titel und erforderliche Release-Labels; die Notiz enthält außerdem kurze Installationshinweise und den maschinenlesbaren getesteten Quell-Commit. Produktversion unverändert, da nur Release-Tooling und Dokumentation geändert wurden.
