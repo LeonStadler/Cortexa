@@ -13,6 +13,10 @@ OUTPUT_FILE="$4"
 GITHUB_REPOSITORY_VALUE="${GITHUB_REPOSITORY:-LeonStadler/Cortexa}"
 RELEASE_TAG="v${RELEASE_VERSION}"
 
+strip_release_emojis() {
+  perl -CS -pe 's/\p{Extended_Pictographic}|[\x{FE0E}\x{FE0F}\x{200D}\x{20E3}\x{1F1E6}-\x{1F1FF}\x{1F3FB}-\x{1F3FF}\x{E0020}-\x{E007F}]//g; s/[\t ]{2,}/ /g; s/[\t ]+$//'
+}
+
 [[ "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
   echo "Release version must use MAJOR.MINOR.PATCH: ${RELEASE_VERSION}" >&2
   exit 2
@@ -70,4 +74,4 @@ The DMG targets Apple Silicon (arm64). This open-source build is ad-hoc signed a
 EOF
 
   printf '\nSource commit: %s\n' "${SOURCE_COMMIT}"
-} >"${OUTPUT_FILE}"
+} | strip_release_emojis >"${OUTPUT_FILE}"
