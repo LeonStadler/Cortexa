@@ -66,6 +66,10 @@
 
 ## Chores
 
+- 2026-09-29: Ersten Release ohne vorhandene Tags oder vorherige Releases vorbereitet.
+  - Dateien: `.github/workflows/release.yml`, `scripts/generate_macos_release_notes.sh`, `docs/distribution.md`, `changelog.md`.
+  - Funktionalität: Die Vorbereitung eines ersten Releases akzeptiert jetzt einen leeren Release-Verlauf. GitHub generiert Notizen ohne vorherigen Tag; direkte Commits werden ab dem Repository-Root aufgenommen. Kein Produktversionsbump, da dies Release-Tooling ist.
+
 - 2026-09-29: Emoji aus automatisch generierten Release-Notizen entfernt.
   - Dateien: `.github/release.yml`, `.github/PULL_REQUEST_TEMPLATE.md`, `scripts/generate_macos_release_notes.sh`, `docs/distribution.md`, `changelog.md`.
   - Funktionalität: Kategorieüberschriften sind textbasiert. Der Release-Notizgenerator entfernt Emoji-Zeichen und ihre Unicode-Sequenzbestandteile aus PR-Titeln, direkten Commit-Nachrichten, Beitragendennamen und dem übrigen generierten Text. Die PR-Vorlage bittet um emoji-freie Titel. Die Produktversion bleibt unverändert, da sich nur Release-Tooling und Dokumentation ändern.
