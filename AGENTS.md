@@ -25,14 +25,14 @@ Bei **großen** Funktionsänderung Änderung an einer oder mehreren Dateien (Bug
 
 Der aktuelle öffentliche Vertriebsweg ist ein von GitHub Actions auf `macos-26` mit Xcode 26+ gebauter Open-Source-DMG für Apple Silicon. Diese SDK-Version wird benötigt, damit das Icon Composer-App-Icon und Apple Foundation Models tatsächlich in die App kompiliert werden. Dafür braucht es kein Apple-Developer-Programm, keine Developer-ID und keine Notarisierung. Die App wird ad-hoc signiert, damit ihre Dateien geprüft werden können; macOS kann beim ersten Öffnen eine Freigabe verlangen. Nach Updates kann macOS Mikrofon- oder Bedienungshilfenrechte erneut abfragen. Sparkle/Appcast ist nicht Teil dieses Ablaufs.
 
-Die Repository-Einstellungen lassen Pull Requests ausgeschaltet. GitHub Actions ist aktiviert, darf aber nur `actions/checkout@v5` verwenden; das `GITHUB_TOKEN`-Standardrecht ist read-only, und Workflows dürfen keine Pull Requests erstellen oder genehmigen. Beim Ergänzen eines weiteren Actions-Imports muss die Allowlist unter Settings → Actions → General bewusst angepasst werden.
+Pull Requests sind im Repository aktiviert und sind künftig der Integrationsweg für Änderungen. Nutze PR-Titel, die die Änderung für Nutzer verständlich zusammenfassen, und wende vor dem Merge genau ein Release-Kategorie-Label gemäß `.github/PULL_REQUEST_TEMPLATE.md` an. GitHubs Release-Notes-API gruppiert gemergte PRs anhand `.github/release.yml`; der Release-Workflow ergänzt direkte Commits ohne PR und Beitragende. GitHub Actions darf weiterhin nur `actions/checkout@v5` importieren; das `GITHUB_TOKEN`-Standardrecht ist read-only, und Workflows dürfen keine Pull Requests erstellen oder genehmigen. Beim Ergänzen eines weiteren Actions-Imports muss die Allowlist unter Settings → Actions → General bewusst angepasst werden.
 
 ### Neue Version bauen und lokal testen
 
 1. Auf dem passenden `feature/...`, `bugfix/...` oder `chore/...`-Branch arbeiten. `main` und andere Worktrees vor Build-Bereinigung prüfen; nie versehentlich deren Artefakte verwenden.
 2. Nach erfolgreicher Implementierung und den relevanten Tests `VERSION` nach den obigen Regeln anheben und `changelog.md` mit Datum, geänderten Dateien, Verhalten und neuer Version aktualisieren. Release-Artefakte müssen dieselbe Version tragen.
-3. Änderungen für den Build committen und nach `main` pushen. GitHub Actions baut den Release-Kandidaten auf einem frischen Apple-Silicon-Runner von genau diesem `main`-Commit; kein lokales oder altes Branch-Artefakt verwenden.
-4. Paket-Build und betroffene Tests ausführen. Danach in GitHub Actions den Workflow **macOS Release** mit `action=prepare` und der Version aus `VERSION` auf `main` starten. Der Workflow baut den arm64-DMG, verifiziert Image und Prüfsumme und erstellt einen GitHub-Draft-Release:
+3. Änderungen committen, einen PR nach `main` eröffnen und die erforderlichen Checks sowie Review abschließen. Nach dem Merge baut GitHub Actions den Release-Kandidaten auf einem frischen Apple-Silicon-Runner von genau diesem `main`-Commit; kein lokales oder altes Branch-Artefakt verwenden.
+4. Paket-Build und betroffene Tests ausführen. Danach in GitHub Actions den Workflow **macOS Release** mit `action=prepare` und der Version aus `VERSION` auf `main` starten. Der Workflow baut den arm64-DMG, verifiziert Image und Prüfsumme, generiert Release-Notizen aus PRs und direkten Commits seit dem letzten veröffentlichten Tag und erstellt einen GitHub-Draft-Release:
 
    ```bash
    swift build
@@ -61,7 +61,7 @@ Ein gemergter PR oder ein Commit auf `main` veröffentlicht **nicht automatisch*
 
 ### Nach ausdrücklicher Freigabe veröffentlichen
 
-1. Den getesteten Branch-Commit integrieren und nach `main` pushen. PRs werden im Repository deaktiviert; keinen PR erstellen. Nach einem Merge/Push den Workflow-Ablauf oben verwenden.
+1. Den getesteten Branch über einen PR nach `main` integrieren. Nach dem Merge den Workflow-Ablauf oben verwenden.
 2. Nach manueller Installation und ausdrücklicher Nutzerfreigabe den Draft über den Workflow `action=publish` veröffentlichen.
 3. GitHub-Release anschließend zurücklesen und die Assets erneut herunterladen. Prüfsumme und Image-Integrität müssen auch für die Downloads gültig sein:
 
