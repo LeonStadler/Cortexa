@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ "$#" -ne 4 ]]; then
-  echo "Usage: $0 <version> <source-commit> <previous-release-tag> <output-file>" >&2
+  echo "Usage: $0 <version> <source-commit> <previous-release-tag-or-empty> <output-file>" >&2
   exit 2
 fi
 
@@ -25,26 +25,30 @@ strip_release_emojis() {
   echo "Source commit must be a full lowercase Git SHA: ${SOURCE_COMMIT}" >&2
   exit 2
 }
-[[ -n "${PREVIOUS_TAG}" ]] || {
-  echo "A previous published release tag is required to generate release notes." >&2
-  exit 2
-}
 git cat-file -e "${SOURCE_COMMIT}^{commit}"
-git rev-parse --verify "refs/tags/${PREVIOUS_TAG}^{commit}" >/dev/null
-git merge-base --is-ancestor "${PREVIOUS_TAG}" "${SOURCE_COMMIT}" || {
-  echo "Previous release ${PREVIOUS_TAG} is not an ancestor of ${SOURCE_COMMIT}." >&2
-  exit 1
-}
+NOTES_ARGUMENTS=(
+  --method POST
+  "repos/${GITHUB_REPOSITORY_VALUE}/releases/generate-notes"
+  -f "tag_name=${RELEASE_TAG}"
+  -f "target_commitish=${SOURCE_COMMIT}"
+  -f "configuration_file_path=.github/release.yml"
+)
+COMMIT_RANGE="${SOURCE_COMMIT}"
 
-NOTES_RESPONSE="$(gh api --method POST \
-  "repos/${GITHUB_REPOSITORY_VALUE}/releases/generate-notes" \
-  -f "tag_name=${RELEASE_TAG}" \
-  -f "target_commitish=${SOURCE_COMMIT}" \
-  -f "previous_tag_name=${PREVIOUS_TAG}" \
-  -f "configuration_file_path=.github/release.yml")"
+if [[ -n "${PREVIOUS_TAG}" ]]; then
+  git rev-parse --verify "refs/tags/${PREVIOUS_TAG}^{commit}" >/dev/null
+  git merge-base --is-ancestor "${PREVIOUS_TAG}" "${SOURCE_COMMIT}" || {
+    echo "Previous release ${PREVIOUS_TAG} is not an ancestor of ${SOURCE_COMMIT}." >&2
+    exit 1
+  }
+  NOTES_ARGUMENTS+=(-f "previous_tag_name=${PREVIOUS_TAG}")
+  COMMIT_RANGE="${PREVIOUS_TAG}..${SOURCE_COMMIT}"
+fi
+
+NOTES_RESPONSE="$(gh api "${NOTES_ARGUMENTS[@]}")"
 GENERATED_NOTES="$(jq -r '.body' <<<"${NOTES_RESPONSE}")"
 
-DIRECT_COMMITS="$(git rev-list --no-merges "${PREVIOUS_TAG}..${SOURCE_COMMIT}")"
+DIRECT_COMMITS="$(git rev-list --no-merges "${COMMIT_RANGE}")"
 DIRECT_NOTES=()
 while IFS= read -r COMMIT; do
   [[ -n "${COMMIT}" ]] || continue

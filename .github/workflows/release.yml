@@ -85,7 +85,7 @@ jobs:
           [[ "$MAIN_SHA" == "$GITHUB_SHA" ]] || { echo "main moved during the build; rerun from the current main commit." >&2; exit 1; }
           PREVIOUS_TAG="$(gh release list --limit 100 \
             --json tagName,isDraft,isPrerelease,publishedAt \
-            | jq -er '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | last | .tagName')"
+            | jq -r '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | last | .tagName // empty')"
           NOTES_FILE="${RUNNER_TEMP}/release-notes.md"
           GITHUB_REPOSITORY="${GITHUB_REPOSITORY}" \
             ./scripts/generate_macos_release_notes.sh \
