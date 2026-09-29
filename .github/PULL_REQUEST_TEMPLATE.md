@@ -17,4 +17,4 @@ Before merging, apply exactly one category label to this PR:
 - `maintenance` — internal tooling, dependencies, or maintenance
 - `skip-release-notes` — no user-facing release note is needed
 
-The release workflow includes PR titles, grouped by these labels, and identifies contributors automatically. Keep the title concise and avoid putting issue references alone in the title.
+The release workflow includes PR titles, grouped by these labels, and identifies contributors automatically. Use plain text without emojis so the release notes stay consistent. Keep the title concise and avoid putting issue references alone in the title.

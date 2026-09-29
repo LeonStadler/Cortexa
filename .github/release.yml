@@ -5,19 +5,19 @@ changelog:
     authors:
       - dependabot[bot]
   categories:
-    - title: "⚠️ Breaking changes"
+    - title: "Breaking changes"
       labels:
         - breaking-change
-    - title: "✨ Features and improvements"
+    - title: "Features and improvements"
       labels:
         - enhancement
-    - title: "🐛 Bug fixes"
+    - title: "Bug fixes"
       labels:
         - bug
-    - title: "📚 Documentation"
+    - title: "Documentation"
       labels:
         - documentation
-    - title: "🧰 Maintenance"
+    - title: "Maintenance"
       labels:
         - maintenance
     - title: "Other changes"

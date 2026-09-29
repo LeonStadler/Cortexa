@@ -66,6 +66,10 @@
 
 ## Chores
 
+- 2026-09-29: Emoji aus automatisch generierten Release-Notizen entfernt.
+  - Dateien: `.github/release.yml`, `.github/PULL_REQUEST_TEMPLATE.md`, `scripts/generate_macos_release_notes.sh`, `docs/distribution.md`, `changelog.md`.
+  - Funktionalität: Kategorieüberschriften sind textbasiert. Der Release-Notizgenerator entfernt Emoji-Zeichen und ihre Unicode-Sequenzbestandteile aus PR-Titeln, direkten Commit-Nachrichten, Beitragendennamen und dem übrigen generierten Text. Die PR-Vorlage bittet um emoji-freie Titel. Die Produktversion bleibt unverändert, da sich nur Release-Tooling und Dokumentation ändern.
+
 - 2026-09-29: Whisper-CLI-CI-Smoke-Test verwendet ein festes Sprachsample statt macOS-Texte-to-Speech.
   - Dateien: `scripts/verify_whisper_cli_runtime.sh`, `changelog.md`.
   - Funktionalität: Der macOS-Smoke-Test transkribiert jetzt das im gepinnten whisper.cpp-Submodul enthaltene JFK-WAV-Sample. Dadurch hängt die CI-Prüfung nicht mehr von der auf GitHub-Runnern erzeugten `say`-Audioausgabe ab. Wenn Whisper keinen Text erzeugt, zeigt der Fehler zusätzlich die CLI-Ausgaben.
