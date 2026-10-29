@@ -1009,7 +1009,7 @@ final class MacAppState: ObservableObject {
     }
 
     var selectedVoiceModelLanguageHintText: String? {
-        guard let selectedVoiceModel = activeVoiceModel else { return nil }
+        guard let selectedVoiceModel else { return nil }
         if let languageCode = selectedVoiceModel.languageCode {
             let languageName =
                 DictationLanguage(rawValue: languageCode)?.displayName ?? languageCode.uppercased()

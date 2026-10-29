@@ -14,16 +14,23 @@ extension MacAppState {
     }
 
     func supportsCapability(_ choice: VoiceModelCapabilityChoice) -> Bool {
-        if case .language(let language) = choice,
-            language != .auto,
-            let override = voiceLanguageOverrides.first(where: {
-                $0.languageCode == language.rawValue
-            }),
-            let model = voiceModels.first(where: { $0.id == override.modelID }),
-            isVoiceModelInstalled(model),
-            voiceProviders.contains(where: { $0.id == model.providerID && $0.isAvailable }),
-            VoiceModelCapabilityPolicy().supports(language: language, model: model) {
-            return true
+        if case .language(let language) = choice {
+            if language != .auto,
+                let override = voiceLanguageOverrides.first(where: {
+                    $0.languageCode == language.rawValue
+                }),
+                let model = voiceModels.first(where: { $0.id == override.modelID }),
+                isVoiceModelInstalled(model),
+                voiceProviders.contains(where: { $0.id == model.providerID && $0.isAvailable }),
+                VoiceModelCapabilityPolicy().supports(language: language, model: model) {
+                return true
+            }
+            guard let selectedVoiceModel,
+                isVoiceModelInstalled(selectedVoiceModel),
+                voiceProviders.contains(where: {
+                    $0.id == selectedVoiceModel.providerID && $0.isAvailable
+                }) else { return false }
+            return VoiceModelCapabilityPolicy().supports(language: language, model: selectedVoiceModel)
         }
         guard let activeVoiceModel else { return false }
         return VoiceModelCapabilityPolicy().supports(

@@ -86,6 +86,10 @@ final class VoiceModelCapabilityPolicyTests: XCTestCase {
         let standard = model("whisper.standard")
         let catalog = [phonon, standard]
         let installed: Set<String> = ["phonon-2", standard.localFileName!]
+        XCTAssertTrue(policy.supports(
+            .language(.english), model: phonon, currentLanguage: .german))
+        XCTAssertFalse(policy.supports(
+            .language(.auto), model: phonon, currentLanguage: .german))
         XCTAssertTrue(policy.supports(language: .english, model: phonon))
         for language in [DictationLanguage.german, .auto] {
             XCTAssertFalse(policy.supports(language: language, model: phonon))
