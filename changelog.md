@@ -9,8 +9,8 @@
 ## Fixes
 
 - 2026-10-29: Phonon-2 übernimmt bei expliziter Modellauswahl automatisch Englisch; Bedienungshilfen-Abfragen laufen serialisiert auf dem Main Thread.
-  - Dateien: `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `Tests/AppShellSupportTests/SpeechModelControllerTests.swift`, `changelog.md`.
-  - Funktionalität: Die bewusste Auswahl von Phonon-2 stellt die erforderliche englische Diktatsprache direkt mit ein. Der Absturzbericht vom 29. Oktober zeigte `AXIsProcessTrustedWithOptions` beim Diktatstart auf einem Hintergrundthread; der Aufruf wird nun mit den Berechtigungsaktualisierungen auf dem Main Thread ausgeführt. Patch-Fix innerhalb des geplanten Feature-Releases `0.49.0`.
+  - Dateien: `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/MacAppStateModelCapabilities.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `Tests/AppShellSupportTests/SpeechModelControllerTests.swift`, `changelog.md`.
+  - Funktionalität: Die bewusste Auswahl von Phonon-2 stellt die erforderliche englische Diktatsprache direkt mit ein und bewahrt Modell-Overrides für die vorherige Sprache. Der Absturzbericht vom 29. Oktober zeigte `AXIsProcessTrustedWithOptions` beim Diktatstart auf einem Hintergrundthread; der Aufruf wird nun mit den Berechtigungsaktualisierungen auf dem Main Thread ausgeführt. Patch-Fix innerhalb des geplanten Feature-Releases `0.49.0`.
 
 - 2026-10-29: Unbekannte FluidAudio-Modell-IDs werden explizit abgelehnt statt stillschweigend als Parakeet Redux geladen zu werden.
   - Dateien: `Sources/FluidASRMac/FluidSpeechEngine.swift`, `Tests/FluidASRMacTests/FluidSpeechEngineSmokeTests.swift`, `changelog.md`.

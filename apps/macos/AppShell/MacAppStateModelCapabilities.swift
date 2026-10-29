@@ -74,7 +74,11 @@ extension MacAppState {
         let language = selectedLanguage
         let hadOverride = selectedLanguageVoiceOverride != nil
         setSelectedVoiceModel(model)
-        if hadOverride, language != .auto {
+        if shouldUpdateVoiceModelLanguageOverride(
+            previousLanguage: language,
+            selectedLanguage: selectedLanguage,
+            hadOverride: hadOverride
+        ) {
             voiceLanguageOverrides.removeAll { $0.languageCode == language.rawValue }
             if VoiceModelCapabilityPolicy().supports(language: language, model: model) {
                 voiceLanguageOverrides.append(VoiceLanguageOverride(
@@ -204,4 +208,12 @@ extension MacAppState {
         let raw = UserDefaults.standard.string(forKey: "wispr.uiLanguage") ?? AppLanguage.system.rawValue
         return (AppLanguage(rawValue: raw) ?? .system).text(german, english)
     }
+}
+
+func shouldUpdateVoiceModelLanguageOverride(
+    previousLanguage: DictationLanguage,
+    selectedLanguage: DictationLanguage,
+    hadOverride: Bool
+) -> Bool {
+    hadOverride && previousLanguage != .auto && previousLanguage == selectedLanguage
 }

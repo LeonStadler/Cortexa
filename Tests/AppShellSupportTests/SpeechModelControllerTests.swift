@@ -45,6 +45,19 @@
             XCTAssertEqual(state.selectedLanguage, .english)
         }
 
+        func testFixedLanguageSelectionKeepsOverridesForThePreviousLanguage() {
+            XCTAssertFalse(shouldUpdateVoiceModelLanguageOverride(
+                previousLanguage: .german,
+                selectedLanguage: .english,
+                hadOverride: true
+            ))
+            XCTAssertTrue(shouldUpdateVoiceModelLanguageOverride(
+                previousLanguage: .german,
+                selectedLanguage: .german,
+                hadOverride: true
+            ))
+        }
+
         func testVoiceModelOperationProgressPublishesOnlyMeaningfulDownloadUpdates() {
             let current = VoiceModelOperationKind.installing(
                 VoiceModelInstallProgress(
