@@ -606,3 +606,91 @@ enum NemoSpeechRuntimeManager {
         return String(data: outData, encoding: .utf8) ?? ""
     }
 }
+
+extension VoiceModelInstaller {
+    public static func nativeModelURL(modelID: String) throws -> URL {
+        let manifest = try NativeVoiceModelBundle.manifest(modelID: modelID)
+        let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        return support.appendingPathComponent("Cortexa/NativeVoiceModels", isDirectory: true)
+            .appendingPathComponent(manifest.bundleName, isDirectory: true)
+    }
+
+    public func installedNativeModelFileNames() throws -> Set<String> {
+        var names: Set<String> = []
+        for manifest in NativeVoiceModelBundle.all {
+            let directory = try Self.nativeModelURL(modelID: manifest.modelID)
+            guard fileManager.fileExists(atPath: directory.path) else { continue }
+            do {
+                try manifest.validate(at: directory)
+                names.insert(manifest.bundleName)
+            } catch {
+                NSLog("Cortexa native model validation failed: %@ (%@)", manifest.modelID, error.localizedDescription)
+            }
+        }
+        return names
+    }
+
+    public func installedVoiceModelFileNames() throws -> Set<String> {
+        let directory = try BundledWhisperRuntimeInstaller.defaultInstallDirectory(fileManager: fileManager)
+            .appendingPathComponent("models", isDirectory: true)
+        let whisperFiles: Set<String>
+        if fileManager.fileExists(atPath: directory.path) {
+            whisperFiles = Set(try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension == "bin" }.map(\.lastPathComponent))
+        } else {
+            whisperFiles = []
+        }
+        return try whisperFiles.union(installedParakeetModelFileNames()).union(installedNativeModelFileNames())
+    }
+
+    public func installNativeModel(
+        _ descriptor: VoiceModelDescriptor,
+        progressHandler: (@Sendable (VoiceModelInstallProgress) -> Void)?
+    ) async throws -> URL {
+        guard #available(macOS 15, *) else {
+            throw VoiceModelInstallerError.runtimeInstallFailed("Native voice models require macOS 15 or later.")
+        }
+        guard LocalVoiceModelCatalog.nativeModelsAvailable else {
+            throw VoiceModelInstallerError.runtimeInstallFailed("Native voice models require an Apple Silicon Mac running macOS 15 or later.")
+        }
+        let manifest = try NativeVoiceModelBundle.manifest(modelID: descriptor.id)
+        let destination = try Self.nativeModelURL(modelID: descriptor.id)
+        let parent = destination.deletingLastPathComponent()
+        try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+        let staging = parent.appendingPathComponent(".install-" + UUID().uuidString, isDirectory: true)
+        try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: staging) }
+        let client = VoiceModelDownloadClient(fileManager: fileManager)
+        var completed: Int64 = 0
+        for file in manifest.files {
+            try Task.checkCancellation()
+            let target = staging.appendingPathComponent(file.path)
+            try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let source = URL(string: "https://huggingface.co/\(manifest.repository)/resolve/\(manifest.revision)/\(file.path)")!
+            let previous = completed
+            try await client.download(from: source, to: target, expectedDownloadBytes: file.bytes) { progress in
+                let received = previous + Int64(Double(file.bytes) * progress.fractionCompleted)
+                progressHandler?(VoiceModelInstallProgress(phase: .downloading, fractionCompleted: Double(received) / Double(manifest.expectedBytes), receivedBytes: received, totalBytes: manifest.expectedBytes))
+            }
+            completed += file.bytes
+        }
+        try Task.checkCancellation()
+        progressHandler?(VoiceModelInstallProgress(phase: .finalizing, fractionCompleted: 0, isIndeterminate: true))
+        try manifest.validate(at: staging)
+        try Task.checkCancellation()
+        if fileManager.fileExists(atPath: destination.path) {
+            _ = try fileManager.replaceItemAt(destination, withItemAt: staging)
+        } else {
+            try fileManager.moveItem(at: staging, to: destination)
+        }
+        progressHandler?(VoiceModelInstallProgress(phase: .finalizing, fractionCompleted: 1))
+        return destination
+    }
+
+    public func removeNativeModel(_ descriptor: VoiceModelDescriptor) throws {
+        let destination = try Self.nativeModelURL(modelID: descriptor.id)
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+    }
+}

@@ -39,6 +39,9 @@ final class AppUninstallerTests: XCTestCase {
         let runtimeRoot = root.appendingPathComponent(
             "Application Support/Cortexa/Runtime/NeMo-Speech", isDirectory: true
         )
+        let nativeModels = root.appendingPathComponent(
+            "Application Support/Cortexa/NativeVoiceModels", isDirectory: true
+        )
         let temporary = root.appendingPathComponent("Temporary", isDirectory: true)
         let unmanagedRuntime = root.appendingPathComponent("External/nemo-speech", isDirectory: true)
         try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
@@ -46,6 +49,7 @@ final class AppUninstallerTests: XCTestCase {
         try FileManager.default.createDirectory(at: modelCache, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: unmanagedRuntime, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: nativeModels, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
         let transcript = support.appendingPathComponent("transcript-history.json")
@@ -89,6 +93,7 @@ final class AppUninstallerTests: XCTestCase {
         try Data("keep".utf8).write(to: unrelatedRuntime.appendingPathComponent("keep.txt"))
         let externalMarker = unmanagedRuntime.appendingPathComponent("keep.txt")
         try Data("keep".utf8).write(to: externalMarker)
+        try Data("model bundle".utf8).write(to: nativeModels.appendingPathComponent("phonon-model"))
 
         let preferencesDomain = "AppUninstallerTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: preferencesDomain))
@@ -107,6 +112,7 @@ final class AppUninstallerTests: XCTestCase {
             appSupportDirectory: support,
             appCacheDirectory: appCache,
             nemoModelsDirectory: modelCache,
+            nativeModelsDirectory: nativeModels,
             managedNemoRuntimeDirectory: runtimeRoot,
             temporaryDirectory: temporary,
             preferencesDomain: preferencesDomain
@@ -119,6 +125,7 @@ final class AppUninstallerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: appCache.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: parakeetModel.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: partialDownload.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: nativeModels.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: managedRuntime.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: interruptedRuntime.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: cortexaTemporary.path))
@@ -166,6 +173,7 @@ final class AppUninstallerTests: XCTestCase {
             appSupportDirectory: support,
             appCacheDirectory: root.appendingPathComponent("missing-cache", isDirectory: true),
             nemoModelsDirectory: root.appendingPathComponent("missing-models", isDirectory: true),
+            nativeModelsDirectory: root.appendingPathComponent("missing-native-models", isDirectory: true),
             managedNemoRuntimeDirectory: root.appendingPathComponent("missing-runtime", isDirectory: true),
             temporaryDirectory: root.appendingPathComponent("missing-temp", isDirectory: true),
             preferencesDomain: preferencesDomain
@@ -186,6 +194,7 @@ final class AppUninstallerTests: XCTestCase {
         appSupportDirectory: URL,
         appCacheDirectory: URL,
         nemoModelsDirectory: URL,
+        nativeModelsDirectory: URL,
         managedNemoRuntimeDirectory: URL,
         temporaryDirectory: URL,
         preferencesDomain: String
@@ -194,6 +203,7 @@ final class AppUninstallerTests: XCTestCase {
             appSupportDirectory: appSupportDirectory,
             appCacheDirectory: appCacheDirectory,
             nemoModelsDirectory: nemoModelsDirectory,
+            nativeModelsDirectory: nativeModelsDirectory,
             managedNemoRuntimeDirectory: managedNemoRuntimeDirectory,
             temporaryDirectory: temporaryDirectory,
             appBundleURL: root.appendingPathComponent("Cortexa.app", isDirectory: true),

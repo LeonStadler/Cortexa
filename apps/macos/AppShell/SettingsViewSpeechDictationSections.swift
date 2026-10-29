@@ -91,9 +91,12 @@ enum SpeechModelManagementMatcher {
         var details: [String] = [
             model.displayName, model.id, model.providerID, provider?.displayName ?? "",
             model.sizeLabel, model.localFileName ?? "", model.downloadIdentifier ?? "",
-            model.runtimeID ?? "", "\(model.speedScore)/10", "\(model.accuracyScore)/10",
-            "geschwindigkeit", "speed", "genauigkeit", "accuracy", "größe", "size"
+            model.runtimeID ?? "", "größe", "size"
         ]
+        if model.runtimeID != "fluidAudio" {
+            details += ["\(model.speedScore)/10", "\(model.accuracyScore)/10",
+                "geschwindigkeit", "speed", "genauigkeit", "accuracy"]
+        }
         details.append(contentsOf: languageCodes)
         details.append(contentsOf: languageNames)
 
@@ -275,9 +278,13 @@ extension SettingsView {
                         Text(
                             "\(text("Übersetzung", "Translation")): \(selectedModel.supportsTranslationToEnglish ? text("Ja", "Yes") : text("Nein", "No"))"
                         )
-                        Text(
-                            "\(text("Geschwindigkeit", "Speed")) \(selectedModel.speedScore)/10  \(text("Genauigkeit", "Accuracy")) \(selectedModel.accuracyScore)/10  \(selectedModel.sizeLabel)"
-                        )
+                        if selectedModel.runtimeID == "fluidAudio" {
+                            Text(selectedModel.sizeLabel)
+                        } else {
+                            Text(
+                                "\(text("Geschwindigkeit", "Speed")) \(selectedModel.speedScore)/10  \(text("Genauigkeit", "Accuracy")) \(selectedModel.accuracyScore)/10  \(selectedModel.sizeLabel)"
+                            )
+                        }
                     }
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -554,7 +561,9 @@ extension SettingsView {
                 }
                 return text("Mehrsprachig", "Multilingual")
             }()
-            Text("\(providerName) • \(languageSummary) • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)")
+            Text(model.runtimeID == "fluidAudio"
+                ? "\(providerName) • \(languageSummary) • \(model.sizeLabel)"
+                : "\(providerName) • \(languageSummary) • Speed \(model.speedScore)/10 • Accuracy \(model.accuracyScore)/10 • \(model.sizeLabel)")
                 .font(.footnote)
             .foregroundStyle(.secondary)
             .lineLimit(2)

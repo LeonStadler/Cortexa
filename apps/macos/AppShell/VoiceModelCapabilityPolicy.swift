@@ -21,6 +21,11 @@ struct VoiceModelCapabilityPolicy {
         catalog: [VoiceModelDescriptor],
         installedFiles: Set<String>
     ) -> VoiceModelDescriptor? {
+        if let selected = catalog.first(where: { $0.id == selectedModelID }),
+            selected.runtimeID == "fluidAudio" {
+            return isInstalled(selected, files: installedFiles)
+                && supports(language: language, model: selected) ? selected : nil
+        }
         let overrideID = language == .auto ? nil : overrides.first {
             $0.languageCode == language.rawValue
         }?.modelID
@@ -63,8 +68,8 @@ struct VoiceModelCapabilityPolicy {
 
     func supports(language: DictationLanguage, model: VoiceModelDescriptor) -> Bool {
         if language == .auto { return model.supportsAutomaticLanguageDetection }
-        guard model.supportsLanguageSelection else { return false }
-        if let fixed = model.languageCode, fixed != language.rawValue { return false }
+        if let fixed = model.languageCode { return fixed == language.rawValue }
+        guard model.supportsLanguageSelection || model.runtimeID == "fluidAudio" else { return false }
         return model.supportedLanguageCodes?.contains(language.rawValue) ?? true
     }
 

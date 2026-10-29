@@ -95,6 +95,7 @@ protocol DictationRuntimeControlling: AnyObject {
     var onSessionActivityChanged: ((Bool) -> Void)? { get set }
     var onPermissionInteractionFinished: (() -> Void)? { get set }
 
+    func releaseModelBeforeRemoval(modelID: String) throws
     func prepareRuntime()
     func prepareRuntimeIfModelAvailable()
     func setVoiceModelActiveDuration(_ duration: VoiceModelActiveDuration)
@@ -1008,7 +1009,7 @@ final class MacAppState: ObservableObject {
     }
 
     var selectedVoiceModelLanguageHintText: String? {
-        guard let selectedVoiceModel = activeVoiceModel else { return nil }
+        guard let selectedVoiceModel else { return nil }
         if let languageCode = selectedVoiceModel.languageCode {
             let languageName =
                 DictationLanguage(rawValue: languageCode)?.displayName ?? languageCode.uppercased()
@@ -1709,9 +1710,11 @@ final class MacAppState: ObservableObject {
         rebuildAIProcessingStack(reason: "initial-load")
         updateUpdaterState()
         dictationRuntime.setVoiceModelActiveDuration(voiceModelActiveDuration)
-        dictationRuntime.prepareRuntime()
-        if onboardingStore.isComplete {
-            dictationRuntime.prepareRuntimeIfModelAvailable()
+        if selectedVoiceModel?.runtimeID != "fluidAudio" {
+            dictationRuntime.prepareRuntime()
+            if onboardingStore.isComplete {
+                dictationRuntime.prepareRuntimeIfModelAvailable()
+            }
         }
         refreshPermissionStates()
         permissionCoordinator.beginLaunchPermissionStabilization()
@@ -1730,7 +1733,9 @@ final class MacAppState: ObservableObject {
     }
 
     func onboardingDidComplete() {
-        dictationRuntime.prepareRuntimeIfModelAvailable()
+        if selectedVoiceModel?.runtimeID != "fluidAudio" {
+            dictationRuntime.prepareRuntimeIfModelAvailable()
+        }
         appendAudit("onboarding.completed")
     }
 
@@ -1938,10 +1943,12 @@ final class MacAppState: ObservableObject {
         updateCapabilitySummary()
         rebuildAIProcessingStack(reason: reason)
         permissionCoordinator.refreshPermissionsAfterExternalEvent(reason: reason)
-        if onboardingStore.isComplete {
-            dictationRuntime.prepareRuntimeIfModelAvailable()
-        } else {
-            dictationRuntime.prepareRuntime()
+        if selectedVoiceModel?.runtimeID != "fluidAudio" {
+            if onboardingStore.isComplete {
+                dictationRuntime.prepareRuntimeIfModelAvailable()
+            } else {
+                dictationRuntime.prepareRuntime()
+            }
         }
         updateUpdaterState()
         appendAudit("lifecycle.refresh reason=\(reason)")

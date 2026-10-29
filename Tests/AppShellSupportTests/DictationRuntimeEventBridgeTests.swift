@@ -144,6 +144,7 @@ private final class BridgeTestRuntime: DictationRuntimeControlling {
     var onSessionActivityChanged: ((Bool) -> Void)?
     var onPermissionInteractionFinished: (() -> Void)?
 
+    func releaseModelBeforeRemoval(modelID: String) throws {}
     func prepareRuntime() {}
     func prepareRuntimeIfModelAvailable() {}
     func setVoiceModelActiveDuration(_ duration: VoiceModelActiveDuration) {}

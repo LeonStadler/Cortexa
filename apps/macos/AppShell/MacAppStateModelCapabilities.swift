@@ -14,16 +14,23 @@ extension MacAppState {
     }
 
     func supportsCapability(_ choice: VoiceModelCapabilityChoice) -> Bool {
-        if case .language(let language) = choice,
-            language != .auto,
-            let override = voiceLanguageOverrides.first(where: {
-                $0.languageCode == language.rawValue
-            }),
-            let model = voiceModels.first(where: { $0.id == override.modelID }),
-            isVoiceModelInstalled(model),
-            voiceProviders.contains(where: { $0.id == model.providerID && $0.isAvailable }),
-            VoiceModelCapabilityPolicy().supports(language: language, model: model) {
-            return true
+        if case .language(let language) = choice {
+            if language != .auto,
+                let override = voiceLanguageOverrides.first(where: {
+                    $0.languageCode == language.rawValue
+                }),
+                let model = voiceModels.first(where: { $0.id == override.modelID }),
+                isVoiceModelInstalled(model),
+                voiceProviders.contains(where: { $0.id == model.providerID && $0.isAvailable }),
+                VoiceModelCapabilityPolicy().supports(language: language, model: model) {
+                return true
+            }
+            guard let selectedVoiceModel,
+                isVoiceModelInstalled(selectedVoiceModel),
+                voiceProviders.contains(where: {
+                    $0.id == selectedVoiceModel.providerID && $0.isAvailable
+                }) else { return false }
+            return VoiceModelCapabilityPolicy().supports(language: language, model: selectedVoiceModel)
         }
         guard let activeVoiceModel else { return false }
         return VoiceModelCapabilityPolicy().supports(
@@ -67,7 +74,11 @@ extension MacAppState {
         let language = selectedLanguage
         let hadOverride = selectedLanguageVoiceOverride != nil
         setSelectedVoiceModel(model)
-        if hadOverride, language != .auto {
+        if shouldUpdateVoiceModelLanguageOverride(
+            previousLanguage: language,
+            selectedLanguage: selectedLanguage,
+            hadOverride: hadOverride
+        ) {
             voiceLanguageOverrides.removeAll { $0.languageCode == language.rawValue }
             if VoiceModelCapabilityPolicy().supports(language: language, model: model) {
                 voiceLanguageOverrides.append(VoiceLanguageOverride(
@@ -78,7 +89,7 @@ extension MacAppState {
     }
 
     func requestVoiceCapability(_ choice: VoiceModelCapabilityChoice) {
-        guard let source = activeVoiceModel else {
+        guard let source = activeVoiceModel ?? selectedVoiceModel else {
             Task { @MainActor [weak self] in
                 await Task.yield()
                 self?.showCapabilityModelManagementAlert()
@@ -126,7 +137,7 @@ extension MacAppState {
             NSApplication.shared.activate(ignoringOtherApps: true)
             guard alert.runModal() == .alertFirstButtonReturn,
                 self.voiceSelectionRevision == selectionRevision,
-                self.activeVoiceModel?.id == source.id else { return }
+                (self.activeVoiceModel ?? self.selectedVoiceModel)?.id == source.id else { return }
 
             if installed {
                 self.applyVoiceCapability(choice, model: suggestion)
@@ -134,7 +145,7 @@ extension MacAppState {
                 self.speechModelController.installVoiceModelForCapability(suggestion) { [weak self] in
                     guard let self,
                         self.voiceSelectionRevision == selectionRevision,
-                        self.activeVoiceModel?.id == source.id else { return }
+                        (self.activeVoiceModel ?? self.selectedVoiceModel)?.id == source.id else { return }
                     self.applyVoiceCapability(choice, model: suggestion)
                 }
             }
@@ -197,4 +208,12 @@ extension MacAppState {
         let raw = UserDefaults.standard.string(forKey: "wispr.uiLanguage") ?? AppLanguage.system.rawValue
         return (AppLanguage(rawValue: raw) ?? .system).text(german, english)
     }
+}
+
+func shouldUpdateVoiceModelLanguageOverride(
+    previousLanguage: DictationLanguage,
+    selectedLanguage: DictationLanguage,
+    hadOverride: Bool
+) -> Bool {
+    hadOverride && previousLanguage != .auto && previousLanguage == selectedLanguage
 }

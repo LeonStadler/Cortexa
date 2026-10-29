@@ -6,6 +6,58 @@
 
     @MainActor
     final class SpeechModelControllerTests: XCTestCase {
+        func testNativeEnglishSelectionPreservesIncompatibleLanguageForExplicitChoice() {
+            let phonon = LocalVoiceModelCatalog.model(id: "fermion.phonon2", includeParakeet: true)!
+            let state = SpeechModelControllerState(
+                selectedLanguage: .german,
+                translationOutputMode: .original,
+                selectedVoiceProviderID: phonon.providerID,
+                selectedVoiceModelID: phonon.id,
+                voiceLanguageOverrides: [],
+                voiceProviders: LocalVoiceModelCatalog.availableProviders(),
+                voiceModels: LocalVoiceModelCatalog.availableModels(includeParakeet: true),
+                installedVoiceModelFileNames: [phonon.localFileName!],
+                voiceModelOperationStates: [:])
+            let controller = makeController(state: state)
+            controller.sanitizeSpeechModelSelections()
+            XCTAssertEqual(state.selectedLanguage, .german)
+            XCTAssertEqual(state.selectedVoiceModelID, phonon.id)
+            XCTAssertFalse(controller.canUseVoiceModel(phonon, for: .german))
+            XCTAssertTrue(controller.canUseVoiceModel(phonon, for: .english))
+        }
+
+        func testSelectingPhononSwitchesLanguageToEnglish() {
+            let phonon = LocalVoiceModelCatalog.model(id: "fermion.phonon2", includeParakeet: true)!
+            let state = SpeechModelControllerState(
+                selectedLanguage: .german,
+                translationOutputMode: .original,
+                selectedVoiceProviderID: LocalVoiceModelCatalog.defaultProviderID,
+                selectedVoiceModelID: LocalVoiceModelCatalog.defaultModelID,
+                voiceLanguageOverrides: [],
+                voiceProviders: LocalVoiceModelCatalog.availableProviders(),
+                voiceModels: LocalVoiceModelCatalog.availableModels(includeParakeet: true),
+                installedVoiceModelFileNames: [phonon.localFileName!],
+                voiceModelOperationStates: [:])
+
+            makeController(state: state).setSelectedVoiceModel(phonon)
+
+            XCTAssertEqual(state.selectedVoiceModelID, phonon.id)
+            XCTAssertEqual(state.selectedLanguage, .english)
+        }
+
+        func testFixedLanguageSelectionKeepsOverridesForThePreviousLanguage() {
+            XCTAssertFalse(shouldUpdateVoiceModelLanguageOverride(
+                previousLanguage: .german,
+                selectedLanguage: .english,
+                hadOverride: true
+            ))
+            XCTAssertTrue(shouldUpdateVoiceModelLanguageOverride(
+                previousLanguage: .german,
+                selectedLanguage: .german,
+                hadOverride: true
+            ))
+        }
+
         func testVoiceModelOperationProgressPublishesOnlyMeaningfulDownloadUpdates() {
             let current = VoiceModelOperationKind.installing(
                 VoiceModelInstallProgress(

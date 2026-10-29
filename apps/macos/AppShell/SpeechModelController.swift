@@ -99,9 +99,7 @@ final class SpeechModelController {
             guard let self else { return }
             var installedFiles: Set<String> = []
             do {
-                installedFiles = try await self.voiceModelInstaller
-                    .installedWhisperModelFileNames()
-                installedFiles.formUnion(try await self.voiceModelInstaller.installedParakeetModelFileNames())
+                installedFiles = try await self.voiceModelInstaller.installedVoiceModelFileNames()
                 self.setInstalledVoiceModelFileNames(installedFiles)
             } catch {
                 self.setInstalledVoiceModelFileNames([])
@@ -176,7 +174,8 @@ final class SpeechModelController {
     ) {
         guard voiceModelOperationState(for: descriptor) == nil else { return }
         guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue
-                || descriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue else {
+                || descriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue
+                || descriptor.runtimeID == "fluidAudio" else {
             appendDiagnostic("Dieser Speech-Anbieter ist lokal aktuell nicht installierbar.")
             return
         }
@@ -195,17 +194,21 @@ final class SpeechModelController {
 
             do {
                 let installer = self.voiceModelInstaller
-                let runtime = try await installer.install(descriptor) { [weak self] progress in
+                let progressHandler: @Sendable (VoiceModelInstallProgress) -> Void = { [weak self] progress in
                     Task { @MainActor [weak self] in
                         self?.setOperation(.installing(progress), for: descriptor.id)
                     }
                 }
-                var installedFileNames = Set(runtime.availableModelFileNames)
-                installedFileNames.formUnion(
-                    try await self.voiceModelInstaller.installedParakeetModelFileNames())
+                if descriptor.runtimeID == "fluidAudio" {
+                    _ = try await installer.installNativeModel(descriptor, progressHandler: progressHandler)
+                } else {
+                    _ = try await installer.install(descriptor, progressHandler: progressHandler)
+                }
+                let installedFileNames = try await installer.installedVoiceModelFileNames()
                 self.setInstalledVoiceModelFileNames(installedFileNames)
                 self.setVoiceProviders(LocalVoiceModelCatalog.availableProviders(
                     parakeetBinaryURL: VoiceModelInstaller.resolveNemoSpeechCLI()))
+                self.clearOperation(for: descriptor.id)
                 onInstalled()
                 self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde installiert.")
             } catch {
@@ -229,7 +232,8 @@ final class SpeechModelController {
 
     func removeVoiceModel(_ descriptor: VoiceModelDescriptor) {
         guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue
-                || descriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue else {
+                || descriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue
+                || descriptor.runtimeID == "fluidAudio" else {
             appendDiagnostic("Dieser Speech-Anbieter ist lokal aktuell nicht entfernbar.")
             return
         }
@@ -253,10 +257,12 @@ final class SpeechModelController {
             }
 
             do {
-                let runtime = try await self.voiceModelInstaller.remove(descriptor)
-                var installedFileNames = Set(runtime.availableModelFileNames)
-                installedFileNames.formUnion(
-                    try await self.voiceModelInstaller.installedParakeetModelFileNames())
+                if descriptor.runtimeID == "fluidAudio" {
+                    try await self.voiceModelInstaller.removeNativeModel(descriptor)
+                } else {
+                    _ = try await self.voiceModelInstaller.remove(descriptor)
+                }
+                let installedFileNames = try await self.voiceModelInstaller.installedVoiceModelFileNames()
                 self.setInstalledVoiceModelFileNames(installedFileNames)
                 self.setVoiceLanguageOverrides(
                     self.currentVoiceLanguageOverrides().filter { $0.modelID != descriptor.id })
@@ -264,8 +270,7 @@ final class SpeechModelController {
                 self.appendDiagnostic("Speech-Modell \(descriptor.displayName) wurde entfernt.")
             } catch {
                 do {
-                    var actualFiles = Set(try await self.voiceModelInstaller.installedWhisperModelFileNames())
-                    actualFiles.formUnion(try await self.voiceModelInstaller.installedParakeetModelFileNames())
+                    let actualFiles = try await self.voiceModelInstaller.installedVoiceModelFileNames()
                     self.setInstalledVoiceModelFileNames(actualFiles)
                 } catch {
                     self.setInstalledVoiceModelFileNames(previousInstalledFileNames)
@@ -297,6 +302,12 @@ final class SpeechModelController {
                 "Speech-Modell \(descriptor.displayName) ist nicht installiert oder sein lokales Backend ist nicht verfügbar."
             )
             return
+        }
+        if descriptor.runtimeID == "fluidAudio",
+            let languageCode = descriptor.languageCode,
+            let fixedLanguage = DictationLanguage(rawValue: languageCode),
+            currentSelectedLanguage() != fixedLanguage {
+            setSelectedLanguage(fixedLanguage)
         }
         if currentSelectedVoiceProviderID() != descriptor.providerID {
             setSelectedVoiceProviderID(descriptor.providerID)
@@ -351,11 +362,6 @@ final class SpeechModelController {
             return false
         }
 
-        if descriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue {
-            guard let fileName = descriptor.localFileName else { return false }
-            return currentInstalledVoiceModelFileNames().contains(fileName)
-        }
-        guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue else { return false }
         guard let localFileName = descriptor.localFileName else { return false }
         return currentInstalledVoiceModelFileNames().contains(localFileName)
     }
@@ -368,17 +374,13 @@ final class SpeechModelController {
         -> Bool
     {
         guard descriptor.providerID == VoiceProviderID.whisperCpp.rawValue
-                || descriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue else { return false }
+                || descriptor.providerID == VoiceProviderID.nvidiaParakeet.rawValue
+                || descriptor.runtimeID == "fluidAudio" else { return false }
         guard isVoiceProviderAvailable(descriptor.providerID) else { return false }
         if !isVoiceModelInstalled(descriptor) {
             return false
         }
-        if language == .auto { return descriptor.supportsAutomaticLanguageDetection }
-        guard descriptor.supportsLanguageSelection else { return false }
-        if let languageCode = descriptor.languageCode, languageCode != language.rawValue {
-            return false
-        }
-        return descriptor.supportedLanguageCodes?.contains(language.rawValue) ?? true
+        return VoiceModelCapabilityPolicy().supports(language: language, model: descriptor)
     }
 
     func voiceLanguageOptions(for descriptor: VoiceModelDescriptor?) -> [DictationLanguage] {
@@ -386,12 +388,7 @@ final class SpeechModelController {
             return Self.autoFirstLanguageOptions(DictationLanguage.allCases)
         }
         var options = DictationLanguage.allCases.filter { language in
-            if language == .auto { return descriptor.supportsAutomaticLanguageDetection }
-            guard descriptor.supportsLanguageSelection else { return false }
-            if let languageCode = descriptor.languageCode, languageCode != language.rawValue {
-                return false
-            }
-            return descriptor.supportedLanguageCodes?.contains(language.rawValue) ?? true
+            VoiceModelCapabilityPolicy().supports(language: language, model: descriptor)
         }
         if options.isEmpty, let fixedCode = descriptor.languageCode,
             let fixedLanguage = DictationLanguage(rawValue: fixedCode) {
@@ -469,7 +466,8 @@ final class SpeechModelController {
                 else { return false }
                 return canUseVoiceModel(model, for: language)
             }
-            if !availableLanguages.contains(language.rawValue) && !hasUsableOverride {
+            if selectedVoiceModel.runtimeID != "fluidAudio",
+                !availableLanguages.contains(language.rawValue) && !hasUsableOverride {
                 setSelectedLanguage(voiceLanguageOptions(for: selectedVoiceModel).first ?? .english)
             }
         }

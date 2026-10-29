@@ -59,6 +59,8 @@ targets:
       - package: WisprLocalPackage
         product: ASRCore
       - package: WisprLocalPackage
+        product: FluidASRMac
+      - package: WisprLocalPackage
         product: AudioCore
       - package: WisprLocalPackage
         product: SnippetCore

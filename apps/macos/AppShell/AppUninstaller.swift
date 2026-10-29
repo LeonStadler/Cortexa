@@ -9,6 +9,7 @@ struct AppUninstallPaths {
     let appSupportDirectory: URL
     let appCacheDirectory: URL
     let nemoModelsDirectory: URL
+    let nativeModelsDirectory: URL
     let managedNemoRuntimeDirectory: URL
     let temporaryDirectory: URL
     let appBundleURL: URL
@@ -47,6 +48,8 @@ struct AppUninstallPaths {
             nemoModelsDirectory: caches
                 .appendingPathComponent("NeMoSpeech", isDirectory: true)
                 .appendingPathComponent("models", isDirectory: true),
+            nativeModelsDirectory: applicationSupport
+                .appendingPathComponent("Cortexa/NativeVoiceModels", isDirectory: true),
             managedNemoRuntimeDirectory: applicationSupport
                 .appendingPathComponent("Cortexa/Runtime/NeMo-Speech", isDirectory: true),
             temporaryDirectory: temporaryDirectory,
@@ -59,6 +62,7 @@ struct AppUninstallPaths {
         appSupportDirectory: URL,
         appCacheDirectory: URL,
         nemoModelsDirectory: URL,
+        nativeModelsDirectory: URL,
         managedNemoRuntimeDirectory: URL,
         temporaryDirectory: URL,
         appBundleURL: URL,
@@ -67,6 +71,7 @@ struct AppUninstallPaths {
         self.appSupportDirectory = appSupportDirectory
         self.appCacheDirectory = appCacheDirectory
         self.nemoModelsDirectory = nemoModelsDirectory
+        self.nativeModelsDirectory = nativeModelsDirectory
         self.managedNemoRuntimeDirectory = managedNemoRuntimeDirectory
         self.temporaryDirectory = temporaryDirectory
         self.appBundleURL = appBundleURL
@@ -155,6 +160,9 @@ struct AppUninstallCleanup {
         }
         attempt("NeMo-Modellcache", failures: &failures) {
             try removeKnownParakeetModels(in: paths.nemoModelsDirectory)
+        }
+        attempt("native Core-ML-Modelle", failures: &failures) {
+            try removeIfPresent(paths.nativeModelsDirectory)
         }
         attempt("Cortexa-verwaltete NeMo-Runtime", failures: &failures) {
             try removeManagedNemoRuntimes(in: paths.managedNemoRuntimeDirectory)

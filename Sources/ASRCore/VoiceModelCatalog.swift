@@ -3,6 +3,8 @@ import Foundation
 public enum VoiceProviderID: String, Codable, CaseIterable, Sendable {
     case whisperCpp = "whisper.cpp"
     case nvidiaParakeet = "nvidia.parakeet"
+    case fermionPhonon = "fermion.phonon2"
+    case moondreamRedux = "moondream.parakeet-redux"
 }
 
 public struct VoiceProviderDescriptor: Identifiable, Codable, Equatable, Sendable {
@@ -166,6 +168,11 @@ public enum LocalVoiceModelCatalog {
             )
         )
 
+        for (id, name) in [(VoiceProviderID.fermionPhonon, "Fermion Research"), (.moondreamRedux, "Moondream")] {
+            providers.append(VoiceProviderDescriptor(id: id.rawValue, displayName: name,
+                summary: "Lokale Core-ML-Spracherkennung über FluidAudio (Apple Silicon, macOS 15+).",
+                isAvailable: nativeModelsAvailable))
+        }
         return providers
     }
 
@@ -174,11 +181,35 @@ public enum LocalVoiceModelCatalog {
         if includeParakeet {
             models.append(contentsOf: parakeetModels)
         }
+        models.append(contentsOf: nativeModels)
         return models
     }
 
     public static func model(id: String, includeParakeet: Bool = true) -> VoiceModelDescriptor? {
         availableModels(includeParakeet: includeParakeet).first(where: { $0.id == id })
+    }
+
+    public static var nativeModelsAvailable: Bool {
+        #if os(macOS) && arch(arm64)
+        if #available(macOS 15, *) { return true }
+        #endif
+        return false
+    }
+
+    private static let nativeModels: [VoiceModelDescriptor] = NativeVoiceModelBundle.all.map { bundle in
+        let english = bundle.modelID == "fermion.phonon2"
+        return VoiceModelDescriptor(
+            id: bundle.modelID, providerID: bundle.modelID,
+            displayName: english ? "Phonon-2 (English)" : "Parakeet Redux",
+            languageCode: english ? "en" : nil, languageScope: english ? .english : .multilingual,
+            supportsTranslationToEnglish: false, supportsLiveTranscription: true,
+            supportsAutomaticLanguageDetection: !english, supportsLanguageSelection: !english,
+            supportsQualityProfile: false,
+            supportedLanguageCodes: english ? ["en"] : ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"],
+            speedScore: 5, accuracyScore: 5,
+            sizeLabel: formattedDownloadSize(bundle.expectedBytes), expectedDownloadBytes: bundle.expectedBytes,
+            installState: nativeModelsAvailable ? .downloadable : .unavailable,
+            localFileName: bundle.bundleName, downloadIdentifier: bundle.modelID, runtimeID: "fluidAudio")
     }
 
     private static let whisperModels: [VoiceModelDescriptor] = [

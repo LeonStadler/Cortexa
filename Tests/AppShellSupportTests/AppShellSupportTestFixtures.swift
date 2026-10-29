@@ -40,6 +40,7 @@ final class AppShellTestDictationRuntime: DictationRuntimeControlling {
     private(set) var promptAccessibilityTrustCallCount = 0
     private(set) var aiProcessingServiceCount = 0
 
+    func releaseModelBeforeRemoval(modelID: String) throws {}
     func prepareRuntime() {
         prepareRuntimeCallCount += 1
     }

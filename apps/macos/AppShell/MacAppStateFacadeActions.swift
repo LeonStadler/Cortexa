@@ -126,7 +126,12 @@ extension MacAppState {
     }
 
     func removeVoiceModel(_ descriptor: VoiceModelDescriptor) {
-        speechModelController.removeVoiceModel(descriptor)
+        do {
+            try dictationRuntime.releaseModelBeforeRemoval(modelID: descriptor.id)
+            speechModelController.removeVoiceModel(descriptor)
+        } catch {
+            appendDiagnostic("Speech-Modell kann derzeit nicht entfernt werden: \(error.localizedDescription)")
+        }
     }
 
     func retryUnusedNemoRuntimeCleanup() {

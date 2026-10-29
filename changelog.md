@@ -1,6 +1,24 @@
 # Changelog
 
+## Features
+
+- 2026-10-29: Phonon-2 und Parakeet Redux als lokale Core-ML-Spracherkennungsmodelle ergänzt.
+  - Dateien: `Package.swift`, `Package.resolved`, `Sources/ASRCore/ASRTypes.swift`, `Sources/ASRCore/NativeVoiceModelBundle.swift`, `Sources/ASRCore/VoiceModelCatalog.swift`, `Sources/ASRCore/VoiceModelInstaller.swift`, `Sources/FluidASRMac/FluidSpeechEngine.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/AppUninstaller.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppStateFacadeActions.swift`, `apps/macos/AppShell/MacAppStateModelCapabilities.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/VoiceModelCapabilityPolicy.swift`, `apps/macos/WisprLocalMac/project.yml`, `Tests/ASRCoreTests/NativeVoiceModelBundleTests.swift`, `Tests/AppShellSupportTests/AppShellCharacterizationTests.swift`, `Tests/AppShellSupportTests/AppShellSupportTestFixtures.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `Tests/AppShellSupportTests/DictationRuntimeEventBridgeTests.swift`, `Tests/AppShellSupportTests/SpeechModelControllerTests.swift`, `Tests/AppShellSupportTests/VoiceModelCapabilityPolicyTests.swift`, `Tests/FluidASRMacTests/FluidSpeechEngineSmokeTests.swift`, `apps/macos/README.md`, `docs/features-and-implementation.md`, `docs/third-party-notices.md`, `VERSION`, `changelog.md`.
+  - Funktionalität: Auswahl und geprüfter Download der angepinnten Core-ML-Bundles, Offline-Transkription, Live-Teilergebnisse und Finalisierung über FluidAudio v0.17.7. Phonon-2 wird als Englischmodell geführt; Redux als mehrsprachig. Inkompatible Sprachen lösen keinen stillen Modellwechsel aus. Auch bei bestehendem Sprachkonflikt bleibt die feste Sprachgrenze des gewählten Modells sichtbar; eine kompatible Sprache oder ein passendes Modell wird nur nach bewusster Auswahl verwendet. Neue Modelle benötigen Apple Silicon und macOS 15 oder neuer; vorhandene Mindestversionen und Modellstandards bleiben bestehen. Nicht erhobene Speed-/Accuracy-Werte werden für diese Modelle nicht angezeigt. Die Deinstallation entfernt die beiden Cortexa-eigenen Modellbundles gezielt. Feature-Version `0.49.0`.
+
 ## Fixes
+
+- 2026-10-29: Phonon-2 übernimmt bei expliziter Modellauswahl automatisch Englisch; Bedienungshilfen-Abfragen laufen serialisiert auf dem Main Thread.
+  - Dateien: `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/MacAppStateModelCapabilities.swift`, `apps/macos/AppShell/DictationRuntimeServices.swift`, `Tests/AppShellSupportTests/SpeechModelControllerTests.swift`, `changelog.md`.
+  - Funktionalität: Die bewusste Auswahl von Phonon-2 stellt die erforderliche englische Diktatsprache direkt mit ein und bewahrt Modell-Overrides für die vorherige Sprache. Der Absturzbericht vom 29. Oktober zeigte `AXIsProcessTrustedWithOptions` beim Diktatstart auf einem Hintergrundthread; der Aufruf wird nun mit den Berechtigungsaktualisierungen auf dem Main Thread ausgeführt. Patch-Fix innerhalb des geplanten Feature-Releases `0.49.0`.
+
+- 2026-10-29: Unbekannte FluidAudio-Modell-IDs werden explizit abgelehnt statt stillschweigend als Parakeet Redux geladen zu werden.
+  - Dateien: `Sources/FluidASRMac/FluidSpeechEngine.swift`, `Tests/FluidASRMacTests/FluidSpeechEngineSmokeTests.swift`, `changelog.md`.
+  - Funktionalität: Die Engine ordnet nur die beiden bekannten Modell-IDs ihren FluidAudio-Modellversionen zu. Eine unbekannte ID liefert `modelNotLoaded`; Redux wird nicht als impliziter Fallback ausgewählt. Feature-Version `0.49.0`.
+
+- 2026-10-29: Native Modellvorbereitung schließt die Core-ML-Erstkompilierung vor dem ersten Diktat ab.
+  - Dateien: `Sources/FluidASRMac/FluidSpeechEngine.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `Tests/FluidASRMacTests/FluidSpeechEngineSmokeTests.swift`, `changelog.md`.
+  - Funktionalität: Die Engine führt während des sichtbaren Vorbereitungszustands eine lokale Stille-Inferenz aus, damit die erste echte Live-Ausgabe nicht durch die Core-ML-Kompilierung verzögert wird. Der Echtmodell-Smoke prüft 500-ms-Eingabeintervalle, wiederholte Teilergebnisse, erste Ausgabe unter zwei Sekunden und Update-p95 unter zwei Sekunden. Im letzten Lauf auf dem Test-Mac lag die erste Ausgabe bei 587/671 ms und Update-p95 bei 548/536 ms für Phonon-2/Redux. Feature-Version `0.49.0`.
 
 - 2026-09-29: Vollständige Entfernung abgebrochener Cortexa-NeMo-Runtime-Installationen bei der Deinstallation.
   - Dateien: `apps/macos/AppShell/AppUninstaller.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`, `changelog.md`.
