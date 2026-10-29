@@ -42,7 +42,7 @@ struct SettingsSearchPresentation {
             destination(.general, "app", "App", "Sprache und Startverhalten", ["language", "sprache", "menüleiste", "menu bar", "dock"]),
             destination(.general, "access", "Berechtigungen", "Mikrofon und Bedienungshilfen", ["permissions", "zugriff", "mikrofon", "accessibility", "bedienungshilfen"]),
             destination(.speech, "model", "Modell", "Lokale Spracherkennung", ["speech", "whisper", "parakeet", "download", "installieren"]),
-            destination(.speech, "language", "Sprache", "Erkennungssprache", ["language", "speech", "voice"]),
+            destination(.speech, "language", "Sprache", "Erkennungssprache", ["language", "speech", "voice", "kompatibilität", "kompatibilitaet", "compatibility", "modellwechsel", "hinweise", "model change"]),
             destination(.speech, "translation", "Übersetzung", "Sprachübersetzung", ["translation", "translate", "übersetzen"]),
             destination(.dictation, "live-rewrite", "Live-Anpassung", "Verarbeitung während des Diktats", ["streaming", "rewrite", "anpassung", "kontext"]),
             destination(.dictation, "text-input", "Texteingabe", "Einfügen und Zwischenablage", ["clipboard", "paste", "insert", "delivery", "auto-send"]),

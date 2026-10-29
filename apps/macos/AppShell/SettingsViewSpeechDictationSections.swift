@@ -148,23 +148,6 @@ extension SettingsView {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .settingsFormMenuPickerSlot(minWidth: 240)
-                    .confirmationDialog(
-                        text("Modell herunterladen?", "Download model?"),
-                        isPresented: pendingVoiceModelInstallDialogBinding
-                    ) {
-                        Button(text("Download und auswählen", "Download and choose")) {
-                            if let model = pendingVoiceModelForInstallation {
-                                appState.installVoiceModel(model)
-                                pendingVoiceModelForInstallation = nil
-                            }
-                        }
-                        Button(text("Abbrechen", "Cancel"), role: .cancel) {}
-                    } message: {
-                        Text(
-                            pendingVoiceModelForInstallation.map(voiceModelInstallationMessage)
-                                ?? ""
-                        )
-                    }
                 }
             } label: {
                 SettingsFieldLabel(
@@ -189,9 +172,8 @@ extension SettingsView {
                         Text(
                             language.localizedDisplayName(
                                 interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                                + (appState.supportsCapability(.language(language))
-                                    ? "" : text(" · Modellwechsel nötig", " · Change model"))
-                        ).tag(language)
+                        )
+                        .tag(language)
                     }
                 }
                 .labelsHidden()
@@ -224,6 +206,24 @@ extension SettingsView {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            if appState.autoResolveVoiceModelConflicts {
+                Text(text(
+                    "Inkompatible Auswahlen werden automatisch mit einem installierten Modell abgeglichen. Downloads benötigen weiterhin deine Bestätigung.",
+                    "Incompatible selections are automatically resolved with an installed model. Downloads still require your confirmation."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                Button(text("Kompatibilitätshinweise wieder anzeigen", "Show compatibility notices again")) {
+                    appState.resetVoiceModelCapabilityHints()
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button(text("Kompatibilitätshinweise automatisch lösen", "Automatically resolve compatibility notices")) {
+                    appState.autoResolveVoiceModelConflicts = true
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 
@@ -237,11 +237,9 @@ extension SettingsView {
                         selection: appState.capabilityQualityBinding
                     ) {
                         ForEach(DictationPerformance.allCases) { mode in
-                            Text(
-                                mode.localizedDisplayName(
-                                    interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                            )
-                            .tag(mode)
+                            Text(mode.localizedDisplayName(
+                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                            )).tag(mode)
                         }
                     }
                     .labelsHidden()
@@ -256,17 +254,9 @@ extension SettingsView {
                         )
                     )
                 }
-
                 Text(qualityProfileExplanation)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            } else {
-                LabeledContent(text("Qualitätsprofil", "Quality profile")) {
-                    Text(qualityProfileExplanation)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
 
             if let selectedModel = appState.activeVoiceModel {
@@ -336,13 +326,9 @@ extension SettingsView {
                     selection: appState.capabilityTranslationBinding
                 ) {
                     ForEach(TranslationOutputMode.allCases) { mode in
-                        Text(
-                            mode.localizedDisplayName(
-                                interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                                + (appState.supportsCapability(.translation(mode))
-                                    ? "" : text(" · Modellwechsel nötig", " · Change model"))
-                        )
-                        .tag(mode)
+                        Text(mode.localizedDisplayName(
+                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                        )).tag(mode)
                     }
                 }
                 .labelsHidden()
@@ -580,22 +566,7 @@ extension SettingsView {
             set: { newValue in
                 guard let model = appState.allVoiceModels.first(where: { $0.id == newValue })
                 else { return }
-                if appState.isVoiceModelInstalled(model) {
-                    appState.selectActiveVoiceModel(model)
-                } else if model.installState != .unavailable {
-                    pendingVoiceModelForInstallation = model
-                }
-            }
-        )
-    }
-
-    private var pendingVoiceModelInstallDialogBinding: Binding<Bool> {
-        Binding(
-            get: { pendingVoiceModelForInstallation != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingVoiceModelForInstallation = nil
-                }
+                appState.requestVoiceModelSelection(model)
             }
         )
     }
@@ -612,22 +583,6 @@ extension SettingsView {
             status = text("Download", "download")
         }
         return "\(model.displayName) · \(status)"
-    }
-
-    private func voiceModelInstallationMessage(for model: VoiceModelDescriptor) -> String {
-        let language = model.languageCode?.uppercased() ?? text("mehrsprachig", "multilingual")
-        let translation = model.supportsTranslationToEnglish ? text("ja", "yes") : text("nein", "no")
-        if model.providerID == VoiceProviderID.nvidiaParakeet.rawValue,
-            VoiceModelInstaller.resolveNemoSpeechCLI() == nil {
-            return text(
-                "\(model.displayName)\nSprache: \(language)\nGröße: \(model.sizeLabel)\nÜbersetzung: \(translation)\n\nCortexa richtet zuerst die passende NeMo-Speech-Runtime ein und lädt danach das Modell herunter.",
-                "\(model.displayName)\nLanguage: \(language)\nSize: \(model.sizeLabel)\nTranslation: \(translation)\n\nCortexa will first install the compatible NeMo-Speech runtime, then download the model."
-            )
-        }
-        return text(
-            "\(model.displayName)\nSprache: \(language)\nGröße: \(model.sizeLabel)\nÜbersetzung: \(translation)\n\nDas Modell wird heruntergeladen und danach automatisch ausgewählt.",
-            "\(model.displayName)\nLanguage: \(language)\nSize: \(model.sizeLabel)\nTranslation: \(translation)\n\nThe model will download and then be selected automatically."
-        )
     }
 
     @ViewBuilder
@@ -672,7 +627,7 @@ extension SettingsView {
                 .controlSize(.small)
             }
             Button(text("Als Standard verwenden", "Use as default")) {
-                appState.setSelectedVoiceModel(model)
+                appState.requestVoiceModelSelection(model)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -692,7 +647,7 @@ extension SettingsView {
             }
         } else {
             Button(text("Installieren", "Install")) {
-                appState.installVoiceModel(model)
+                appState.requestVoiceModelSelection(model)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -776,26 +731,19 @@ extension SettingsView {
                 )
             }
 
-            Toggle(isOn: appState.capabilityLiveTextBinding) {
-                SettingsFieldLabel(
-                    title: text("Live-Text einfügen", "Insert live text"),
-                    helpText: text(
-                        "Zeigt laufende Zwischenergebnisse direkt im Zieltextfeld an, solange gestreamt wird.",
-                        "Shows live intermediate results directly in the target text field while streaming is active."
+            if appState.selectedVoiceModelSupportsLiveTranscription {
+                Toggle(isOn: appState.capabilityLiveTextBinding) {
+                    SettingsFieldLabel(
+                        title: text("Live-Text einfügen", "Insert live text"),
+                        helpText: text(
+                            "Zeigt laufende Zwischenergebnisse direkt im Zieltextfeld an, solange gestreamt wird.",
+                            "Shows live intermediate results directly in the target text field while streaming is active."
+                        )
                     )
-                )
-            }
-            .disabled(
-                appState.finalResultDeliveryMode == .clipboardOnly
-                    || !appState.dictationCapability.allowsDirectInsertion)
-
-            if !appState.selectedVoiceModelSupportsLiveTranscription {
-                Text(text(
-                    "Das aktive Modell unterstützt keinen Live-Text. Wähle die Option für einen Modellwechsel.",
-                    "The active model does not support live text. Select the option to change models."
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                }
+                .disabled(
+                    appState.finalResultDeliveryMode == .clipboardOnly
+                        || !appState.dictationCapability.allowsDirectInsertion)
             }
 
             Text(

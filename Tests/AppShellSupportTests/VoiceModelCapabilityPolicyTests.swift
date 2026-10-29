@@ -43,6 +43,24 @@ final class VoiceModelCapabilityPolicyTests: XCTestCase {
             catalog: models, installedFiles: files)?.id, standard.id)
     }
 
+    func testPreservingSuggestionsKeepEveryCurrentCapabilityAndPreferInstalledModels() {
+        let current = model("whisper.nano.en")
+        let standard = model("whisper.standard")
+        let choices: [VoiceModelCapabilityChoice] = [
+            .translation(.english), .liveText, .quality(.accurate),
+        ]
+
+        let suggestions = policy.suggestedModels(
+            preserving: choices, currentModel: current, currentLanguage: .english,
+            catalog: models, installedFiles: [standard.localFileName!]
+        )
+
+        XCTAssertEqual(suggestions.first?.id, standard.id)
+        XCTAssertTrue(suggestions.allSatisfy { candidate in
+            choices.allSatisfy { policy.supports($0, model: candidate, currentLanguage: .english) }
+        })
+    }
+
     func testLanguageSuggestionSupportsBothCurrentAndRequestedLanguage() {
         let englishNano = model("whisper.nano.en")
         let standard = model("whisper.standard")
@@ -58,6 +76,58 @@ final class VoiceModelCapabilityPolicyTests: XCTestCase {
             for: .language(.german), currentModel: englishNano,
             currentLanguage: .english, catalog: [englishNano, germanOnly, standard],
             installedFiles: ["german-only.bin"])?.id, standard.id)
+    }
+
+    func testLanguageSuggestionsPrioritizeRequestedLanguageOverCurrentLanguage() {
+        let englishNano = model("whisper.nano.en")
+        let germanModel = VoiceModelDescriptor(
+            id: "german-only", providerID: VoiceProviderID.whisperCpp.rawValue,
+            displayName: "German only", languageCode: "de", languageScope: .multilingual,
+            supportsTranslationToEnglish: false,
+            supportsAutomaticLanguageDetection: false,
+            speedScore: 9, accuracyScore: 3, sizeLabel: "S",
+            installState: .downloadable, localFileName: "german-only.bin"
+        )
+
+        let suggestions = policy.suggestedModels(
+            for: .language(.german), currentModel: englishNano,
+            currentLanguage: .german, catalog: [englishNano, germanModel],
+            installedFiles: ["german-only.bin"]
+        )
+
+        XCTAssertEqual(suggestions.map(\.id), [germanModel.id])
+    }
+
+    func testAutoQualityProfileIsSupportedWithoutQualityProfiles() {
+        let parakeet = model("parakeet.multilingual")
+
+        XCTAssertTrue(policy.supports(.quality(.auto), model: parakeet, currentLanguage: .auto))
+        XCTAssertFalse(policy.supports(.quality(.accurate), model: parakeet, currentLanguage: .auto))
+    }
+
+    func testSupportedLanguagesFollowDescriptorCapabilities() {
+        let parakeet = model("parakeet.multilingual")
+
+        XCTAssertEqual(policy.supportedLanguages(for: parakeet), [.auto])
+        XCTAssertEqual(
+            Set(policy.supportedLanguages(for: model("whisper.standard"))),
+            Set(DictationLanguage.allCases)
+        )
+        XCTAssertEqual(policy.suggestedLanguage(for: model("whisper.nano.en"), currentLanguage: .german), .english)
+    }
+
+    func testAutomaticResolutionNeverSelectsAnUndownloadedModel() {
+        let parakeet = model("parakeet.multilingual")
+        let standard = model("whisper.standard")
+
+        XCTAssertNil(policy.bestInstalledSuggestion(
+            for: .liveText, currentModel: parakeet, currentLanguage: .auto,
+            catalog: [parakeet, standard], installedFiles: []
+        ))
+        XCTAssertEqual(policy.bestInstalledSuggestion(
+            for: .liveText, currentModel: parakeet, currentLanguage: .auto,
+            catalog: [parakeet, standard], installedFiles: [standard.localFileName!]
+        )?.id, standard.id)
     }
 
     func testEffectiveModelUsesInstalledLanguageOverrideLikeSessionBuilder() {

@@ -320,6 +320,14 @@ final class MacAppState: ObservableObject {
         }
     }
 
+    @Published var autoResolveVoiceModelConflicts: Bool {
+        didSet {
+            userDefaults.set(
+                autoResolveVoiceModelConflicts,
+                forKey: UserDefaultsKeys.autoResolveVoiceModelConflicts)
+        }
+    }
+
     @Published var selectedVoiceProviderID: String {
         didSet {
             if oldValue != selectedVoiceProviderID { voiceSelectionRevision &+= 1 }
@@ -999,12 +1007,16 @@ final class MacAppState: ObservableObject {
     }
 
     var selectedVoiceModelLanguageOptions: [DictationLanguage] {
-        [.auto] + DictationLanguage.allCases.filter { $0 != .auto }
+        guard let model = activeVoiceModel ?? selectedVoiceModel else {
+            return [.auto] + DictationLanguage.allCases.filter { $0 != .auto }
+        }
+        let supported = VoiceModelCapabilityPolicy().supportedLanguages(for: model)
+        return supported.filter { $0 == .auto } + supported.filter { $0 != .auto }
     }
 
     var menuBarLanguageOptions: [DictationLanguage] {
-        [.auto] + DictationLanguage.allCases.filter {
-            $0 != .auto && (visibleMenuBarLanguages.contains($0.rawValue) || $0 == selectedLanguage)
+        selectedVoiceModelLanguageOptions.filter {
+            $0 == .auto || visibleMenuBarLanguages.contains($0.rawValue) || $0 == selectedLanguage
         }
     }
 
@@ -1104,6 +1116,7 @@ final class MacAppState: ObservableObject {
         static let translationOutputMode = "wispr.settings.translationOutputMode"
         static let visibleMenuBarLanguages = "wispr.settings.visibleMenuBarLanguages"
         static let performanceProfile = "wispr.settings.performanceProfile"
+        static let autoResolveVoiceModelConflicts = "wispr.settings.autoResolveVoiceModelConflicts"
         static let selectedVoiceProviderID = "wispr.settings.selectedVoiceProviderID"
         static let selectedVoiceModelID = "wispr.settings.selectedVoiceModelID"
         static let voiceLanguageOverrides = "wispr.settings.voiceLanguageOverrides"
@@ -1282,6 +1295,7 @@ final class MacAppState: ObservableObject {
         self.translationOutputMode = preferences.translationOutputMode
         self.visibleMenuBarLanguages = preferences.visibleMenuBarLanguages
         self.performanceProfile = preferences.performanceProfile
+        self.autoResolveVoiceModelConflicts = preferences.autoResolveVoiceModelConflicts
         self.selectedVoiceProviderID = preferences.selectedVoiceProviderID
         self.selectedVoiceModelID = preferences.selectedVoiceModelID
         self.voiceLanguageOverrides = preferences.voiceLanguageOverrides

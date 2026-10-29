@@ -61,8 +61,8 @@ struct VoiceModelCapabilityPolicy {
             return mode == .original || model.supportsTranslationToEnglish
         case .liveText:
             return model.supportsLiveTranscription
-        case .quality:
-            return model.supportsQualityProfile
+        case .quality(let profile):
+            return profile == .auto || model.supportsQualityProfile
         }
     }
 
@@ -80,21 +80,82 @@ struct VoiceModelCapabilityPolicy {
         catalog: [VoiceModelDescriptor],
         installedFiles: Set<String>
     ) -> VoiceModelDescriptor? {
+        suggestedModels(
+            for: choice,
+            currentModel: currentModel,
+            currentLanguage: currentLanguage,
+            catalog: catalog,
+            installedFiles: installedFiles
+        ).first
+    }
+
+    func suggestedModels(
+        for choice: VoiceModelCapabilityChoice,
+        currentModel: VoiceModelDescriptor,
+        currentLanguage: DictationLanguage,
+        catalog: [VoiceModelDescriptor],
+        installedFiles: Set<String>
+    ) -> [VoiceModelDescriptor] {
+        suggestedModels(
+            preserving: [choice], currentModel: currentModel,
+            currentLanguage: currentLanguage, catalog: catalog, installedFiles: installedFiles
+        )
+    }
+
+    func suggestedModels(
+        preserving choices: [VoiceModelCapabilityChoice],
+        currentModel: VoiceModelDescriptor,
+        currentLanguage: DictationLanguage,
+        catalog: [VoiceModelDescriptor],
+        installedFiles: Set<String>
+    ) -> [VoiceModelDescriptor] {
         let eligible = catalog.enumerated().filter { _, model in
             model.id != currentModel.id
                 && model.installState != .unavailable
                 && supports(language: currentLanguage, model: model)
-                && supports(choice, model: model, currentLanguage: currentLanguage)
+                && choices.allSatisfy {
+                    supports($0, model: model, currentLanguage: currentLanguage)
+                }
         }
-        if let preferredID = currentModel.preferredCompatibleModelID,
-            let preferred = eligible.first(where: { $0.element.id == preferredID }) {
-            return preferred.element
-        }
-        return eligible.min { left, right in
+        return eligible.sorted { left, right in
             let lhs = rank(left.element, index: left.offset, current: currentModel, installed: installedFiles)
             let rhs = rank(right.element, index: right.offset, current: currentModel, installed: installedFiles)
             return lhs.lexicographicallyPrecedes(rhs)
-        }?.element
+        }.map(\.element)
+    }
+
+    func bestInstalledSuggestion(
+        for choice: VoiceModelCapabilityChoice,
+        currentModel: VoiceModelDescriptor,
+        currentLanguage: DictationLanguage,
+        catalog: [VoiceModelDescriptor],
+        installedFiles: Set<String>
+    ) -> VoiceModelDescriptor? {
+        suggestedModels(
+            for: choice,
+            currentModel: currentModel,
+            currentLanguage: currentLanguage,
+            catalog: catalog,
+            installedFiles: installedFiles
+        ).first { isInstalled($0, files: installedFiles) }
+    }
+
+    func supportedLanguages(for model: VoiceModelDescriptor) -> [DictationLanguage] {
+        DictationLanguage.allCases.filter { supports(language: $0, model: model) }
+    }
+
+    func suggestedLanguage(
+        for model: VoiceModelDescriptor,
+        currentLanguage: DictationLanguage
+    ) -> DictationLanguage? {
+        let languages = supportedLanguages(for: model)
+        if languages.contains(currentLanguage) { return currentLanguage }
+        if let fixedLanguage = model.languageCode.flatMap(DictationLanguage.init(rawValue:)),
+            languages.contains(fixedLanguage) {
+            return fixedLanguage
+        }
+        if languages.contains(.auto) { return .auto }
+        return languages.first
     }
 
     private func rank(
@@ -104,9 +165,10 @@ struct VoiceModelCapabilityPolicy {
         installed: Set<String>
     ) -> [Int] {
         let installedRank = model.localFileName.map { installed.contains($0) } == true ? 0 : 1
+        let preferredRank = model.id == current.preferredCompatibleModelID ? 0 : 1
         let providerRank = model.providerID == current.providerID ? 0 : 1
         let distance = abs(model.speedScore - current.speedScore)
             + abs(model.accuracyScore - current.accuracyScore)
-        return [installedRank, providerRank, distance, index]
+        return [installedRank, preferredRank, providerRank, distance, index]
     }
 }

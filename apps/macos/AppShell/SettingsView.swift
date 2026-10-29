@@ -31,7 +31,6 @@ struct SettingsView: View {
     @State var editingDictionaryTerm: String = ""
     @State var editingDictionaryLanguageCode: String = ""
     @State var editingDictionaryCategory: DictionaryTermCategory = .personalTerm
-    @State var pendingVoiceModelForInstallation: VoiceModelDescriptor?
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     let personalWebsiteURL = URL(string: "https://leon-stadler.com")!
@@ -356,6 +355,7 @@ struct SettingsView: View {
                 qualitySectionTitle: text("Qualität", "Quality"),
                 translationSectionTitle: text("Übersetzung", "Translation"),
                 installedModelsSectionTitle: text("Modellverwaltung", "Model management"),
+                showsTranslationSection: appState.speechTranslationAvailable,
                 modelSelectionContent: erasedView { speechModelSelectionContent },
                 languageContent: erasedView { speechLanguageContent },
                 qualityContent: erasedView { speechQualityContent },
