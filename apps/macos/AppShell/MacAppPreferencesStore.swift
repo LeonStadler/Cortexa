@@ -9,6 +9,7 @@ struct MacAppPreferencesSnapshot {
     let translationOutputMode: TranslationOutputMode
     let visibleMenuBarLanguages: [String]
     let performanceProfile: DictationPerformance
+    let autoResolveVoiceModelConflicts: Bool
     let selectedVoiceProviderID: String
     let selectedVoiceModelID: String
     let voiceLanguageOverrides: [VoiceLanguageOverride]
@@ -76,6 +77,7 @@ struct MacAppPreferencesStore {
             visibleMenuBarLanguages: userDefaults.stringArray(forKey: Keys.visibleMenuBarLanguages)
                 ?? DictationLanguage.allCases.filter { $0 != .auto }.map(\.rawValue),
             performanceProfile: enumValue(Keys.performanceProfile, default: .auto),
+            autoResolveVoiceModelConflicts: bool(Keys.autoResolveVoiceModelConflicts, default: false),
             selectedVoiceProviderID: userDefaults.string(forKey: Keys.selectedVoiceProviderID)
                 ?? LocalVoiceModelCatalog.defaultProviderID,
             selectedVoiceModelID: userDefaults.string(forKey: Keys.selectedVoiceModelID)
@@ -248,6 +250,7 @@ struct MacAppPreferencesStore {
         static let translationOutputMode = "wispr.settings.translationOutputMode"
         static let visibleMenuBarLanguages = "wispr.settings.visibleMenuBarLanguages"
         static let performanceProfile = "wispr.settings.performanceProfile"
+        static let autoResolveVoiceModelConflicts = "wispr.settings.autoResolveVoiceModelConflicts"
         static let selectedVoiceProviderID = "wispr.settings.selectedVoiceProviderID"
         static let selectedVoiceModelID = "wispr.settings.selectedVoiceModelID"
         static let voiceLanguageOverrides = "wispr.settings.voiceLanguageOverrides"

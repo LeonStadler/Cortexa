@@ -23,6 +23,12 @@ final class SettingsSearchPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.results.map(\.id), ["advanced.uninstall"])
     }
 
+    func testSearchFindsVoiceModelCompatibilitySettings() {
+        let presentation = SettingsSearchPresentation(searchText: "kompatibilität", language: .german)
+
+        XCTAssertEqual(presentation.results.map(\.id), ["speech.language"])
+    }
+
     func testSearchDoesNotExposePersonalTextOrUnknownTerms() {
         let presentation = SettingsSearchPresentation(searchText: "private dictation text", language: .german)
 

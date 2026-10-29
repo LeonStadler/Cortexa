@@ -35,6 +35,7 @@ struct SpeechSettingsPage: View {
     let qualitySectionTitle: String
     let translationSectionTitle: String
     let installedModelsSectionTitle: String
+    let showsTranslationSection: Bool
     let modelSelectionContent: AnyView
     let languageContent: AnyView
     let qualityContent: AnyView
@@ -43,33 +44,42 @@ struct SpeechSettingsPage: View {
 
     var body: some View {
         SettingsFormPage(
-            sections: [
-                SettingsPageSection(
-                    id: "model",
-                    title: modelSectionTitle,
-                    content: modelSelectionContent
-                ),
-                SettingsPageSection(
-                    id: "language",
-                    title: languageSectionTitle,
-                    content: languageContent
-                ),
-                SettingsPageSection(
-                    id: "quality",
-                    title: qualitySectionTitle,
-                    content: qualityContent
-                ),
-                SettingsPageSection(
-                    id: "translation",
-                    title: translationSectionTitle,
-                    content: translationContent
-                ),
-                SettingsPageSection(
-                    id: "installed-models",
-                    title: installedModelsSectionTitle,
-                    content: installedModelsContent
-                ),
-            ]
+            sections: {
+                var sections = [
+                    SettingsPageSection(
+                        id: "model",
+                        title: modelSectionTitle,
+                        content: modelSelectionContent
+                    ),
+                    SettingsPageSection(
+                        id: "language",
+                        title: languageSectionTitle,
+                        content: languageContent
+                    ),
+                    SettingsPageSection(
+                        id: "quality",
+                        title: qualitySectionTitle,
+                        content: qualityContent
+                    ),
+                ]
+                if showsTranslationSection {
+                    sections.append(
+                        SettingsPageSection(
+                            id: "translation",
+                            title: translationSectionTitle,
+                            content: translationContent
+                        )
+                    )
+                }
+                sections.append(
+                    SettingsPageSection(
+                        id: "installed-models",
+                        title: installedModelsSectionTitle,
+                        content: installedModelsContent
+                    )
+                )
+                return sections
+            }()
         )
     }
 }

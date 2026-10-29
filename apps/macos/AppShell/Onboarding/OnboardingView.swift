@@ -246,7 +246,7 @@ struct OnboardingView: View {
                 .font(.title3.weight(.semibold))
 
             LabeledContent(text("Sprache", "Language")) {
-                Picker(text("Sprache", "Language"), selection: $appState.selectedLanguage) {
+                Picker(text("Sprache", "Language"), selection: appState.capabilityLanguageBinding) {
                     ForEach(DictationLanguage.allCases.filter { $0 != .auto }) { language in
                         Text(
                             language.localizedDisplayName(

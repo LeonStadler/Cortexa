@@ -19,6 +19,7 @@ final class MacAppPreferencesStoreTests: XCTestCase {
         userDefaults.set(true, forKey: "wispr.settings.aiProcessingEnabled")
         userDefaults.set(false, forKey: "wispr.settings.launchOnLoginEnabled")
         userDefaults.set(false, forKey: "wispr.settings.automaticallyCheckForUpdates")
+        userDefaults.set(true, forKey: "wispr.settings.autoResolveVoiceModelConflicts")
         userDefaults.set("test-model", forKey: "wispr.settings.selectedAIModelID")
         userDefaults.set(85.0, forKey: "wispr.settings.soundEffectsVolume")
         userDefaults.set(
@@ -38,6 +39,7 @@ final class MacAppPreferencesStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.aiProcessingEnabled)
         XCTAssertFalse(snapshot.launchOnLoginEnabled)
         XCTAssertFalse(snapshot.automaticallyCheckForUpdates)
+        XCTAssertTrue(snapshot.autoResolveVoiceModelConflicts)
         XCTAssertEqual(snapshot.selectedAIModelID, "test-model")
         XCTAssertEqual(snapshot.soundEffectsVolume, 85)
         XCTAssertEqual(snapshot.remoteProviders.count, 1)
@@ -57,6 +59,7 @@ final class MacAppPreferencesStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.automaticallyCheckForUpdates)
         XCTAssertEqual(snapshot.selectedLanguage, .german)
         XCTAssertEqual(snapshot.translationOutputMode, .original)
+        XCTAssertFalse(snapshot.autoResolveVoiceModelConflicts)
     }
 }
 #endif

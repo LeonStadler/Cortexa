@@ -54,12 +54,13 @@ extension MacAppState {
     }
 
     func toggleDictationModeFromShortcut() {
-        streamingEnabled.toggle()
+        guard streamingEnabled else {
+            requestVoiceCapability(.liveText)
+            return
+        }
+        streamingEnabled = false
         appendAudit("mode.toggle streamingEnabled=\(streamingEnabled)")
-        appendDiagnostic(
-            streamingEnabled
-                ? "Live-Einfügen aktiviert. Der Wechsel gilt ab dem nächsten Diktat."
-                : "Live-Einfügen deaktiviert. Der Wechsel gilt ab dem nächsten Diktat.")
+        appendDiagnostic("Live-Einfügen deaktiviert. Der Wechsel gilt ab dem nächsten Diktat.")
     }
 
     func revealAppDataFolder() {

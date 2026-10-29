@@ -136,28 +136,7 @@ final class SpeechModelController {
 
     func installVoiceModel(_ descriptor: VoiceModelDescriptor) {
         startVoiceModelInstallation(descriptor) { [weak self] in
-            guard let self else { return }
-            let language = self.currentSelectedLanguage()
-            let hadOverride = language != .auto && self.currentVoiceLanguageOverrides().contains {
-                $0.languageCode == language.rawValue
-            }
-            if self.isVoiceProviderAvailable(descriptor.providerID) {
-                if self.currentSelectedVoiceProviderID() != descriptor.providerID {
-                    self.setSelectedVoiceProviderID(descriptor.providerID)
-                }
-                if self.currentSelectedVoiceModelID() != descriptor.id {
-                    self.setSelectedVoiceModelID(descriptor.id)
-                }
-                if hadOverride, VoiceModelCapabilityPolicy().supports(
-                    language: language, model: descriptor) {
-                    var overrides = self.currentVoiceLanguageOverrides()
-                    overrides.removeAll { $0.languageCode == language.rawValue }
-                    overrides.append(VoiceLanguageOverride(
-                        languageCode: language.rawValue, modelID: descriptor.id))
-                    self.setVoiceLanguageOverrides(overrides)
-                }
-            }
-            self.sanitizeSpeechModelSelections()
+            self?.sanitizeSpeechModelSelections()
         }
     }
 

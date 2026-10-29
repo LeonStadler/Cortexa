@@ -381,23 +381,27 @@ struct MenuBarContentView: View {
                 }
             }
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(text("Sprachmodell", "Voice model"))
-                Spacer(minLength: 8)
-                Text(appState.activeVoiceModel?.displayName ?? text("Auswählen…", "Choose…"))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            if appState.compactMenuBarDesign {
+                MenuActionLabel(
+                    title: text("Sprachmodell", "Voice model"),
+                    shortcutGlyph: nil,
+                    shortcutText: nil
+                )
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(text("Sprachmodell", "Voice model"))
+                    Spacer(minLength: 8)
+                    Text(appState.activeVoiceModel?.displayName ?? text("Auswählen…", "Choose…"))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private func selectVoiceModelFromMenu(_ model: VoiceModelDescriptor) {
-        if appState.isVoiceModelInstalled(model) {
-            appState.selectActiveVoiceModel(model)
-        } else if model.installState != .unavailable {
-            appState.installVoiceModel(model)
-        }
+        appState.requestVoiceModelSelection(model)
     }
 
     private func voiceModelMenuRowTitle(for model: VoiceModelDescriptor) -> String {
@@ -593,42 +597,40 @@ struct MenuBarContentView: View {
                 Divider()
             }
 
-            Toggle(text("Live-Text einfügen", "Insert live text"), isOn: appState.capabilityLiveTextBinding)
-                .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
+            if appState.supportsCapability(.liveText) {
+                Toggle(text("Live-Text einfügen", "Insert live text"), isOn: appState.capabilityLiveTextBinding)
+                    .disabled(appState.finalResultDeliveryMode == .clipboardOnly)
+            }
 
             Picker(text("Sprache", "Language"), selection: appState.capabilityLanguageBinding) {
                 ForEach(visibleMenuBarLanguages) { language in
                     Text(
                         language.localizedDisplayName(
                             interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        + (appState.supportsCapability(.language(language))
-                            ? "" : text(" · Modellwechsel nötig", " · Change model"))
                     )
                     .tag(language)
                 }
             }
 
-            Picker(text("Übersetzung", "Translation"), selection: appState.capabilityTranslationBinding) {
-                ForEach(TranslationOutputMode.allCases) { mode in
-                    Text(
-                        mode.localizedDisplayName(
-                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode)
-                        + (appState.supportsCapability(.translation(mode))
-                            ? "" : text(" · Modellwechsel nötig", " · Change model"))
-                    )
-                    .tag(mode)
+            if appState.speechTranslationAvailable {
+                Picker(text("Übersetzung", "Translation"), selection: appState.capabilityTranslationBinding) {
+                    ForEach(TranslationOutputMode.allCases) { mode in
+                        Text(mode.localizedDisplayName(
+                            interfaceLanguageCode: effectiveLanguage.embeddedInterfaceCode
+                        )).tag(mode)
+                    }
                 }
             }
 
-            if !appState.compactMenuBarDesign {
-                if selectableVoiceModels.isEmpty {
-                    Text(text("Keine Modelle erkannt", "No models detected"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    menuBarVoiceModelMenu
-                }
+            if selectableVoiceModels.isEmpty {
+                Text(text("Keine Modelle erkannt", "No models detected"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                menuBarVoiceModelMenu
+            }
 
+            if !appState.compactMenuBarDesign {
                 if appState.activeVoiceModel?.supportsQualityProfile == true {
                     Picker(text("Qualität", "Quality"), selection: appState.capabilityQualityBinding) {
                         ForEach(DictationPerformance.allCases) { profile in
