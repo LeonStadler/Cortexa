@@ -6,6 +6,26 @@
 
     @MainActor
     final class SpeechModelControllerTests: XCTestCase {
+        func testNativeEnglishSelectionPreservesIncompatibleLanguageForExplicitChoice() {
+            let phonon = LocalVoiceModelCatalog.model(id: "fermion.phonon2", includeParakeet: true)!
+            let state = SpeechModelControllerState(
+                selectedLanguage: .german,
+                translationOutputMode: .original,
+                selectedVoiceProviderID: phonon.providerID,
+                selectedVoiceModelID: phonon.id,
+                voiceLanguageOverrides: [],
+                voiceProviders: LocalVoiceModelCatalog.availableProviders(),
+                voiceModels: LocalVoiceModelCatalog.availableModels(includeParakeet: true),
+                installedVoiceModelFileNames: [phonon.localFileName!],
+                voiceModelOperationStates: [:])
+            let controller = makeController(state: state)
+            controller.sanitizeSpeechModelSelections()
+            XCTAssertEqual(state.selectedLanguage, .german)
+            XCTAssertEqual(state.selectedVoiceModelID, phonon.id)
+            XCTAssertFalse(controller.canUseVoiceModel(phonon, for: .german))
+            XCTAssertTrue(controller.canUseVoiceModel(phonon, for: .english))
+        }
+
         func testVoiceModelOperationProgressPublishesOnlyMeaningfulDownloadUpdates() {
             let current = VoiceModelOperationKind.installing(
                 VoiceModelInstallProgress(

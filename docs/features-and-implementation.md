@@ -6,7 +6,7 @@ Stand: 2026-04-04. Diese Seite ordnet **sichtbare Produktfunktionen** den **Swif
 
 | Bereich                  | macOS                                                     | iOS / iPadOS                                                                                                                     |
 | ------------------------ | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Lokale ASR (whisper.cpp) | Vollständig über gebündelten Runtime-Installer + Katalog  | Host/Extension-Blueprint; Parität mit macOS-Laufzeitpfad laut [apps/ios/README.md](../apps/ios/README.md) noch nicht vollständig |
+| Lokale ASR (Whisper.cpp, NeMo-Speech, FluidAudio) | Whisper.cpp und NeMo-Speech; optional installierbare FluidAudio-Modelle Phonon-2 und Parakeet Redux | Host/Extension-Blueprint; Parität mit macOS-Laufzeitpfad laut [apps/ios/README.md](../apps/ios/README.md) noch nicht vollständig |
 | Text einfügen            | Accessibility (`TextTargetMac`) + optional Paste-Fallback | Nur im Extension-Kontext über `textDocumentProxy`                                                                                |
 | Globales Diktat-Hotkey   | Ja (`GlobalHotkeyManager`, konfigurierbar)                | Nicht anwendbar                                                                                                                  |
 | Snippets                 | `SnippetCore` + UI, Import/Export JSON                    | Geteilt über App Group                                                                                                           |
@@ -18,7 +18,8 @@ Stand: 2026-04-04. Diese Seite ordnet **sichtbare Produktfunktionen** den **Swif
 
 | Modul                | Rolle                                                                | Wesentliche Umsetzung                                                                  |
 | -------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| **ASRCore**          | Whisper-Engine, CLI-Ausführung, Modell-Registry, gebündelter Runtime | `WhisperCppEngine`, `BundledWhisperRuntime`, Katalog für Provider/Modelle, Checksummen |
+| **ASRCore**          | ASR-Verträge, Modellkatalog und verwaltete Laufzeit-/Modell-Installer | `WhisperCppEngine`, `BundledWhisperRuntime`, NeMo- und Core-ML-Bundle-Prüfsummen |
+| **FluidASRMac**      | Lokale Core-ML-Erkennung für Phonon-2 und Parakeet Redux auf macOS 15+ | FluidAudio v0.17.7; Neural Engine; Modelle werden bei Bedarf in Application Support geladen |
 | **AudioCore**        | Aufnahme 16 kHz mono, Unterbrechungen                                | `AVAudioEngine`, optional Preprocessing (siehe unten)                                  |
 | **SessionCore**      | Zustandsmaschine, Streaming-Stabilisator, Commit-Regeln              | Koordiniert mit Snippets und Insert-Pfad                                               |
 | **SnippetCore**      | Regeln, Matcher, Persistenz, sichere Dateirechte                     | Longest-match, Streaming + Final                                                       |

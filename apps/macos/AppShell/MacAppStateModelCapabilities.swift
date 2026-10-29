@@ -78,7 +78,7 @@ extension MacAppState {
     }
 
     func requestVoiceCapability(_ choice: VoiceModelCapabilityChoice) {
-        guard let source = activeVoiceModel else {
+        guard let source = activeVoiceModel ?? selectedVoiceModel else {
             Task { @MainActor [weak self] in
                 await Task.yield()
                 self?.showCapabilityModelManagementAlert()
@@ -126,7 +126,7 @@ extension MacAppState {
             NSApplication.shared.activate(ignoringOtherApps: true)
             guard alert.runModal() == .alertFirstButtonReturn,
                 self.voiceSelectionRevision == selectionRevision,
-                self.activeVoiceModel?.id == source.id else { return }
+                (self.activeVoiceModel ?? self.selectedVoiceModel)?.id == source.id else { return }
 
             if installed {
                 self.applyVoiceCapability(choice, model: suggestion)
@@ -134,7 +134,7 @@ extension MacAppState {
                 self.speechModelController.installVoiceModelForCapability(suggestion) { [weak self] in
                     guard let self,
                         self.voiceSelectionRevision == selectionRevision,
-                        self.activeVoiceModel?.id == source.id else { return }
+                        (self.activeVoiceModel ?? self.selectedVoiceModel)?.id == source.id else { return }
                     self.applyVoiceCapability(choice, model: suggestion)
                 }
             }

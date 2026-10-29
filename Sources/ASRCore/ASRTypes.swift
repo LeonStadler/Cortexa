@@ -2,6 +2,7 @@ import Foundation
 
 public enum ASRBackend: String, Sendable, Codable {
     case whisperCpp
+    case fluidAudio
     case coreMLHybrid
     case nemoSpeech
 }

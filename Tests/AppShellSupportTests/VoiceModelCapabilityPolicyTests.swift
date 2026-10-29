@@ -73,6 +73,42 @@ final class VoiceModelCapabilityPolicyTests: XCTestCase {
             catalog: models, installedFiles: files)?.id, standard.id)
     }
 
+    func testNativeEnglishModelRequiresEnglishAndNeverSilentlyFallsBack() {
+        let phonon = VoiceModelDescriptor(
+            id: "fermion.phonon2", providerID: "fermion.phonon2",
+            displayName: "Phonon-2", languageCode: "en", languageScope: .english,
+            supportsTranslationToEnglish: false,
+            supportsAutomaticLanguageDetection: false,
+            supportsLanguageSelection: false,
+            speedScore: 9, accuracyScore: 8, sizeLabel: "360 MB",
+            installState: .downloadable, localFileName: "phonon-2",
+            runtimeID: "fluidAudio")
+        let standard = model("whisper.standard")
+        let catalog = [phonon, standard]
+        let installed: Set<String> = ["phonon-2", standard.localFileName!]
+        XCTAssertTrue(policy.supports(language: .english, model: phonon))
+        for language in [DictationLanguage.german, .auto] {
+            XCTAssertFalse(policy.supports(language: language, model: phonon))
+            XCTAssertNil(policy.effectiveModel(
+                for: language, selectedModelID: phonon.id,
+                overrides: [VoiceLanguageOverride(languageCode: language.rawValue, modelID: standard.id)],
+                catalog: catalog, installedFiles: installed))
+        }
+        XCTAssertEqual(policy.effectiveModel(
+            for: .english, selectedModelID: phonon.id, overrides: [],
+            catalog: catalog, installedFiles: installed)?.id, phonon.id)
+    }
+
+    func testNativeReduxSupportsExplicitGermanAndAutomaticDetection() {
+        let redux = model("moondream.parakeet-redux")
+
+        XCTAssertTrue(policy.supports(language: .german, model: redux))
+        XCTAssertTrue(policy.supports(language: .auto, model: redux))
+        XCTAssertEqual(policy.effectiveModel(
+            for: .german, selectedModelID: redux.id, overrides: [],
+            catalog: [redux], installedFiles: [redux.localFileName!])?.id, redux.id)
+    }
+
     private func model(_ id: String) -> VoiceModelDescriptor {
         LocalVoiceModelCatalog.model(id: id)!
     }

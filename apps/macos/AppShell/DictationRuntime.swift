@@ -7,6 +7,7 @@ import AudioCore
 import CapabilityCore
 import Carbon
 import Foundation
+import FluidASRMac
 import SessionCore
 import SnippetCore
 import TextTargetMac
@@ -305,7 +306,7 @@ final class DictationRuntime: @unchecked Sendable {
     /// Mikrofon-/AX-Dialoge oder TCC-Updates: UI soll `authorizationStatus` / AX erneut lesen.
     var onPermissionInteractionFinished: (() -> Void)?
 
-    private let whisperEngine = WhisperCppEngine()
+    private var whisperEngine: WhisperEngine = WhisperCppEngine()
     private let processQueue = DispatchQueue(label: "wispr.dictation.process", qos: .userInitiated)
     private let insertionQueue = DispatchQueue(label: "wispr.dictation.insert", qos: .userInitiated)
     private let capabilityProfiler = CapabilityProfiler()
@@ -416,7 +417,7 @@ final class DictationRuntime: @unchecked Sendable {
             whisperEngine.onPartial = { [weak self] partial in
                 self?.handlePartialText(partial.text)
             }
-            whisperEngine.onDebugEvent = { [weak self] event in
+            (whisperEngine as? WhisperCppEngine)?.onDebugEvent = { [weak self] event in
                 self?.publishDebug(event)
             }
         } catch {
@@ -511,8 +512,9 @@ final class DictationRuntime: @unchecked Sendable {
             return
         }
 
-        prepareRuntimeIfModelAvailable()
-        guard runtimePrepared else {
+        let usesFluid = options.selectedVoiceModelID == "fermion.phonon2" || options.selectedVoiceModelID == "moondream.parakeet-redux"
+        if !usesFluid { prepareRuntimeIfModelAvailable() }
+        guard usesFluid || runtimePrepared else {
             withSessionLock {
                 isStarting = false
             }
@@ -558,7 +560,7 @@ final class DictationRuntime: @unchecked Sendable {
                 let requestedMode: DictationMode = modelRequiresOfflineTranscription
                     ? .finalize : options.mode
                 let effectiveMode: DictationMode = accessibilityGranted ? requestedMode : .finalize
-                try configureEngine(for: options, runtimeMode: effectiveMode)
+                try await configureEngine(for: options, runtimeMode: effectiveMode)
 
                 if accessibilityGranted {
                     var lockedTarget = try? captureFocusedTextTarget()
@@ -1381,8 +1383,12 @@ final class DictationRuntime: @unchecked Sendable {
     }
 
     private func configureEngine(for options: DictationStartOptions, runtimeMode: DictationMode)
-        throws
+        async throws
     {
+        if options.selectedVoiceModelID == "fermion.phonon2" || options.selectedVoiceModelID == "moondream.parakeet-redux" {
+            try await configureFluidEngine(options: options, runtimeMode: runtimeMode)
+            return
+        }
         let runtime = try BundledWhisperRuntimeInstaller.syncRuntimeCLIOnly(
             bundle: .main, appName: "WisprLocal")
         let preset = selectEnginePreset(options: options, runtimeMode: runtimeMode)
@@ -1419,12 +1425,63 @@ final class DictationRuntime: @unchecked Sendable {
             return
         }
 
+        if !(whisperEngine is WhisperCppEngine) {
+            whisperEngine.resetStreaming()
+            whisperEngine = WhisperCppEngine()
+            bindEngineCallbacks()
+        }
         try whisperEngine.loadModel(at: modelURL, config: config)
         loadedModelPath = modelURL
         loadedConfig = config
         publishDebug(
             "engine.configure.loaded model=\(modelURL.lastPathComponent) latency=\(config.latencyProfile.rawValue) threads=\(config.threadCount) beam=\(config.beamSize) chunkMs=\(config.chunkMilliseconds)"
         )
+    }
+
+    private func bindEngineCallbacks() {
+        whisperEngine.onPartial = { [weak self] partial in self?.handlePartialText(partial.text) }
+        (whisperEngine as? WhisperCppEngine)?.onDebugEvent = { [weak self] event in self?.publishDebug(event) }
+        (whisperEngine as? FluidSpeechEngine)?.onFailure = { [weak self] error in
+            self?.publishDiagnostic("Live transcription failed: \(error.localizedDescription)")
+        }
+    }
+
+    func releaseModelBeforeRemoval(modelID: String) throws {
+        guard loadedConfig?.modelID == modelID else { return }
+        guard !withSessionLock({ isRunning || isStarting }) else {
+            throw WhisperEngineError.backendUnavailable("Stop dictation before removing the active model.")
+        }
+        cancelRuntimeUnloadTask()
+        whisperEngine.resetStreaming()
+        whisperEngine = WhisperCppEngine()
+        bindEngineCallbacks()
+        loadedModelPath = nil
+        loadedConfig = nil
+        runtimePrepared = false
+    }
+
+    private func configureFluidEngine(options: DictationStartOptions, runtimeMode: DictationMode) async throws {
+        guard let descriptor = LocalVoiceModelCatalog.model(id: options.selectedVoiceModelID, includeParakeet: true),
+              descriptor.localFileName != nil else { throw WhisperEngineError.modelNotLoaded }
+        guard model(descriptor, supports: options.language) else {
+            throw WhisperEngineError.backendUnavailable("Choose a supported language or explicitly select another installed model.")
+        }
+        let url = try VoiceModelInstaller.nativeModelURL(modelID: descriptor.id)
+        let config = ASRConfig(languageHint: options.language.asrHint, initialPrompt: nil,
+            translationMode: .original, modelID: descriptor.id, backend: .fluidAudio,
+            latencyProfile: runtimeMode == .streaming ? .streaming : .quality)
+        if loadedModelPath == url, loadedConfig == config { return }
+        publishStatus("Preparing speech model")
+        publishDiagnostic("Preparing speech model for the Neural Engine. The first preparation can take several minutes.")
+        let engine = FluidSpeechEngine()
+        try await Task.detached { try engine.loadModel(at: url, config: config) }.value
+        try Task.checkCancellation()
+        whisperEngine.resetStreaming()
+        whisperEngine = engine
+        bindEngineCallbacks()
+        loadedModelPath = url
+        loadedConfig = config
+        runtimePrepared = true
     }
 
     private func selectEnginePreset(
@@ -1584,6 +1641,7 @@ final class DictationRuntime: @unchecked Sendable {
 
     private func model(_ descriptor: VoiceModelDescriptor, supports language: DictationLanguage) -> Bool {
         if language == .auto { return descriptor.supportsAutomaticLanguageDetection }
+        if descriptor.languageCode == language.rawValue { return true }
         guard descriptor.supportsLanguageSelection else { return false }
         if let fixedCode = descriptor.languageCode, fixedCode != language.rawValue { return false }
         return descriptor.supportedLanguageCodes?.contains(language.rawValue) ?? true
@@ -1927,6 +1985,8 @@ final class DictationRuntime: @unchecked Sendable {
         }
 
         whisperEngine.resetStreaming()
+        whisperEngine = WhisperCppEngine()
+        bindEngineCallbacks()
         publishDiagnostic(
             "ASR runtime war im Leerlauf zu lange inaktiv und wird beim nächsten Start neu geladen."
         )

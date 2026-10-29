@@ -187,3 +187,21 @@ Modell-Attribution: **Parakeet TDT 0.6B v3**, NVIDIA. Cortexa lädt das unverän
 
 - Modellkarte und Lizenz: <https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3>
 - Lizenztext: <https://creativecommons.org/licenses/by/4.0/legalcode>
+
+## Phonon-2 — CC BY 4.0
+
+Phonon-2 von Fermion Research ist ein quantisierter, aus NVIDIA Parakeet TDT v3 abgeleiteter Spracherkenner. Cortexa bezieht die Apple-Core-ML-Konvertierung von Fluid Inference unter einer festgelegten Modellrevision. Gewichte unter CC BY 4.0; FluidAudio-Laufzeit unter MIT. Die jeweiligen Modell- und Laufzeitlizenzen sowie Hinweise werden mit den lokal bezogenen Artefakten geführt.
+
+- Modell und Lizenz: <https://huggingface.co/FermionResearch/Phonon-2>
+- Core-ML-Konvertierung: <https://huggingface.co/FluidInference/phonon-2-coreml>
+- Runtime und Quellcode: <https://github.com/FluidInference/FluidAudio/tree/v0.17.7>
+- Lizenztext: <https://creativecommons.org/licenses/by/4.0/legalcode>
+
+## Moondream Parakeet Redux — CC BY 4.0
+
+Parakeet Redux von Moondream ist eine ternäre, mehrsprachige Ableitung von NVIDIA Parakeet TDT v3. Cortexa bezieht die Core-ML-Konvertierung von Fluid Inference unter einer festgelegten Modellrevision. Gewichte unter CC BY 4.0; FluidAudio-Laufzeit unter MIT. Änderungen durch Modellkonvertierung sind in den Anbieterhinweisen dokumentiert.
+
+- Modell und Lizenz: <https://huggingface.co/moondream/parakeet-redux>
+- Core-ML-Konvertierung: <https://huggingface.co/FluidInference/parakeet-redux-coreml>
+- Runtime und Quellcode: <https://github.com/FluidInference/FluidAudio/tree/v0.17.7>
+- Lizenztext: <https://creativecommons.org/licenses/by/4.0/legalcode>

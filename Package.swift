@@ -1,4 +1,4 @@
-// swift-tools-version: 5.10
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
@@ -11,12 +11,14 @@ let package = Package(
     products: [
         .library(name: "AIProcessingCore", targets: ["AIProcessingCore"]),
         .library(name: "ASRCore", targets: ["ASRCore"]),
+        .library(name: "FluidASRMac", targets: ["FluidASRMac"]),
         .library(name: "AudioCore", targets: ["AudioCore"]),
         .library(name: "SessionCore", targets: ["SessionCore"]),
         .library(name: "SnippetCore", targets: ["SnippetCore"]),
         .library(name: "TextTargetMac", targets: ["TextTargetMac"]),
         .library(name: "CapabilityCore", targets: ["CapabilityCore"])
     ],
+    dependencies: [.package(url: "https://github.com/FluidInference/FluidAudio", exact: "0.17.7", traits: [])],
     targets: [
         .target(
             name: "AIProcessingCore"
@@ -24,6 +26,7 @@ let package = Package(
         .target(
             name: "ASRCore"
         ),
+        .target(name: "FluidASRMac", dependencies: ["ASRCore", .product(name: "FluidAudio", package: "FluidAudio", condition: .when(platforms: [.macOS]))]),
         .target(
             name: "AudioCore",
             dependencies: ["ASRCore"]
@@ -46,6 +49,7 @@ let package = Package(
             dependencies: [
                 "AIProcessingCore",
                 "ASRCore",
+                "FluidASRMac",
                 "AudioCore",
                 "CapabilityCore",
                 "SessionCore",
@@ -62,6 +66,10 @@ let package = Package(
             name: "AIProcessingCoreTests",
             dependencies: ["AIProcessingCore"]
         ),
+        .testTarget(name: "FluidASRMacTests", dependencies: [
+            "FluidASRMac", "ASRCore",
+            .product(name: "FluidAudio", package: "FluidAudio", condition: .when(platforms: [.macOS]))
+        ]),
         .testTarget(
             name: "ASRCoreTests",
             dependencies: ["ASRCore"]
@@ -90,5 +98,6 @@ let package = Package(
             name: "AppShellSupportTests",
             dependencies: ["AppShellSupport"]
         )
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )

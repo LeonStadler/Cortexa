@@ -484,6 +484,7 @@ private final class StubDictationRuntime: DictationRuntimeControlling {
     private(set) var openAccessibilitySettingsCallCount = 0
     private(set) var promptAccessibilityTrustCallCount = 0
 
+    func releaseModelBeforeRemoval(modelID: String) throws {}
     func prepareRuntime() {
         prepareRuntimeCallCount += 1
     }

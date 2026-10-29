@@ -1,5 +1,11 @@
 # Changelog
 
+## Features
+
+- 2026-10-29: Phonon-2 und Parakeet Redux als lokale Core-ML-Spracherkennungsmodelle ergänzt.
+  - Dateien: `Package.swift`, `Package.resolved`, `Sources/ASRCore/ASRTypes.swift`, `Sources/ASRCore/NativeVoiceModelBundle.swift`, `Sources/ASRCore/VoiceModelCatalog.swift`, `Sources/ASRCore/VoiceModelInstaller.swift`, `Sources/FluidASRMac/FluidSpeechEngine.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `apps/macos/AppShell/AppUninstaller.swift`, `apps/macos/AppShell/MacAppState.swift`, `apps/macos/AppShell/MacAppStateFacadeActions.swift`, `apps/macos/AppShell/MacAppStateModelCapabilities.swift`, `apps/macos/AppShell/SettingsViewSpeechDictationSections.swift`, `apps/macos/AppShell/SpeechModelController.swift`, `apps/macos/AppShell/VoiceModelCapabilityPolicy.swift`, `apps/macos/WisprLocalMac/project.yml`, `Tests/ASRCoreTests/NativeVoiceModelBundleTests.swift`, `Tests/AppShellSupportTests/AppShellCharacterizationTests.swift`, `Tests/AppShellSupportTests/AppShellSupportTestFixtures.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `Tests/AppShellSupportTests/DictationRuntimeEventBridgeTests.swift`, `Tests/AppShellSupportTests/SpeechModelControllerTests.swift`, `Tests/AppShellSupportTests/VoiceModelCapabilityPolicyTests.swift`, `Tests/FluidASRMacTests/FluidSpeechEngineSmokeTests.swift`, `apps/macos/README.md`, `docs/features-and-implementation.md`, `docs/third-party-notices.md`, `VERSION`, `changelog.md`.
+  - Funktionalität: Auswahl und geprüfter Download der angepinnten Core-ML-Bundles, Offline-Transkription, Live-Teilergebnisse und Finalisierung über FluidAudio v0.17.7. Phonon-2 wird als Englischmodell geführt; Redux als mehrsprachig. Inkompatible Sprachen lösen keinen stillen Modellwechsel aus. Neue Modelle benötigen Apple Silicon und macOS 15 oder neuer; vorhandene Mindestversionen und Modellstandards bleiben bestehen. Nicht erhobene Speed-/Accuracy-Werte werden für diese Modelle nicht angezeigt. Die Deinstallation entfernt die beiden Cortexa-eigenen Modellbundles gezielt. Feature-Version `0.49.0`.
+
 ## Fixes
 
 - 2026-09-29: Vollständige Entfernung abgebrochener Cortexa-NeMo-Runtime-Installationen bei der Deinstallation.
