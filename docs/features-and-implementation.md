@@ -41,7 +41,7 @@ Der Shell-Code ist inzwischen entlang von Runtime-Services, AppState-Controllern
 - **Live-Rewrite-Scope**: wie weit der Streaming-Tail noch umformuliert werden darf.
 - **Qualitäts-Preset** (auto/fast/balanced/accurate): Chunking, Threads, Beam, Commit-Verhalten — getrennt von der expliziten **Sprachmodellwahl** (Katalog + ggf. sprachspezifische Overrides).
 - **Finaler Output**: Insert ins Fokusfeld vs. nur Zwischenablage; **Clipboard-Fallback** wenn kein Ziel, optional und als datenschutzrelevanter Pfad dokumentiert.
-- **Auto-Send** / **Clipboard-Restore** / simulierte Tastatur-Eingabe: getrennt konfigurierbar (Texteingabe-Semantik).
+- **Auto-Send** / **Clipboard-Restore** / simulierte Tastatur-Eingabe: getrennt konfigurierbar. Simulierte Tastatureingabe gilt nur für das finale Einfügen; Live-Zwischenstände werden per Accessibility im Textfeld aktualisiert und können bei geeigneten Zielen auf Einfügen per Zwischenablage (`⌘V`) zurückfallen. So kann Wispr während des Streamings den veränderlichen Textteil gezielt ersetzen, ohne ihn erneut abzutippen.
 
 ### Audio
 
