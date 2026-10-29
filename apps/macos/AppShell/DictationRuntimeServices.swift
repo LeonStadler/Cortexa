@@ -52,7 +52,7 @@ internal struct RuntimePermissionService {
             promptIfNeeded
             ? [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             : [:] as CFDictionary
-        return AXIsProcessTrustedWithOptions(options)
+        return runOnMainThread { AXIsProcessTrustedWithOptions(options) }
     }
 }
 

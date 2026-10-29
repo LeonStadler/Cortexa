@@ -303,6 +303,12 @@ final class SpeechModelController {
             )
             return
         }
+        if descriptor.runtimeID == "fluidAudio",
+            let languageCode = descriptor.languageCode,
+            let fixedLanguage = DictationLanguage(rawValue: languageCode),
+            currentSelectedLanguage() != fixedLanguage {
+            setSelectedLanguage(fixedLanguage)
+        }
         if currentSelectedVoiceProviderID() != descriptor.providerID {
             setSelectedVoiceProviderID(descriptor.providerID)
         }
