@@ -8,6 +8,10 @@
 
 ## Fixes
 
+- 2026-10-29: Unbekannte FluidAudio-Modell-IDs werden explizit abgelehnt statt stillschweigend als Parakeet Redux geladen zu werden.
+  - Dateien: `Sources/FluidASRMac/FluidSpeechEngine.swift`, `Tests/FluidASRMacTests/FluidSpeechEngineSmokeTests.swift`, `changelog.md`.
+  - Funktionalität: Die Engine ordnet nur die beiden bekannten Modell-IDs ihren FluidAudio-Modellversionen zu. Eine unbekannte ID liefert `modelNotLoaded`; Redux wird nicht als impliziter Fallback ausgewählt. Feature-Version `0.49.0`.
+
 - 2026-09-29: Vollständige Entfernung abgebrochener Cortexa-NeMo-Runtime-Installationen bei der Deinstallation.
   - Dateien: `apps/macos/AppShell/AppUninstaller.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`, `changelog.md`.
   - Funktionalität: Die Deinstallation entfernt jetzt neben bestätigten Runtime-Versionen auch versteckte Cortexa-Staging- und Backup-Ordner, wenn Versionsmuster und UUID exakt zur Installationsroutine passen. Nicht passende Ordner sowie externe Runtimes und unbekannte Modellcache-Dateien bleiben erhalten. Patch-Version `0.48.2`.

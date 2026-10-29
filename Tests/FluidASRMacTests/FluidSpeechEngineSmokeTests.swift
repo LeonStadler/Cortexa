@@ -6,6 +6,23 @@ import XCTest
 @testable import FluidASRMac
 
 final class FluidSpeechEngineSmokeTests: XCTestCase {
+    func testUnknownModelIDIsRejectedInsteadOfSelectingRedux() {
+        let engine = FluidSpeechEngine()
+        let config = ASRConfig(
+            languageHint: "en",
+            modelID: "unrecognized.phonon-compatible",
+            backend: .fluidAudio,
+            latencyProfile: .quality
+        )
+
+        XCTAssertThrowsError(try engine.loadModel(at: URL(fileURLWithPath: "/missing"), config: config)) {
+            guard case WhisperEngineError.modelNotLoaded = $0 else {
+                XCTFail("Expected an explicit rejection for an unknown native model ID.")
+                return
+            }
+        }
+    }
+
     func testOverlappingWindowsCommitEachWordOnlyOnce() {
         let first = makeStreamingWindowUpdate(words: [
             WordTiming(word: "one", startTime: 0.2, endTime: 0.5),

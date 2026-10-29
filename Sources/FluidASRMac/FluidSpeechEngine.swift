@@ -37,7 +37,12 @@ public final class FluidSpeechEngine: WhisperEngine, @unchecked Sendable {
     public init() {}
 
     public func loadModel(at path: URL, config: ASRCore.ASRConfig) throws {
-        let version: AsrModelVersion = config.modelID.contains("phonon") ? .phonon2 : .redux
+        let version: AsrModelVersion
+        switch config.modelID {
+        case "fermion.phonon2": version = .phonon2
+        case "moondream.parakeet-redux": version = .redux
+        default: throw WhisperEngineError.modelNotLoaded
+        }
         let models = try AsrModels.loadLocal(from: path, version: version)
         let loaded = AsrManager(models: models)
         locked { manager = loaded; language = config.languageHint.flatMap(Language.init(rawValue:)) }
