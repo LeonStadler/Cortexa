@@ -48,6 +48,16 @@ public final class FluidSpeechEngine: WhisperEngine, @unchecked Sendable {
         locked { manager = loaded; language = config.languageHint.flatMap(Language.init(rawValue:)) }
     }
 
+    public func prepareForInference() async throws {
+        let snapshot = try locked { () throws -> (AsrManager, Language?) in
+            guard let manager else { throw WhisperEngineError.modelNotLoaded }
+            return (manager, language)
+        }
+        var state = try TdtDecoderState()
+        _ = try await snapshot.0.transcribe(
+            [Float](repeating: 0, count: 16_000), decoderState: &state, language: snapshot.1)
+    }
+
     public func startStreaming() throws {
         try locked {
             guard manager != nil else { throw WhisperEngineError.modelNotLoaded }

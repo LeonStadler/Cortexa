@@ -1474,7 +1474,10 @@ final class DictationRuntime: @unchecked Sendable {
         publishStatus("Preparing speech model")
         publishDiagnostic("Preparing speech model for the Neural Engine. The first preparation can take several minutes.")
         let engine = FluidSpeechEngine()
-        try await Task.detached { try engine.loadModel(at: url, config: config) }.value
+        try await Task.detached {
+            try engine.loadModel(at: url, config: config)
+            try await engine.prepareForInference()
+        }.value
         try Task.checkCancellation()
         whisperEngine.resetStreaming()
         whisperEngine = engine

@@ -114,13 +114,7 @@ final class FluidSpeechEngineSmokeTests: XCTestCase {
             let config = ASRConfig(languageHint: "en", initialPrompt: nil, translationMode: .original,
                 modelID: modelID, backend: .fluidAudio, latencyProfile: .streaming)
             try engine.loadModel(at: url, config: config)
-            let transcript = try await engine.transcribeFile(url: URL(fileURLWithPath: audio))
-            XCTAssertTrue(transcript.text.localizedCaseInsensitiveContains(expected), transcript.text)
-            XCTAssertFalse(transcript.segments.isEmpty)
-            for segment in transcript.segments {
-                XCTAssertTrue(segment.startTime.isFinite)
-                XCTAssertGreaterThanOrEqual(segment.endTime, segment.startTime)
-            }
+            try await engine.prepareForInference()
             let file = try AVAudioFile(forReading: URL(fileURLWithPath: audio))
             XCTAssertEqual(file.processingFormat.sampleRate, 16_000)
             XCTAssertEqual(file.processingFormat.channelCount, 1)
@@ -133,12 +127,22 @@ final class FluidSpeechEngineSmokeTests: XCTestCase {
                 if !partial.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { live.fulfill() }
             }
             try engine.startStreaming()
+            let firstLiveStarted = Date()
             try engine.pushAudioPCM16kMono(samples, frameCount: Int(buffer.frameLength))
             await fulfillment(of: [live], timeout: 30)
+            XCTAssertLessThanOrEqual(Date().timeIntervalSince(firstLiveStarted), 2,
+                "First live text exceeded two seconds after model preparation for \(modelID).")
             let final = try await engine.stopStreaming()
             XCTAssertTrue(final.text.localizedCaseInsensitiveContains(expected), final.text)
             XCTAssertFalse(final.segments.isEmpty)
             engine.resetStreaming()
+            let transcript = try await engine.transcribeFile(url: URL(fileURLWithPath: audio))
+            XCTAssertTrue(transcript.text.localizedCaseInsensitiveContains(expected), transcript.text)
+            XCTAssertFalse(transcript.segments.isEmpty)
+            for segment in transcript.segments {
+                XCTAssertTrue(segment.startTime.isFinite)
+                XCTAssertGreaterThanOrEqual(segment.endTime, segment.startTime)
+            }
             var warmLatencies: [TimeInterval] = []
             for _ in 0..<21 {
                 let firstPartial = expectation(description: "First partial for \(modelID)")

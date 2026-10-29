@@ -12,6 +12,10 @@
   - Dateien: `Sources/FluidASRMac/FluidSpeechEngine.swift`, `Tests/FluidASRMacTests/FluidSpeechEngineSmokeTests.swift`, `changelog.md`.
   - Funktionalität: Die Engine ordnet nur die beiden bekannten Modell-IDs ihren FluidAudio-Modellversionen zu. Eine unbekannte ID liefert `modelNotLoaded`; Redux wird nicht als impliziter Fallback ausgewählt. Feature-Version `0.49.0`.
 
+- 2026-10-29: Native Modellvorbereitung schließt die Core-ML-Erstkompilierung vor dem ersten Diktat ab.
+  - Dateien: `Sources/FluidASRMac/FluidSpeechEngine.swift`, `apps/macos/AppShell/DictationRuntime.swift`, `Tests/FluidASRMacTests/FluidSpeechEngineSmokeTests.swift`, `changelog.md`.
+  - Funktionalität: Die Engine führt während des sichtbaren Vorbereitungszustands eine lokale Stille-Inferenz aus, damit die erste echte Live-Ausgabe nicht durch die Core-ML-Kompilierung verzögert wird. Auf dem Test-Mac lagen erste Live-Ausgabe und laufende Updates danach bei 576/627 ms beziehungsweise 549/540 ms p95 im 500-ms-Eingabetakt. Feature-Version `0.49.0`.
+
 - 2026-09-29: Vollständige Entfernung abgebrochener Cortexa-NeMo-Runtime-Installationen bei der Deinstallation.
   - Dateien: `apps/macos/AppShell/AppUninstaller.swift`, `Tests/AppShellSupportTests/AppUninstallerTests.swift`, `apps/macos/README.md`, `docs/system-design.md`, `VERSION`, `changelog.md`.
   - Funktionalität: Die Deinstallation entfernt jetzt neben bestätigten Runtime-Versionen auch versteckte Cortexa-Staging- und Backup-Ordner, wenn Versionsmuster und UUID exakt zur Installationsroutine passen. Nicht passende Ordner sowie externe Runtimes und unbekannte Modellcache-Dateien bleiben erhalten. Patch-Version `0.48.2`.
