@@ -1,9 +1,27 @@
 #if os(macOS)
 import AVFoundation
 import ASRCore
+import Foundation
 import FluidAudio
 import XCTest
 @testable import FluidASRMac
+
+private final class LivePartialRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var timestamps: [TimeInterval] = []
+
+    func record() {
+        lock.lock()
+        timestamps.append(ProcessInfo.processInfo.systemUptime)
+        lock.unlock()
+    }
+
+    func snapshot() -> [TimeInterval] {
+        lock.lock()
+        defer { lock.unlock() }
+        return timestamps
+    }
+}
 
 final class FluidSpeechEngineSmokeTests: XCTestCase {
     func testUnknownModelIDIsRejectedInsteadOfSelectingRedux() {
@@ -123,18 +141,42 @@ final class FluidSpeechEngineSmokeTests: XCTestCase {
             let samples = try XCTUnwrap(buffer.floatChannelData)[0]
             let live = expectation(description: "Live text for \(modelID)")
             live.assertForOverFulfill = false
+            let partialRecorder = LivePartialRecorder()
             engine.onPartial = { partial in
-                if !partial.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { live.fulfill() }
+                guard !partial.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                partialRecorder.record()
+                live.fulfill()
             }
             try engine.startStreaming()
-            let firstLiveStarted = Date()
-            try engine.pushAudioPCM16kMono(samples, frameCount: Int(buffer.frameLength))
+            let firstLiveStarted = ProcessInfo.processInfo.systemUptime
+            var audioOffset = 0
+            while audioOffset < Int(buffer.frameLength) {
+                let chunkCount = min(8_000, Int(buffer.frameLength) - audioOffset)
+                try engine.pushAudioPCM16kMono(samples.advanced(by: audioOffset), frameCount: chunkCount)
+                audioOffset += chunkCount
+                try await Task.sleep(for: .milliseconds(500))
+            }
             await fulfillment(of: [live], timeout: 30)
-            XCTAssertLessThanOrEqual(Date().timeIntervalSince(firstLiveStarted), 2,
-                "First live text exceeded two seconds after model preparation for \(modelID).")
+            try await Task.sleep(for: .milliseconds(750))
             let final = try await engine.stopStreaming()
             XCTAssertTrue(final.text.localizedCaseInsensitiveContains(expected), final.text)
             XCTAssertFalse(final.segments.isEmpty)
+            let timestamps = partialRecorder.snapshot()
+            let intervals = zip(timestamps, timestamps.dropFirst()).map { $1 - $0 }.sorted()
+            XCTAssertGreaterThanOrEqual(timestamps.count, 4,
+                "Expected repeated live updates for \(modelID).")
+            let firstLatency = (timestamps.first ?? .infinity) - firstLiveStarted
+            XCTAssertLessThanOrEqual(firstLatency, 2,
+                "First live text exceeded two seconds after model preparation for \(modelID).")
+            guard !intervals.isEmpty else {
+                XCTFail("Expected multiple live updates for \(modelID).")
+                engine.resetStreaming()
+                continue
+            }
+            let updateP95 = intervals[Int(ceil(Double(intervals.count) * 0.95)) - 1]
+            XCTAssertLessThanOrEqual(updateP95, 2,
+                "Live update p95 exceeded two seconds for \(modelID).")
+            print("\(modelID) live cadence: partials=\(timestamps.count), first=\(String(format: "%.3f", firstLatency))s, update p95=\(String(format: "%.3f", updateP95))s")
             engine.resetStreaming()
             let transcript = try await engine.transcribeFile(url: URL(fileURLWithPath: audio))
             XCTAssertTrue(transcript.text.localizedCaseInsensitiveContains(expected), transcript.text)
